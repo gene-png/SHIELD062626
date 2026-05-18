@@ -1810,25 +1810,49 @@ disclosure block:
 13. DESIGN SYSTEM AND VISUAL LANGUAGE
 ================================================================================
 
-See SHIELDv2_Design_Mockup.html for the actual visual.
+The authoritative design contract is the file:
+
+  Shield UX fix round 6 full design update for 2.0.txt
+
+The mockup (SHIELDv2_Design_Mockup.html) is a concrete application of that
+contract for nine key screens. If the mockup and the round 6 doc ever
+conflict, the round 6 doc wins.
 
 --------------------------------------------------------------------------------
 13.1  Design philosophy
 --------------------------------------------------------------------------------
 
+  Goal:               "A modern federal enterprise operations platform used
+                      by government leadership, operational cyber teams,
+                      administrators, and external stakeholders."
+
+                      Trust and accessibility of USWDS, operational
+                      efficiency of Azure Portal and Defender XDR, telemetry
+                      maturity of Datadog, polish of modern enterprise SaaS,
+                      professionalism of a federal mission system.
+
   Influences:         Microsoft Fluent (cards, depth, motion restraint)
-                      IBM Carbon (data table density, type scale)
-                      USWDS (accessibility baseline, form patterns)
+                      USWDS (accessibility baseline, form patterns,
+                             structure)
+                      IBM Carbon (data table density, type scale,
+                                  information hierarchy)
                       Azure Portal (left nav, workspace concept,
                                     operational tone)
-                      Defender XDR (executive summary cards, status
-                                    pills, action prompts)
-                      Datadog (telemetry layouts, when the platform
-                              acquires more time-series telemetry)
+                      Microsoft Defender XDR (executive summary cards,
+                                              status pills, action prompts)
+                      Datadog (telemetry layouts, dashboard density,
+                              filter / search persistence)
 
-  Tone:               Calm, mature, mission-focused, government-grade.
-                      No flashy aesthetics. No neon. No gaming UI. No
-                      excessive motion.
+  Tone:               Calm. Clean. Structured. Efficient. Professional.
+                      Trustworthy. Government-grade. Enterprise operational.
+
+                      Not flashy. Not startup. Not cyberpunk. No neon. No
+                      gaming UI. No consumer-style decorative motion. No
+                      excessive animation. No decorative-only graphics.
+
+  Adjective target:   modern, highly usable, operationally mature, scalable,
+                      mission-focused, accessible, data-driven, executive-
+                      ready, production-grade.
 
 --------------------------------------------------------------------------------
 13.2  Color palette
@@ -1940,6 +1964,116 @@ See SHIELDv2_Design_Mockup.html for the actual visual.
 
   Automated checks in CI: axe-core or Pa11y on every key page.
 
+--------------------------------------------------------------------------------
+13.7  Three experiences in one design language
+--------------------------------------------------------------------------------
+
+The same design system serves three distinct audiences. The visual language
+stays consistent; the layout density, navigation pattern, and content depth
+shift per audience.
+
+  PUBLIC / EXTERNAL EXPERIENCE
+    Style anchors:    USWDS, Microsoft public portals, federal digital
+                      service sites.
+    Purpose:          Build trust, improve accessibility, simplify
+                      workflows, present a professional government /
+                      enterprise experience.
+    UX:               Large readable typography. Simple top navigation.
+                      Guided workflows. Clear primary CTAs. Minimal
+                      cognitive load. Accessible forms. Step-by-step
+                      process flows. Strong information hierarchy. Mobile
+                      responsive.
+    Components:       Hero section, mission statement, service cards,
+                      resource center, event / news sections, contact /
+                      help workflows, search, footer with compliance /
+                      accessibility links.
+    Forbidden here:   Dense telemetry, complex dashboards, excessive
+                      widgets, technical jargon on landing pages.
+    Applies to:       Marketing pages, public signup, public-facing
+                      service descriptions, intake wizard public surface,
+                      help / resource pages.
+
+  OPERATIONAL DASHBOARD EXPERIENCE
+    Style anchors:    Azure Portal, Microsoft Defender XDR, Datadog,
+                      modern SOC dashboards.
+    Purpose:          Support analysts, operators, administrators, and
+                      cyber / security personnel with efficient workflows
+                      and high-density operational data.
+    UX:               Persistent left-side navigation. Modular dashboard
+                      widgets. Telemetry-focused layouts. High information
+                      density. Fast scanning. Real-time status indicators.
+                      Minimal clicks to key actions. Contextual side
+                      panels. Drill-down workflows. Persistent filtering
+                      and search. Dark / light mode support.
+    Components:       Alert queues, incident panels, telemetry charts,
+                      threat indicators, asset visibility tables, system
+                      health widgets, workflow automation panels, timeline
+                      investigations, search and filtering systems.
+    Layout rules:     Clarity over aesthetics. Critical alerts surface
+                      first. Progressive disclosure. Trends and anomalies
+                      visible at a glance. Modular cards. Multi-role
+                      workflows supported.
+    Forbidden here:   Clutter. Over-animation. Excessive whitespace.
+                      Consumer-style layouts. Decorative-only graphics.
+    Applies to:       Admin queue, admin client profile, all admin
+                      service workspaces (Tech Debt, Zero Trust, CSF,
+                      ATT&CK), reviewer surfaces.
+
+  EXECUTIVE LEADERSHIP EXPERIENCE
+    Style anchors:    Executive analytics platforms, modern KPI
+                      dashboards, minimalist enterprise reporting.
+    Purpose:          Provide leadership with strategic visibility, KPIs,
+                      risk summaries, mission status, and drill-down
+                      insights without overwhelming detail.
+    UX:               Minimalist layouts. Larger typography. Fewer
+                      widgets. High-level summaries. Visual clarity.
+                      Strategic insights. Trend-focused reporting. Drill-
+                      down capability into operational data. Decision-
+                      focused presentation.
+    Components:       KPI cards, risk scoring, compliance status, mission
+                      readiness indicators, budget / resource summaries,
+                      trend charts, executive alerts, program status
+                      summaries, heatmaps, drill-down analytics.
+    Layout rules:     Emphasize readability. Prioritize the most
+                      important metrics. Avoid technical overload.
+                      Actionable insights. Spacious, intentional layouts.
+    Applies to:       Client /home dashboard, client service detail
+                      pages, executive findings views, board-ready
+                      exports.
+
+  Cross-audience rule: One design language across all three. Same
+  typography scale, same color palette, same status pill grammar, same
+  card shapes. The audience changes density and depth, not visual
+  identity.
+
+--------------------------------------------------------------------------------
+13.8  Visual restraint and forbidden patterns
+--------------------------------------------------------------------------------
+
+Listed explicitly so the build cannot drift:
+
+  - NO cyberpunk, neon, hacker, matrix, or synthwave aesthetics.
+  - NO gaming UI patterns. No XP bars, no achievement badges, no
+    leaderboards, no mascots.
+  - NO consumer-style hero illustrations as ornament on operational
+    or executive screens.
+  - NO saturated color used decoratively. Saturated colors are
+    reserved for status (success / warning / error / info / in-review).
+  - NO emoji as functional UI affordances.
+  - NO over-animation. No looping motion. No parallax. No bouncing.
+    Transitions are smooth and brief (<= 200ms) or absent.
+  - NO chart clutter. No 3D charts. No drop-shadowed bars. No
+    gratuitous gridlines. Avoid pie charts unless 2-3 segments and
+    clearly labeled.
+  - NO dense telemetry on public / external pages.
+  - NO technical jargon on landing pages or executive views.
+  - NO operationally empty dashboard. Every dashboard surfaces
+    something useful on first paint (a queue count, an upcoming
+    deadline, a recently completed item, an empty state with a clear
+    next action).
+  - NO product copy that says "Claude," "the AI," or names the LLM.
+    Refer to platform analysis features as "automated analysis,"
+    "SHIELD analysis," or "the analysis engine."
 
 ================================================================================
 14. WHAT NOT TO REPEAT FROM v1
