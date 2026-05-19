@@ -77,3 +77,33 @@ class CapabilityItemPatch(BaseModel):
     annual_cost_usd: float | None = None
     license_count: int | None = None
     notes: str | None = None
+
+
+class OverlapBucketResponse(BaseModel):
+    key: str
+    item_count: int
+    total_cost: float
+    cost_known: bool
+    item_ids: list[uuid.UUID]
+    item_names: list[str]
+
+
+class TopCostItemResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    vendor: str | None
+    category: str | None
+    annual_cost_usd: float
+
+
+class OverlapAnalysisResponse(BaseModel):
+    capability_list_id: uuid.UUID
+    capability_list_version: int
+    by_category: list[OverlapBucketResponse]
+    by_vendor: list[OverlapBucketResponse]
+    top_cost_items: list[TopCostItemResponse]
+    total_cost: float
+    total_items: int
+    uncategorized_count: int
+    no_vendor_count: int
+    no_cost_count: int

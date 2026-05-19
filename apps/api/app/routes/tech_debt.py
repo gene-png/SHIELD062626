@@ -24,20 +24,22 @@ from app.ai.llm import LLMClient
 from app.audit import audit
 from app.db.session import get_db
 from app.dependencies import current_user, require_role
+from app.models._common import utcnow
 from app.models.artifact import Artifact
-from app.models.capability import CapabilityItem, CapabilityList
+from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
-from app.models._common import utcnow
-from app.models.capability import CapabilityListStatus
 from app.schemas.tech_debt import (
     CapabilityItemPatch,
     CapabilityItemResponse,
     CapabilityListResponse,
     ExtractRequest,
+    OverlapAnalysisResponse,
+    OverlapBucketResponse,
     ServiceCreateRequest,
     ServiceResponse,
+    TopCostItemResponse,
 )
 from app.storage import StorageBackend
 from app.tech_debt.extract import (
@@ -45,6 +47,7 @@ from app.tech_debt.extract import (
     extract_capabilities,
     name_hints_for_deployment,
 )
+from app.tech_debt.overlap import analyze_overlap
 from app.tech_debt.parsers import SUPPORTED_MIME, UnsupportedInventoryFormat
 
 router = APIRouter(prefix="/tech-debt", tags=["tech-debt"])
@@ -339,3 +342,65 @@ def approve_capability_list(
     db.commit()
     db.refresh(cap_list)
     return _serialize_list_with_items(db, cap_list)
+
+
+@router.get(
+    "/services/{service_id}/overlap-analysis",
+    response_model=OverlapAnalysisResponse,
+    summary="Overlap analysis for the latest capability list (admin)",
+)
+def overlap_analysis(
+    service_id: uuid.UUID,
+    _user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> OverlapAnalysisResponse:
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found.",
+        )
+    cap_list = _latest_list_or_none(db, svc.id)
+    if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No capability list yet. Run extraction first.",
+        )
+    items = (
+        db.execute(select(CapabilityItem).where(CapabilityItem.capability_list_id == cap_list.id))
+        .scalars()
+        .all()
+    )
+    analysis = analyze_overlap(list(items))
+
+    def _bucket(b) -> OverlapBucketResponse:
+        return OverlapBucketResponse(
+            key=b.key,
+            item_count=b.item_count,
+            total_cost=b.total_cost,
+            cost_known=b.cost_known,
+            item_ids=[uuid.UUID(i) for i in b.item_ids],
+            item_names=list(b.item_names),
+        )
+
+    return OverlapAnalysisResponse(
+        capability_list_id=cap_list.id,
+        capability_list_version=cap_list.version,
+        by_category=[_bucket(b) for b in analysis.by_category],
+        by_vendor=[_bucket(b) for b in analysis.by_vendor],
+        top_cost_items=[
+            TopCostItemResponse(
+                id=uuid.UUID(i.id),
+                name=i.name,
+                vendor=i.vendor,
+                category=i.category,
+                annual_cost_usd=i.annual_cost_usd,
+            )
+            for i in analysis.top_cost_items
+        ],
+        total_cost=analysis.total_cost,
+        total_items=analysis.total_items,
+        uncategorized_count=analysis.uncategorized_count,
+        no_vendor_count=analysis.no_vendor_count,
+        no_cost_count=analysis.no_cost_count,
+    )

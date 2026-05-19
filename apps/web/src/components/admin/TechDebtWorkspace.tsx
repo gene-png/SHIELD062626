@@ -18,11 +18,17 @@ import {
   approveCapabilityList,
   extractCapabilities,
   fetchLatestList,
+  fetchOverlapAnalysis,
   TechDebtProxyError,
 } from "@/lib/tech_debt/client";
-import type { CapabilityItem, CapabilityList } from "@/lib/tech_debt/types";
+import type {
+  CapabilityItem,
+  CapabilityList,
+  OverlapAnalysis,
+} from "@/lib/tech_debt/types";
 
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
+import { OverlapDashboard } from "./OverlapDashboard";
 
 export interface TechDebtWorkspaceProps {
   serviceId: string;
@@ -34,10 +40,28 @@ export function TechDebtWorkspace({
   serviceTitle,
 }: TechDebtWorkspaceProps): JSX.Element {
   const [list, setList] = React.useState<CapabilityList | null>(null);
+  const [overlap, setOverlap] = React.useState<OverlapAnalysis | null>(null);
+  const [overlapError, setOverlapError] = React.useState<string | null>(null);
+  const [overlapLoading, setOverlapLoading] = React.useState(false);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
   const [approving, setApproving] = React.useState(false);
+
+  const refreshOverlap = React.useCallback(async () => {
+    setOverlapLoading(true);
+    try {
+      const next = await fetchOverlapAnalysis(serviceId);
+      setOverlap(next);
+      setOverlapError(null);
+    } catch (err) {
+      setOverlapError(
+        err instanceof Error ? err.message : "Failed to load overlap.",
+      );
+    } finally {
+      setOverlapLoading(false);
+    }
+  }, [serviceId]);
 
   const refresh = React.useCallback(async () => {
     try {
@@ -47,7 +71,8 @@ export function TechDebtWorkspace({
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load list.");
     }
-  }, [serviceId]);
+    await refreshOverlap();
+  }, [serviceId, refreshOverlap]);
 
   React.useEffect(() => {
     void refresh();
@@ -59,6 +84,7 @@ export function TechDebtWorkspace({
     try {
       const next = await extractCapabilities(serviceId, artifactId);
       setList(next);
+      await refreshOverlap();
     } catch (err) {
       if (err instanceof TechDebtProxyError) {
         const payload = err.payload as
@@ -87,6 +113,8 @@ export function TechDebtWorkspace({
         items: curr.items.map((i) => (i.id === next.id ? next : i)),
       };
     });
+    // Inline edits change the overlap math; refresh in the background.
+    void refreshOverlap();
   }
 
   async function onApprove(): Promise<void> {
@@ -233,6 +261,14 @@ export function TechDebtWorkspace({
           description="Upload an inventory above to run the first AI extraction."
         />
       )}
+
+      {list ? (
+        <OverlapDashboard
+          analysis={overlap}
+          loading={overlapLoading && overlap === null}
+          error={overlapError}
+        />
+      ) : null}
     </div>
   );
 }

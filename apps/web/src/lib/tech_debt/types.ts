@@ -60,3 +60,33 @@ export interface CapabilityItemPatch {
   license_count?: number | null;
   notes?: string;
 }
+
+export interface OverlapBucket {
+  key: string;
+  item_count: number;
+  total_cost: number;
+  cost_known: boolean;
+  item_ids: string[];
+  item_names: string[];
+}
+
+export interface TopCostItem {
+  id: string;
+  name: string;
+  vendor: string | null;
+  category: string | null;
+  annual_cost_usd: number;
+}
+
+export interface OverlapAnalysis {
+  capability_list_id: string;
+  capability_list_version: number;
+  by_category: OverlapBucket[];
+  by_vendor: OverlapBucket[];
+  top_cost_items: TopCostItem[];
+  total_cost: number;
+  total_items: number;
+  uncategorized_count: number;
+  no_vendor_count: number;
+  no_cost_count: number;
+}
