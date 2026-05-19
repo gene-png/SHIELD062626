@@ -20,6 +20,7 @@ from app.routes import (
     admin,
     artifacts,
     auth,
+    csf,
     deliverables,
     health,
     intake,
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router)
     app.include_router(notifications.router)
     app.include_router(tech_debt.router)
+    app.include_router(csf.router)
     app.include_router(deliverables.router)
 
     return app
