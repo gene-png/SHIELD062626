@@ -16,7 +16,7 @@ from app.config import get_settings
 from app.exceptions import register_exception_handlers
 from app.logging import configure_logging, get_logger
 from app.middleware.correlation import CorrelationIdMiddleware
-from app.routes import auth, health, intake
+from app.routes import artifacts, auth, health, intake
 
 
 @asynccontextmanager
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(intake.router)
+    app.include_router(artifacts.router)
 
     return app
 
