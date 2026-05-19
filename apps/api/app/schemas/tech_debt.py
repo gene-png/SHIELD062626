@@ -7,7 +7,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.capability import CapabilityListStatus
+from app.models.capability import CapabilityDisposition, CapabilityListStatus
 from app.models.service import ServiceKind, ServiceStatus
 
 
@@ -48,6 +48,9 @@ class CapabilityItemResponse(BaseModel):
     notes: str | None
     confidence_pct: int | None
     source_artifact_id: uuid.UUID | None
+    disposition: CapabilityDisposition | None
+    disposition_rationale: str | None
+    consolidation_target_id: uuid.UUID | None
 
 
 class CapabilityListResponse(BaseModel):
@@ -77,6 +80,21 @@ class CapabilityItemPatch(BaseModel):
     annual_cost_usd: float | None = None
     license_count: int | None = None
     notes: str | None = None
+    disposition: CapabilityDisposition | None = None
+    disposition_rationale: str | None = Field(default=None, max_length=4000)
+    consolidation_target_id: uuid.UUID | None = None
+
+
+class ConsolidationPlanSummary(BaseModel):
+    capability_list_id: uuid.UUID
+    capability_list_version: int
+    total_items: int
+    keep_count: int
+    consolidate_count: int
+    cut_count: int
+    undecided_count: int
+    estimated_annual_savings: float
+    savings_cost_known: bool
 
 
 class OverlapBucketResponse(BaseModel):

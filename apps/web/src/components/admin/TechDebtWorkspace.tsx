@@ -17,6 +17,7 @@ import { RedactionDisclosure } from "@/components/intake/RedactionDisclosure";
 import {
   approveCapabilityList,
   extractCapabilities,
+  fetchConsolidationPlan,
   fetchLatestList,
   fetchOverlapAnalysis,
   TechDebtProxyError,
@@ -24,9 +25,11 @@ import {
 import type {
   CapabilityItem,
   CapabilityList,
+  ConsolidationPlanSummary,
   OverlapAnalysis,
 } from "@/lib/tech_debt/types";
 
+import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { OverlapDashboard } from "./OverlapDashboard";
 
@@ -43,6 +46,7 @@ export function TechDebtWorkspace({
   const [overlap, setOverlap] = React.useState<OverlapAnalysis | null>(null);
   const [overlapError, setOverlapError] = React.useState<string | null>(null);
   const [overlapLoading, setOverlapLoading] = React.useState(false);
+  const [plan, setPlan] = React.useState<ConsolidationPlanSummary | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
@@ -60,6 +64,12 @@ export function TechDebtWorkspace({
       );
     } finally {
       setOverlapLoading(false);
+    }
+    try {
+      const nextPlan = await fetchConsolidationPlan(serviceId);
+      setPlan(nextPlan);
+    } catch {
+      // non-blocking; dashboard already shows the overlap.
     }
   }, [serviceId]);
 
@@ -263,11 +273,14 @@ export function TechDebtWorkspace({
       )}
 
       {list ? (
-        <OverlapDashboard
-          analysis={overlap}
-          loading={overlapLoading && overlap === null}
-          error={overlapError}
-        />
+        <>
+          <ConsolidationPlanCard summary={plan} />
+          <OverlapDashboard
+            analysis={overlap}
+            loading={overlapLoading && overlap === null}
+            error={overlapError}
+          />
+        </>
       ) : null}
     </div>
   );

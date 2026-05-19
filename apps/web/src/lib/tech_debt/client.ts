@@ -4,6 +4,7 @@ import type {
   CapabilityItem,
   CapabilityItemPatch,
   CapabilityList,
+  ConsolidationPlanSummary,
   OverlapAnalysis,
   ServiceResponse,
 } from "./types";
@@ -108,6 +109,21 @@ export async function approveCapabilityList(
     `/api/proxy/tech-debt/capability-lists/${listId}/approve`,
     { method: "POST" },
   );
+}
+
+export async function fetchConsolidationPlan(
+  serviceId: string,
+): Promise<ConsolidationPlanSummary | null> {
+  try {
+    return await jsonRequest<ConsolidationPlanSummary>(
+      `/api/proxy/tech-debt/services/${serviceId}/consolidation-plan`,
+    );
+  } catch (err) {
+    if (err instanceof TechDebtProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function fetchOverlapAnalysis(

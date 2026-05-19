@@ -8,6 +8,10 @@ Master Spec §11:
                       function, annual_cost_usd, license_count, notes,
                       confidence_pct (AI flag), source_artifact_id
 
+Phase 3 stage 7 adds the consolidation-plan verdict columns:
+  disposition (keep/consolidate/cut), disposition_rationale,
+  consolidation_target_id (self-FK).
+
 AI Prompt §6.2 / §6.4: the extraction surface is an editable table, NOT
 a JSON textarea. confidence_pct is what the renderer reads to dim
 low-confidence rows (or surface them as "review me" badges).
@@ -41,6 +45,14 @@ class CapabilityListStatus(enum.StrEnum):
     DRAFT = "draft"
     APPROVED = "approved"
     RELEASED = "released"
+
+
+class CapabilityDisposition(enum.StrEnum):
+    """Consolidation-plan verdict for each capability (Phase 3 stage 7)."""
+
+    KEEP = "keep"
+    CONSOLIDATE = "consolidate"
+    CUT = "cut"
 
 
 class CapabilityList(UUIDPKMixin, TimestampMixin, Base):
@@ -85,4 +97,21 @@ class CapabilityItem(UUIDPKMixin, TimestampMixin, Base):
     confidence_pct: Mapped[int | None] = mapped_column(Integer)
     source_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
+
+    # Consolidation-plan verdict (Phase 3 stage 7). None = undecided.
+    disposition: Mapped[CapabilityDisposition | None] = mapped_column(
+        SAEnum(
+            CapabilityDisposition,
+            name="capability_disposition",
+            native_enum=False,
+            length=16,
+        )
+    )
+    disposition_rationale: Mapped[str | None] = mapped_column(Text)
+    # When disposition=consolidate, optionally points at the item we'd
+    # consolidate INTO. ondelete=SET NULL so deleting the target doesn't
+    # nuke the dependent row's disposition.
+    consolidation_target_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("capability_items.id", ondelete="SET NULL")
     )

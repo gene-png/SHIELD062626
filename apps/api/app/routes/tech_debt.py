@@ -34,6 +34,7 @@ from app.schemas.tech_debt import (
     CapabilityItemPatch,
     CapabilityItemResponse,
     CapabilityListResponse,
+    ConsolidationPlanSummary,
     ExtractRequest,
     OverlapAnalysisResponse,
     OverlapBucketResponse,
@@ -403,4 +404,68 @@ def overlap_analysis(
         uncategorized_count=analysis.uncategorized_count,
         no_vendor_count=analysis.no_vendor_count,
         no_cost_count=analysis.no_cost_count,
+    )
+
+
+@router.get(
+    "/services/{service_id}/consolidation-plan",
+    response_model=ConsolidationPlanSummary,
+    summary="Consolidation-plan summary for the latest capability list (admin)",
+)
+def consolidation_plan_summary(
+    service_id: uuid.UUID,
+    _user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> ConsolidationPlanSummary:
+    from app.models.capability import CapabilityDisposition
+
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found.",
+        )
+    cap_list = _latest_list_or_none(db, svc.id)
+    if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No capability list yet. Run extraction first.",
+        )
+    items = (
+        db.execute(select(CapabilityItem).where(CapabilityItem.capability_list_id == cap_list.id))
+        .scalars()
+        .all()
+    )
+
+    keep = 0
+    consolidate = 0
+    cut = 0
+    undecided = 0
+    cut_savings = 0.0
+    savings_cost_known = True
+    for it in items:
+        if it.disposition is None:
+            undecided += 1
+            continue
+        if it.disposition == CapabilityDisposition.KEEP:
+            keep += 1
+        elif it.disposition == CapabilityDisposition.CONSOLIDATE:
+            consolidate += 1
+        elif it.disposition == CapabilityDisposition.CUT:
+            cut += 1
+            if it.annual_cost_usd is None:
+                savings_cost_known = False
+            else:
+                cut_savings += float(it.annual_cost_usd)
+
+    return ConsolidationPlanSummary(
+        capability_list_id=cap_list.id,
+        capability_list_version=cap_list.version,
+        total_items=len(items),
+        keep_count=keep,
+        consolidate_count=consolidate,
+        cut_count=cut,
+        undecided_count=undecided,
+        estimated_annual_savings=cut_savings,
+        savings_cost_known=savings_cost_known,
     )

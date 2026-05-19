@@ -97,9 +97,7 @@ def _load_artifact_bytes(storage: StorageBackend, artifact: Artifact) -> bytes:
     import urllib.request
 
     url = storage.signed_url(artifact.file_storage_key, ttl_seconds=120)
-    with urllib.request.urlopen(
-        url
-    ) as resp:  # noqa: S310 - URL is produced by our own StorageBackend, not user input
+    with urllib.request.urlopen(url) as resp:  # noqa: S310 - URL produced by our own StorageBackend
         return resp.read()
 
 

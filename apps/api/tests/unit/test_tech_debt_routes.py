@@ -482,3 +482,116 @@ def test_approve_capability_list_404_for_unknown(app_client) -> None:
         headers={"Authorization": f"Bearer {bearer}"},
     )
     assert r.status_code == 404
+
+
+def _seed_three_item_list(
+    c: TestClient, bearer: str, provider: FixtureProvider
+) -> tuple[str, list[str]]:
+    """Seed a 3-item list with realistic costs for consolidation-plan tests."""
+    provider.register(
+        "extract.capabilities",
+        lambda _p: LLMResponse(
+            json.dumps(
+                {
+                    "items": [
+                        {"name": "Wiz", "category": "CNAPP", "annual_cost_usd": 350000},
+                        {"name": "Lacework", "category": "CNAPP", "annual_cost_usd": 120000},
+                        {"name": "Splunk", "category": "SIEM", "annual_cost_usd": 480000},
+                    ]
+                }
+            )
+        ),
+    )
+    sr = c.post(
+        "/tech-debt/services",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"title": "x"},
+    )
+    svc_id = sr.json()["id"]
+    artifact_id = _upload_csv(c, bearer, "x.csv", b"A\n1\n")
+    er = c.post(
+        f"/tech-debt/services/{svc_id}/capability-lists/extract",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"artifact_id": artifact_id},
+    )
+    return svc_id, [i["id"] for i in er.json()["items"]]
+
+
+@pytest.mark.unit
+def test_consolidation_plan_summary_counts_dispositions(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, item_ids = _seed_three_item_list(c, bearer, provider)
+
+    # Mark dispositions: keep / consolidate / cut respectively.
+    for item_id, disp in zip(item_ids, ["keep", "consolidate", "cut"], strict=True):
+        r = c.patch(
+            f"/tech-debt/capability-items/{item_id}",
+            headers={"Authorization": f"Bearer {bearer}"},
+            json={"disposition": disp},
+        )
+        assert r.status_code == 200, r.text
+
+    r = c.get(
+        f"/tech-debt/services/{svc_id}/consolidation-plan",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["keep_count"] == 1
+    assert body["consolidate_count"] == 1
+    assert body["cut_count"] == 1
+    assert body["undecided_count"] == 0
+    # Splunk was the "cut" item ($480k savings).
+    assert body["estimated_annual_savings"] == 480000.0
+    assert body["savings_cost_known"] is True
+
+
+@pytest.mark.unit
+def test_consolidation_plan_marks_savings_unknown_when_cut_has_no_cost(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, item_ids = _seed_three_item_list(c, bearer, provider)
+
+    # Cut the first item then clear its cost.
+    c.patch(
+        f"/tech-debt/capability-items/{item_ids[0]}",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"disposition": "cut", "annual_cost_usd": None},
+    )
+    r = c.get(
+        f"/tech-debt/services/{svc_id}/consolidation-plan",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cut_count"] == 1
+    assert body["estimated_annual_savings"] == 0.0
+    assert body["savings_cost_known"] is False
+
+
+@pytest.mark.unit
+def test_consolidation_plan_summary_404_for_unknown_service(app_client) -> None:
+    c, _, _ = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    r = c.get(
+        f"/tech-debt/services/{_uuid.uuid4()}/consolidation-plan",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.unit
+def test_consolidation_plan_summary_rejects_client_role(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    client = _register(c, "client@example.com")
+    svc_id, _ = _seed_three_item_list(c, admin["tokens"]["access_token"], provider)
+    r = c.get(
+        f"/tech-debt/services/{svc_id}/consolidation-plan",
+        headers={"Authorization": f"Bearer {client['tokens']['access_token']}"},
+    )
+    assert r.status_code == 403

@@ -6,11 +6,12 @@ import { cn, StatusPill } from "@shield/design-system";
 
 import { patchCapabilityItem } from "@/lib/tech_debt/client";
 import type {
+  CapabilityDisposition,
   CapabilityItem,
   CapabilityItemPatch,
 } from "@/lib/tech_debt/types";
 
-import { inputClasses } from "../intake/Field";
+import { inputClasses, selectClasses } from "../intake/Field";
 
 export interface EditableCapabilityTableProps {
   items: CapabilityItem[];
@@ -71,6 +72,15 @@ export function EditableCapabilityTable({
     return "neutral";
   }
 
+  function dispositionTone(
+    d: CapabilityDisposition | null,
+  ): "success" | "warning" | "danger" | "neutral" {
+    if (d === "keep") return "success";
+    if (d === "consolidate") return "warning";
+    if (d === "cut") return "danger";
+    return "neutral";
+  }
+
   function confidenceLabel(pct: number | null): string {
     if (pct === null) return "Human-curated";
     return `AI ${pct}%`;
@@ -86,6 +96,12 @@ export function EditableCapabilityTable({
               style={{ width: "8.5rem" }}
             >
               Confidence
+            </th>
+            <th
+              className="border-b border-border-subtle px-3 py-2 text-left font-semibold"
+              style={{ width: "9rem" }}
+            >
+              Disposition
             </th>
             <th className="border-b border-border-subtle px-3 py-2 text-left font-semibold">
               Name
@@ -114,7 +130,7 @@ export function EditableCapabilityTable({
           {items.length === 0 ? (
             <tr>
               <td
-                colSpan={8}
+                colSpan={9}
                 className="px-3 py-12 text-center text-sm text-ink-tertiary"
               >
                 No items in this capability list. Run a new extraction.
@@ -153,6 +169,37 @@ export function EditableCapabilityTable({
                         <span className="text-xs text-status-danger-fg">
                           Save failed
                         </span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="border-b border-border-subtle px-3 py-2 align-top">
+                    <div className="flex flex-col gap-1">
+                      <select
+                        defaultValue={item.disposition ?? ""}
+                        disabled={readOnly}
+                        onChange={(e) => {
+                          const v = (e.target.value ||
+                            null) as CapabilityDisposition | null;
+                          if (v !== item.disposition) {
+                            void save(item, { disposition: v });
+                          }
+                        }}
+                        className={selectClasses}
+                        aria-label="Disposition"
+                      >
+                        <option value="">Undecided…</option>
+                        <option value="keep">Keep</option>
+                        <option value="consolidate">Consolidate</option>
+                        <option value="cut">Cut</option>
+                      </select>
+                      {item.disposition ? (
+                        <StatusPill tone={dispositionTone(item.disposition)}>
+                          {item.disposition === "keep"
+                            ? "Keep"
+                            : item.disposition === "consolidate"
+                              ? "Consolidate"
+                              : "Cut"}
+                        </StatusPill>
                       ) : null}
                     </div>
                   </td>

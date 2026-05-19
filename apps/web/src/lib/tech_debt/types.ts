@@ -16,6 +16,8 @@ export type ServiceStatus =
 
 export type CapabilityListStatus = "draft" | "approved" | "released";
 
+export type CapabilityDisposition = "keep" | "consolidate" | "cut";
+
 export interface ServiceResponse {
   id: string;
   kind: ServiceKind;
@@ -39,6 +41,9 @@ export interface CapabilityItem {
   notes: string | null;
   confidence_pct: number | null;
   source_artifact_id: string | null;
+  disposition: CapabilityDisposition | null;
+  disposition_rationale: string | null;
+  consolidation_target_id: string | null;
 }
 
 export interface CapabilityList {
@@ -59,6 +64,21 @@ export interface CapabilityItemPatch {
   annual_cost_usd?: number | null;
   license_count?: number | null;
   notes?: string;
+  disposition?: CapabilityDisposition | null;
+  disposition_rationale?: string;
+  consolidation_target_id?: string | null;
+}
+
+export interface ConsolidationPlanSummary {
+  capability_list_id: string;
+  capability_list_version: number;
+  total_items: number;
+  keep_count: number;
+  consolidate_count: number;
+  cut_count: number;
+  undecided_count: number;
+  estimated_annual_savings: number;
+  savings_cost_known: boolean;
 }
 
 export interface OverlapBucket {
