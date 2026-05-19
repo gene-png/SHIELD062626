@@ -49,3 +49,21 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
   - `GET /auth/me` — current user.
 - `current_user` FastAPI dependency: validates `Authorization: Bearer <access>` and loads the user (`apps/api/app/dependencies.py`).
 - 14 new auth route tests + 13 primitive tests = 43 unit tests all passing.
+
+### Phase 1 stage 4 — Keycloak realm (`v0.1.4`) — 2026-05-19
+
+- `infra/keycloak/shield-realm.json` imported on `keycloak` service start (compose mounts the dir at `/opt/keycloak/data/import` and starts with `--import-realm`).
+- Realm + 3 realm roles (admin / reviewer / client) + 2 clients (`shield-web` public OIDC w/ PKCE S256, `shield-api` bearer-only).
+- Brute-force protection mirrors API lockout counters (10 failures, 60s/900s waits).
+- SSO session idle 1800s, max 86400s — matches Master Spec §4.5.
+- Bootstrap dev-admin user with temporary password (dev only).
+
+### Phase 1 stage 5 — Next.js skeleton (`v0.1.5`) — 2026-05-19
+
+- `apps/web` baseline: Next.js 14.2 App Router + React 18 + TS strict + Tailwind 3.4 + NextAuth 4.24.
+- `next.config.mjs` ships `output: "standalone"` for slim prod image, security headers (`X-Frame-Options: DENY`, HSTS, Permissions-Policy, no `X-Powered-By`).
+- NextAuth Credentials provider (`src/lib/auth/options.ts`) posts to `/auth/login` on the API and stores access + refresh tokens in the encrypted JWT session. 401/423 from the API map to `null` (sign-in failure); other errors propagate.
+- Server-side `apiFetch<T>()` helper (`src/lib/api.ts`) attaches Bearer tokens, surfaces correlation IDs from `X-Request-ID`, raises `ApiError` with status + payload on non-2xx.
+- Typed session augmentation in `src/types/next-auth.d.ts` exposes `session.role` and `session.accessToken`.
+- Placeholder landing at `/` (real Round-6 landing arrives in stage 7).
+- Smoke: `pnpm typecheck` clean; `pnpm build` succeeded — 4 routes built (`/`, `/_not-found`, `/api/auth/[...nextauth]`), 87.2 kB First Load JS shared.
