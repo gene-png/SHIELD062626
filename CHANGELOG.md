@@ -102,3 +102,51 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
   - **Web:** `prettier --check`, `eslint`, `tsc --noEmit`, `next build` (9 routes). Added `.prettierignore` so the lockfile and `reference-docs/` are not reformatted.
 - CI workflow rewritten (`.github/workflows/ci.yml`) to actually run those checks against the codebase. Three jobs: `python` (ruff, black, pytest, bandit), `web` (prettier, eslint, typecheck, build), `secret-scan` (gitleaks).
 - `apps/api/app/models/user.py`: `UserRole(str, Enum)` → `UserRole(StrEnum)` (Python 3.11+ idiom; what ruff UP042 wanted).
+
+## Phase 1 — Foundation — Complete (`v0.1.0`) — 2026-05-19
+
+### Acceptance criteria
+- [x] User can self-register, sign in. (MFA + email verification deferred per Master Spec §2 risk acceptance; columns + feature flags in place to enable in v1.x.)
+- [x] Three roles distinguishable (admin / reviewer / client).
+- [x] Audit log records every login (and registration, lockout, logout).
+- [x] No stack trace surfaces to user under any forced error.
+
+### Notable features shipped
+- API skeleton with structured JSON logs and correlation IDs end-to-end.
+- Data model for `client` (singleton), `users` (with role enum + lockout bookkeeping), `audit_entries` (append-only at two layers).
+- Auth backbone: Argon2id hashing, JWT issue/verify, register/login/refresh/logout/me routes, account lockout, account-existence oracle defense.
+- Keycloak realm exported and ready for v1.x OIDC federation with the same audience claim.
+- Next.js 14 web app: marketing landing (Round-6 PUBLIC EXPERIENCE), sign-in + sign-up, NextAuth Credentials provider, security headers, footer stub pages.
+- `@shield/design-system` package: Round-6 tokens, Tailwind preset, 8 keyboard-accessible primitives (Card, StatusPill, NumberCard, DataTable, Toast, Modal, SlideOver, EmptyState).
+- CI green across the whole tree: ruff, black, bandit, pytest, prettier, eslint, tsc, next build.
+
+### Security review (OWASP Top 10) — see BUILD_REPORT.md for full matrix
+- A01 Access Control:                PARTIAL (authn done; role-based route guards in Phase 2)
+- A02 Cryptographic Failures:        PASS
+- A03 Injection:                     PASS
+- A04 Insecure Design:               PASS
+- A05 Misconfiguration:              PASS
+- A06 Vulnerable Components:         PARTIAL (pinned versions; audit hooks in Phase 6)
+- A07 Auth Failures:                 PASS WITH NOTES (MFA deferred per spec)
+- A08 Software Integrity:            PASS
+- A09 Logging and Monitoring:        PASS
+- A10 SSRF:                          PASS
+
+### What's stubbed or deferred
+- MFA enrollment + email verification — feature-flagged off; columns and feature flags ready.
+- Postgres audit-trigger integration smoke — waits on Docker availability in the dev container.
+- axe-core / Playwright accessibility CI job — deferred to Phase 6 hardening; WCAG 2.1 AA is implemented at the component layer.
+- Redactor module (`apps/api/app/ai/redact.py`) — lands in Phase 3 with the first AI-extraction use case (Tech Debt capability list).
+
+### Known issues
+- None blocking Phase 2.
+
+### How to try it
+1. `cp .env.example .env`; paste `ANTHROPIC_API_KEY` (only needed when `SHIELD_LLM_MODE=live`); generate `NEXTAUTH_SECRET` via `openssl rand -hex 32`.
+2. `docker compose up -d db redis minio keycloak mailhog && docker compose up -d --build api worker`.
+3. `docker compose run --service-ports --rm web bash scripts/dev-web.sh`.
+4. Open http://localhost:3000.
+
+### Decisions logged this phase
+- D-001 through D-014 (opening commit). No new decisions added during stages 1–9 beyond DECISIONS.md entries already on `main`.
+
