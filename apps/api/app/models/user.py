@@ -49,3 +49,8 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     mfa_enrolled: Mapped[bool] = mapped_column(default=False, nullable=False)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Lockout bookkeeping (Master Spec §4.5: 10 failed attempts in 15 min).
+    failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    last_failed_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_until_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

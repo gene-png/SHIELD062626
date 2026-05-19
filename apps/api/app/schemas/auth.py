@@ -1,0 +1,57 @@
+"""Auth-route request/response schemas."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, EmailStr, Field
+
+from app.models.user import UserRole
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=256)
+    display_name: str = Field(min_length=1, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=64)
+    timezone: str = Field(default="UTC", min_length=1, max_length=64)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=256)
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenPairResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    access_expires_at: datetime
+    refresh_expires_at: datetime
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    role: UserRole
+    display_name: str | None
+    title: str | None
+    phone: str | None
+    timezone: str
+    is_active: bool
+    mfa_enrolled: bool
+    email_verified_at: datetime | None
+    last_login_at: datetime | None
+    created_at: datetime
+
+
+class RegisterResponse(BaseModel):
+    user: UserResponse
+    tokens: TokenPairResponse
+    is_primary_poc: bool

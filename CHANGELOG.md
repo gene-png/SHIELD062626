@@ -35,3 +35,17 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - `/ready` readiness probe that touches the DB (`SELECT 1`) and reports per-dependency status (returns 200 with `status=degraded` rather than 5xx, so load balancers get a clean signal but readiness sweeps stay green).
 - Alembic env honors any `sqlalchemy.url` already set in the config (tests override it for SQLite).
 - 16 unit tests passing: migration applies cleanly on SQLite; ORM round-trips a User + audit row; audit immutability fires on UPDATE and DELETE; client singleton inserts; `audit()` row carries correlation_id; everything from stage 1 still green.
+
+### Phase 1 stage 3 — Auth backbone (`v0.1.3`) — 2026-05-19
+
+- Argon2id password hashing tuned per OWASP Password Storage Cheat Sheet (`apps/api/app/security/password.py`).
+- HS256 JWT issue + verify with typed claims (`apps/api/app/security/jwt.py`); separate access / refresh `typ` claim; `verify_token(expected_type=...)` prevents token-confusion attacks.
+- Lockout bookkeeping columns added to `users` via migration `0002_user_lockout_columns.py`: `failed_login_count`, `last_failed_login_at`, `locked_until_at`. 10 failed attempts in 15 minutes locks the account (Master Spec §4.5).
+- Auth routes (`apps/api/app/routes/auth.py`):
+  - `POST /auth/register` — self-registration per D-004. First registrant becomes Primary POC with `admin` role; subsequent registrants are `client`.
+  - `POST /auth/login` — email + password. Account-existence oracle defended (wrong-email runs a dummy Argon2 verify so timing matches wrong-password).
+  - `POST /auth/refresh` — refresh token → new access + refresh pair. Refuses access tokens.
+  - `POST /auth/logout` — audited.
+  - `GET /auth/me` — current user.
+- `current_user` FastAPI dependency: validates `Authorization: Bearer <access>` and loads the user (`apps/api/app/dependencies.py`).
+- 14 new auth route tests + 13 primitive tests = 43 unit tests all passing.
