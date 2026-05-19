@@ -150,3 +150,22 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 ### Decisions logged this phase
 - D-001 through D-014 (opening commit). No new decisions added during stages 1–9 beyond DECISIONS.md entries already on `main`.
 
+## [Unreleased — Phase 2 in progress]
+
+### Phase 2 stage 1 — Intake data model (`v0.2.1`) — 2026-05-19
+
+- New `ServiceRequest` ORM model (`apps/api/app/models/service_request.py`) matching Master Spec §11: `service_type`, `requested_by`, `requested_at`, `notes`, `deadline`, `fulfilled_service_id`, `declined_at`, `declined_reason`.
+- New `ServiceType(StrEnum)`: `tech_debt`, `zero_trust_cisa`, `zero_trust_dod`, `nist_csf`, `attack_coverage`, `consultation`. The fifth-option "I'm not sure" intake path maps to `CONSULTATION`.
+- `Client.intake_completed_at` column added so the admin queue can surface new leads with a real timestamp (Phase 2 acceptance).
+- `Client.service_interests` switched to `ARRAY(String(32)).with_variant(JSONB, "sqlite")` for SQLite test compatibility.
+- Migration `0003_intake.py`: adds the column, creates `service_requests` + indexes on `(requested_at)` and `(service_type)`.
+- 5 new unit tests (48 total).
+
+### Phase 2 stage 2 — Intake API routes (`v0.2.2`) — 2026-05-19
+
+- Three routes on the FastAPI side back the wizard (`apps/api/app/routes/intake.py`):
+  - `GET /intake` — current state; lazily creates the singleton client placeholder so the wizard always has a target.
+  - `PATCH /intake` — auto-save target on every blur. Accepts a sparse body; only set-and-non-None fields are applied (avoids overwriting NOT-NULL columns like `users.timezone` with None).
+  - `POST /intake/submit` — finalizes submission: validates a real legal name, writes `ServiceRequest` rows (dedupes by service_type), stamps `client.intake_completed_at = utcnow()`, and writes a `client.intake_submitted` audit row whose `details.services` are sorted for stable diffing.
+- `IntakePatchRequest` / `IntakeSubmitRequest` / `IntakeStateResponse` Pydantic schemas (`apps/api/app/schemas/intake.py`). `IntakeSubmitRequest.service_requests` enforces `min_length=1`; `consultation` is a valid first pick so the "I'm not sure" path doesn't get blocked.
+- 7 new route tests (55 total): GET creates the singleton, PATCH writes partial updates, submit writes service_requests + audit row, submit rejects empty service list, submit rejects the pending placeholder legal name, submit dedupes duplicates, all three routes return 401 when unauthenticated.
