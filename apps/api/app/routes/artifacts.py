@@ -25,7 +25,8 @@ from app.audit import audit
 from app.db.session import get_db
 from app.dependencies import current_user
 from app.models.artifact import Artifact, ArtifactOrigin
-from app.models.user import User
+from app.models.deliverable import Deliverable
+from app.models.user import User, UserRole
 from app.schemas.artifact import ArtifactListResponse, ArtifactResponse
 from app.storage import StorageBackend, get_storage
 
@@ -172,6 +173,21 @@ def get_artifact(
     return ArtifactResponse.model_validate(row, from_attributes=True)
 
 
+def _is_released_deliverable_artifact(db: Session, artifact_id: uuid.UUID) -> bool:
+    """True if `artifact_id` is the PDF or XLSX of a released deliverable.
+
+    Used to broaden download auth so engagement CLIENT users can fetch
+    a deliverable they didn't personally upload.
+    """
+    row = db.execute(
+        select(Deliverable).where(
+            (Deliverable.pdf_artifact_id == artifact_id)
+            | (Deliverable.xlsx_artifact_id == artifact_id)
+        )
+    ).scalar_one_or_none()
+    return row is not None and row.released_to_client_at is not None
+
+
 @router.get(
     "/{artifact_id}/download",
     summary="Stream the raw artifact bytes",
@@ -183,7 +199,22 @@ def download_artifact(
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> Response:
     row = db.get(Artifact, artifact_id)
-    if row is None or row.uploaded_by != user.id:
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact not found.",
+        )
+    # Three permitted readers (v1 single-tenant):
+    #   1. the uploader (admin who finalized, or any user who uploaded
+    #      via intake);
+    #   2. any admin / reviewer (audit + ops);
+    #   3. any client when the artifact is part of a released deliverable.
+    is_uploader = row.uploaded_by == user.id
+    is_staff = user.role in (UserRole.ADMIN, UserRole.REVIEWER)
+    is_released = user.role == UserRole.CLIENT and _is_released_deliverable_artifact(
+        db, artifact_id
+    )
+    if not (is_uploader or is_staff or is_released):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",
