@@ -305,3 +305,22 @@ A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps
 - `off` mode is pass-through. The runtime config refuses it outside development via `Settings.assert_safe_for_runtime()` (Phase 1); tests use it to compare raw-vs-redacted paths.
 - Order of operations matters: signature block → email → SSN → EIN → contract → phone → CAGE → names → addresses → org. SSN runs before phone so `123-45-6789` is replaced with `[SSN]` before the phone pass sees it.
 - 23 new pytest tests (98 total): every PII pattern + every mode + nested-payload walk + non-string-scalar preservation.
+
+### Phase 3 stage 3 — AI client + `llm_calls` audit (`v0.3.3`) — 2026-05-19
+
+- `app.ai.llm` module — the only path that calls an external AI provider. `LLMClient.invoke(...)` redacts the payload, opens an `llm_calls` row with `status=running` before the provider call, calls the provider, then finalizes with `status=completed | failed` + token counts + duration + `redacted_counts`.
+- Two provider implementations: `FixtureProvider` (canned responses keyed by `purpose`; raises on unregistered purpose), `AnthropicProvider` (lazy SDK import; raises if `ANTHROPIC_API_KEY` is empty).
+- `LLMCall` model + migration `0007_llm_calls.py` matching Master Spec §11 verbatim. `redacted_counts` is JSONB on Postgres / JSON on SQLite — counts only, never payload content (§12.1). `correlation_id` auto-populates from the request-scoped contextvar.
+- 5 new pytest tests (103 total): provider sees the **redacted** payload (raw email/SSN never reach it); completed row carries token counts; failed row carries `error_message` + `duration_ms`; dict keys (field names) preserved through redaction; unregistered fixture purpose raises a loud `KeyError`; correlation_id threaded from request context.
+
+### Phase 3 stage 4 — Capability list ingest (`v0.3.4`) — 2026-05-19
+
+- **First real LLM extraction.** Admin uploads a CSV/XLSX inventory; the route runs it through `LLMClient.invoke(purpose="extract.capabilities")` with strict redaction; the response becomes a versioned `CapabilityList` + `CapabilityItem` rows.
+- `app.tech_debt.parsers` parses CSV (stdlib) and XLSX (openpyxl, lazy import) into row-dicts. Header row becomes the keys; up to 500 rows ship; a sentinel `__truncated__` marker rides at the end if the input was longer.
+- `app.tech_debt.extract` builds the prompt (versioned `PROMPT_VERSION="v1"` so future prompt-shape changes don't silently regress past extractions; the version is recorded on the `llm_calls` row), assembles `{rows, context}` payload, and parses the JSON response. Response parser handles the common "LLM wrapped JSON in prose" case by stripping to the outermost `{...}`.
+- Name hints + client org name are pulled from the deployment (every user's display name + email-local-part as name hints; the singleton client's legal name as `[CLIENT]`) so the redactor uses real deployment data, not hardcoded fixtures.
+- Three routes (`/tech-debt/services`, `/tech-debt/services/{id}/capability-lists/extract`, `/tech-debt/services/{id}/capability-lists/latest`) — all admin-only via `require_role(UserRole.ADMIN)`.
+- Versioning: each extract creates `version = max + 1`; the unique constraint from stage 1's migration enforces it.
+- Bad-JSON path: extractor raises `ValueError`, route maps to **502 Bad Gateway** (the `llm_calls` row is already written, so the operator can debug; client error code is wrong here because it's the upstream provider that misbehaved).
+- 8 new pytest tests (111 total): admin can open service; client role gets 403; full extract flow with PII in CSV → redacted payload reaches the FixtureProvider (verified end-to-end); subsequent extracts version incrementally; unsupported artifact MIME (PDF) returns 415; non-existent service returns 404; bad JSON from the LLM returns 502; latest-list is admin-only until release.
+- Demo DB migrated to head; `openpyxl` added to the API dev environment.
