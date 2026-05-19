@@ -4,9 +4,9 @@ const nextConfig = {
   poweredByHeader: false,
   // Next.js standalone output keeps the prod Docker image small.
   output: "standalone",
-  experimental: {
-    typedRoutes: true,
-  },
+  // typedRoutes intentionally OFF: requires `next build` to populate the
+  // route manifest before `tsc --noEmit` can verify `<Link href>`. We run
+  // typecheck before build as a smoke. Revisit in Phase 6 hardening.
   async headers() {
     return [
       {

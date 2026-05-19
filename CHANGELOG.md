@@ -83,3 +83,14 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
   - `EmptyState` — icon + title + description + action slot.
 - Wired into `apps/web`: package dep, Tailwind preset, token CSS import, placeholder `/` now uses `Card` + `StatusPill`.
 - Smoke: `pnpm typecheck` clean across workspace; `pnpm build` succeeded — `/` route now 8.57 kB First Load JS (up from 138 B placeholder); 4 routes, 87.1 kB shared.
+
+### Phase 1 stage 7 — Landing + auth screens (`v0.1.7`) — 2026-05-19
+
+- Marketing landing (`/`): `PublicHeader` + `Hero` + `ServiceGrid` (4 service cards using `Card` from `@shield/design-system`) + trust strip with `StatusPill`s + `PublicFooter`. Round-6 PUBLIC EXPERIENCE tier.
+- `/sign-in`: NextAuth Credentials-backed form (`SignInForm`) wrapped in `<Suspense>` (uses `useSearchParams` for `callbackUrl`). Errors render inline; 401/423 from the API surface as "Invalid email or password" to avoid an account-existence oracle.
+- `/sign-up`: form (`SignUpForm`) posting to `/api/proxy/auth/register`, which proxies to the FastAPI `/auth/register` via the server-side `apiFetch` helper. On success, immediately calls `signIn("credentials")` so the user lands in an authenticated session.
+- `/api/proxy/auth/register`: thin server route that keeps API host names off the wire to the browser and maps `ApiError` → `NextResponse` with the upstream status preserved.
+- Footer pages stubbed at `/accessibility`, `/privacy`, `/security` so the footer nav doesn't 404; each carries a real mailto contact for the relevant team.
+- `AuthSessionProvider` (NextAuth `SessionProvider`) and `ToastProvider` wired into the root layout.
+- `next.config.mjs` `typedRoutes` left OFF intentionally (requires `next build` to populate the route manifest before `tsc --noEmit`, which we run as a pre-build smoke).
+- Smoke: `pnpm typecheck` clean across workspace; `pnpm build` succeeded — 9 routes total (`/`, `/_not-found`, `/sign-in`, `/sign-up`, `/accessibility`, `/privacy`, `/security`, `/api/auth/[...nextauth]`, `/api/proxy/auth/register`). First Load JS shared 87.2 kB; biggest route (`/sign-up`) at 105 kB.

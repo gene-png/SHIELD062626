@@ -1,59 +1,43 @@
-/**
- * Marketing landing placeholder (stage 5 + stage 6 wiring).
- *
- * Renders a minimal version using @shield/design-system primitives so a real
- * `next build` exercises the design-system tokens + components. The full
- * Round-6 landing (hero, service cards, resource center, contact, footer)
- * lands in Phase 1 stage 7.
- */
+import { StatusPill } from "@shield/design-system";
 
-import {
-  Card,
-  CardBody,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  StatusPill,
-} from "@shield/design-system";
+import { Hero } from "@/components/marketing/Hero";
+import { ServiceGrid } from "@/components/marketing/ServiceGrid";
+import { PublicFooter } from "@/components/site/PublicFooter";
+import { PublicHeader } from "@/components/site/PublicHeader";
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-8 px-6 py-16">
-      <header className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-tertiary">
-          SHIELD
-        </p>
-        <h1 className="text-4xl font-semibold leading-tight text-ink-primary sm:text-5xl">
-          SHIELD by Kentro
-        </h1>
-        <p className="text-lg text-ink-secondary">
-          Enterprise cybersecurity assessment platform. Technical Debt, Zero Trust, NIST CSF 2.0,
-          MITRE ATT&amp;CK Coverage.
-        </p>
-      </header>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Phase 1 in progress</CardTitle>
+    <>
+      <PublicHeader />
+      <Hero />
+      <ServiceGrid />
+      <section
+        aria-labelledby="trust-heading"
+        className="border-t border-border-subtle bg-surface-card"
+      >
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="flex flex-wrap items-center gap-3">
             <StatusPill tone="info" withDot>
-              Stage 6
+              FedRAMP-targeted
+            </StatusPill>
+            <StatusPill tone="success" withDot>
+              WCAG 2.1 AA
+            </StatusPill>
+            <StatusPill tone="neutral" withDot>
+              Single-tenant per engagement
             </StatusPill>
           </div>
-          <CardDescription>
-            The full marketing landing (hero, service cards, resource center) lands in Phase 1
-            stage 7 per the Round 6 Design Contract. This page is a deliberate placeholder so the
-            build can ship a typed, accessible shell before the visual layer arrives.
-          </CardDescription>
-        </CardHeader>
-        <CardBody>
-          <ul className="grid grid-cols-1 gap-3 text-sm text-ink-secondary sm:grid-cols-2">
-            <li>Technical Debt Review</li>
-            <li>Zero Trust Assessment (CISA + DoD)</li>
-            <li>NIST CSF 2.0 Assessment</li>
-            <li>MITRE ATT&amp;CK Coverage Mapping</li>
-          </ul>
-        </CardBody>
-      </Card>
-    </main>
+          <h2 id="trust-heading" className="mt-4 text-xl font-semibold text-ink-primary">
+            Built for federal mission systems
+          </h2>
+          <p className="mt-2 max-w-2xl text-ink-secondary">
+            Mandatory PII redaction on every AI call, append-only audit log, short-lived JWT
+            sessions with account lockout, and self-hosted infrastructure - no third-party CDNs.
+            Targeted for AWS GovCloud and Azure Government.
+          </p>
+        </div>
+      </section>
+      <PublicFooter />
+    </>
   );
 }
