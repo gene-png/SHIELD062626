@@ -20,7 +20,14 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Honor an explicit sqlalchemy.url already set in the config (tests override
+# this); only fall back to settings when none was provided.
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url)
+
+# Importing the models registers them against Base.metadata so that
+# autogenerate sees them and create_all in tests gets the full graph.
+import app.models  # noqa: F401  pylint: disable=unused-import
 
 target_metadata = Base.metadata
 

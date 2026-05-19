@@ -25,3 +25,13 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - `/health` liveness endpoint.
 - Runtime Dockerfile under `apps/api/Dockerfile` with least-privilege `shield` user (uid 10001), no shell, no sudo (production posture per AI Prompt §3.10 note).
 - Unit tests (9 passing): health, correlation-ID middleware, exception handler, config safety asserts.
+
+### Phase 1 stage 2 — Data model + audit log (`v0.1.2`) — 2026-05-19
+
+- ORM models for the three Phase 1 tables: `client` (singleton org), `users` (with `UserRole` enum: admin/reviewer/client), `audit_entries` (append-only) — `apps/api/app/models/`.
+- Cross-dialect first Alembic migration (`alembic/versions/0001_initial_schema.py`): creates tables on both Postgres and SQLite; installs Postgres-only `audit_entries_block_mutation()` trigger function + `BEFORE UPDATE`/`BEFORE DELETE` triggers.
+- Application-layer append-only guard: `SQLAlchemy` `before_flush` event listener raises `AuditEntryImmutableError` on any update or delete of an `AuditEntry`. Catches logic bugs even when running against SQLite or if the prod trigger is somehow missing.
+- `app.audit.spine.audit()` is the only blessed write surface for audit rows; automatically merges the current correlation ID from the request context.
+- `/ready` readiness probe that touches the DB (`SELECT 1`) and reports per-dependency status (returns 200 with `status=degraded` rather than 5xx, so load balancers get a clean signal but readiness sweeps stay green).
+- Alembic env honors any `sqlalchemy.url` already set in the config (tests override it for SQLite).
+- 16 unit tests passing: migration applies cleanly on SQLite; ORM round-trips a User + audit row; audit immutability fires on UPDATE and DELETE; client singleton inserts; `audit()` row carries correlation_id; everything from stage 1 still green.
