@@ -1,0 +1,63 @@
+"""Service request - records the four "yes I want this service" picks made
+during intake, plus the fifth "I'm not sure" consultation request (D-003
+landing CTA → consultation flow).
+
+Master Spec §11:
+  service_requests    id, service_type, requested_by, notes, deadline,
+                      requested_at, fulfilled_service_id, declined_at,
+                      declined_reason
+
+Service types per §15.5 filename convention slugs and §17 Q5 (full ATT&CK
+matrix per D-007). The values use snake_case ASCII so they round-trip
+through URLs and filenames without escaping.
+"""
+
+from __future__ import annotations
+
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+from app.models._common import TimestampMixin, UUIDPKMixin, utcnow
+
+
+class ServiceType(enum.StrEnum):
+    """The four locked v1 services + the "I'm not sure" consultation path."""
+
+    TECH_DEBT = "tech_debt"
+    ZERO_TRUST_CISA = "zero_trust_cisa"
+    ZERO_TRUST_DOD = "zero_trust_dod"
+    NIST_CSF = "nist_csf"
+    ATTACK_COVERAGE = "attack_coverage"
+    CONSULTATION = "consultation"
+
+
+class ServiceRequest(UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = "service_requests"
+
+    service_type: Mapped[ServiceType] = mapped_column(
+        SAEnum(ServiceType, name="service_type", native_enum=False, length=32),
+        nullable=False,
+    )
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+    notes: Mapped[str | None] = mapped_column(Text)
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Set when an admin opens a real Service row from this request.
+    fulfilled_service_id: Mapped[uuid.UUID | None] = mapped_column()
+
+    # Set when an admin declines the request (e.g. out of scope, duplicate).
+    declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    declined_reason: Mapped[str | None] = mapped_column(Text)
