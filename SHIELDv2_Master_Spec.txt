@@ -149,11 +149,11 @@ audit-defensible, and exportable as a polished PDF or XLSX deliverable.
 
 
 ================================================================================
-2. THE THREE SERVICES (what SHIELD does)
+2. THE FOUR SERVICES (what SHIELD does)
 ================================================================================
 
 A client engagement with SHIELD always picks one or more services from
-the three offered. The service choice drives the entire experience -
+the four offered. The service choice drives the entire experience -
 what questions they are asked at signup, what dashboards they see, what
 deliverables they receive, what artifacts they are asked to provide.
 
@@ -2468,9 +2468,11 @@ Q7. Languages and locale:
 ================================================================================
 
 Client experience:
-  [ ] A new client can sign up, verify email, enroll MFA, complete
-      intake (any combination of the four services), and reach a
-      meaningful home dashboard in under 30 minutes.
+  [ ] A new client can sign up, complete intake (any combination
+      of the four services, including the "I'm not sure" path), and
+      reach a meaningful home dashboard in under 30 minutes.
+      (Email verification and MFA enrollment are feature-flagged and
+      DEFERRED for v1 per Section 1 Locked Decisions.)
   [ ] Every page the client sees uses plain English. No raw enum
       values. No spec citations. No internal slug labels.
   [ ] Every analytic output the client sees renders as a dashboard
