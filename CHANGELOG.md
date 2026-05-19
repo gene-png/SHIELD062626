@@ -67,3 +67,19 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - Typed session augmentation in `src/types/next-auth.d.ts` exposes `session.role` and `session.accessToken`.
 - Placeholder landing at `/` (real Round-6 landing arrives in stage 7).
 - Smoke: `pnpm typecheck` clean; `pnpm build` succeeded — 4 routes built (`/`, `/_not-found`, `/api/auth/[...nextauth]`), 87.2 kB First Load JS shared.
+
+### Phase 1 stage 6 — Design-system primitives (`v0.1.6`) — 2026-05-19
+
+- New workspace package `@shield/design-system` (`packages/design-system/`).
+- Round-6 tokens in `src/tokens.css` as CSS custom properties: surface, ink, border, brand navy, status palette (saturated colors reserved for status per Round-6), type scale, 4-px spacing scale, radii, soft shadows, motion tokens that collapse under `prefers-reduced-motion`.
+- Tailwind preset (`src/tailwind-preset.ts`) wires the tokens to classnames.
+- 8 primitives, all keyboard-accessible and WCAG-2.1-AA-targeted:
+  - `Card` + sub-parts — modular, soft shadow.
+  - `StatusPill` — saturated colors only here per Round-6.
+  - `NumberCard` — KPI card for executive surfaces.
+  - `DataTable` — sticky header, sortable columns with `aria-sort`, row click, empty-state slot.
+  - `Toast` + `ToastProvider` + `useToast()` — `aria-live=polite` region, auto-dismiss.
+  - `Modal` + `SlideOver` — native `<dialog>` (browser focus trap + ESC), backdrop click closes.
+  - `EmptyState` — icon + title + description + action slot.
+- Wired into `apps/web`: package dep, Tailwind preset, token CSS import, placeholder `/` now uses `Card` + `StatusPill`.
+- Smoke: `pnpm typecheck` clean across workspace; `pnpm build` succeeded — `/` route now 8.57 kB First Load JS (up from 138 B placeholder); 4 routes, 87.1 kB shared.

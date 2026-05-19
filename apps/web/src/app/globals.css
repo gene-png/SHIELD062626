@@ -1,18 +1,19 @@
+@import "@shield/design-system/tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Round 6 design tokens land in stage 6 via packages/design-system.
-   These baseline styles only carry the platform through stage 5/8. */
-
 @layer base {
   html {
-    color-scheme: light dark;
+    color-scheme: light;
   }
   body {
-    @apply bg-ink-50 text-ink-900 antialiased;
+    @apply bg-surface-canvas text-ink-primary antialiased;
+    font-family: var(--font-sans);
   }
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-navy-500;
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
   }
 }
