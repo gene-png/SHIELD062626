@@ -201,3 +201,13 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - New `Field` component (`apps/web/src/components/intake/Field.tsx`) wires label / hint / error with `aria-describedby` and `aria-invalid` per USWDS accessibility patterns. Exports shared Tailwind class strings (`inputClasses`, `textareaClasses`, `selectClasses`) so every input renders identically.
 - `IntakeWizard` rewires the placeholder step renderer to dispatch to the real step components; submit handler bundles client state + service_inputs into `POST /intake/submit` and reflects the response.
 - Smoke: typecheck clean, ESLint 0 warnings, prettier clean, `next build` clean — `/intake` route now 8.0 kB (up from 3.56 kB), 112 kB First Load JS. 12 routes total; no schema changes so the 55 API unit tests still pass.
+
+### Phase 2 stage 5 — Section-tabbed questionnaire renderer (`v0.2.5`) — 2026-05-19
+
+- New `@/components/questionnaire` module — the shared rendering primitive that Phases 4 (CSF) and 5 (ATT&CK with the full ~600-technique matrix per D-007) will both consume. Master Spec §15 Phase 2: "Section-tabbed questionnaire renderer (shared component for CSF, ZT, future frameworks)."
+- **`QuestionnaireDefinition` shape:** JSON-friendly (so it can ship as static assets in `packages/csf-data` / `packages/attack-data` / `packages/zt-data`). Sections contain questions; each question carries a stable id used as the key in a flat `Responses` map (matches the `questionnaire_responses` table shape from Master Spec §11).
+- **Eight question primitives** cover the v1 surface: `short_text`, `long_text`, `number` (with optional `unit`), `score_0_2` (named-label radio group for CSF 5-dimension scoring + ATT&CK coverage), `choice` (single-select), `multi` (multi-checkbox), `yes_no`, `tristate` (yes/no/n-a). Specialized CSF grid composes these in Phase 4.
+- **`SectionTabs`** has full WAI-ARIA APG tab semantics: `role="tablist"`, `role="tab"`, `aria-selected`, `aria-controls`, roving `tabIndex`, plus full keyboard nav (ArrowLeft / ArrowRight / Home / End) with manual activation. Per-section completion chips drive a small progress percentage.
+- **`QuestionnaireRenderer`** renders the active section as a `role="tabpanel"` with `aria-labelledby` wired to the active tab. Computes `sectionProgress` via `useMemo` from the responses map — Phase 4 reuses this for the "needs answers" badge on the admin queue.
+- **Dev preview** at `/dev/questionnaire-preview` exercises every question type end-to-end with a hand-rolled definition (3 sections, 10 questions). Unlisted route; the page header makes the dev-only nature obvious.
+- Smoke: typecheck clean, ESLint 0 warnings, prettier clean, `next build` clean. 13 routes total (1 new: `/dev/questionnaire-preview`).
