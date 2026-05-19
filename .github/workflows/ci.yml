@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-python:
+    name: Lint + type-check (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tooling
+        run: pip install ruff black mypy bandit
+      - name: Ruff
+        run: ruff check apps/api
+      - name: Black
+        run: black --check apps/api
+      - name: Mypy
+        if: hashFiles('apps/api/app/**/*.py') != ''
+        run: mypy apps/api/app
+      - name: Bandit
+        if: hashFiles('apps/api/app/**/*.py') != ''
+        run: bandit -q -c pyproject.toml -r apps/api/app
+
+  lint-web:
+    name: Lint + type-check (Web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - name: Install
+        run: pnpm install --frozen-lockfile || pnpm install
+      - name: Format check
+        run: pnpm format:check
+      - name: Lint
+        if: hashFiles('apps/web/**/*') != ''
+        run: pnpm -F web lint
+      - name: Typecheck
+        if: hashFiles('apps/web/**/*') != ''
+        run: pnpm -F web typecheck
+
+  test-api:
+    name: API unit tests
+    runs-on: ubuntu-latest
+    if: hashFiles('apps/api/tests/**') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e apps/api
+          pip install pytest pytest-asyncio
+      - name: Pytest unit
+        run: pytest -m unit apps/api/tests
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  accessibility:
+    name: Accessibility check (axe-core)
+    runs-on: ubuntu-latest
+    if: hashFiles('apps/web/app/**/*') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: echo "axe-core wiring lands with Phase 1 stage 8 (CI accessibility on landing page)."

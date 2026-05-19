@@ -1,0 +1,164 @@
+name: shield-v2
+
+x-api-env: &api-env
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://shield:shield@db:5432/shield}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+  S3_BUCKET: ${S3_BUCKET:-shield-artifacts}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-shield-minio}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-shield-minio-secret}
+  S3_KMS_KEY_ID: ${S3_KMS_KEY_ID:-dev-stub-key}
+  KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/shield}
+  KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-shield-api}
+  KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-shield-web}
+  SHIELD_LLM_PROVIDER: ${SHIELD_LLM_PROVIDER:-anthropic}
+  SHIELD_LLM_MODEL: ${SHIELD_LLM_MODEL:-claude-opus-4-7}
+  SHIELD_LLM_MODE: ${SHIELD_LLM_MODE:-fixture}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  SHIELD_AUTH_REQUIRE_MFA: ${SHIELD_AUTH_REQUIRE_MFA:-false}
+  SHIELD_AUTH_REQUIRE_EMAIL_VERIFY: ${SHIELD_AUTH_REQUIRE_EMAIL_VERIFY:-false}
+  SHIELD_EMAIL_DELIVERY_ENABLED: ${SHIELD_EMAIL_DELIVERY_ENABLED:-false}
+  SHIELD_REDACTION_MODE: ${SHIELD_REDACTION_MODE:-strict}
+  JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+  JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-1800}
+  SHIELD_ACCOUNT_LOCKOUT_MAX_ATTEMPTS: ${SHIELD_ACCOUNT_LOCKOUT_MAX_ATTEMPTS:-10}
+  SHIELD_ACCOUNT_LOCKOUT_WINDOW_SECONDS: ${SHIELD_ACCOUNT_LOCKOUT_WINDOW_SECONDS:-900}
+  SHIELD_IDLE_TIMEOUT_SECONDS: ${SHIELD_IDLE_TIMEOUT_SECONDS:-1800}
+  SHIELD_FORCED_REAUTH_SECONDS: ${SHIELD_FORCED_REAUTH_SECONDS:-86400}
+  SMTP_HOST: ${SMTP_HOST:-mailhog}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_FROM: ${SMTP_FROM:-no-reply@shield.local}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shield
+      POSTGRES_PASSWORD: shield
+      POSTGRES_DB: shield
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shield"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-shield-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-shield-minio-secret}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\nHost: localhost\\n\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      <<: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  worker:
+    build:
+      context: ./apps/api
+    environment:
+      <<: *api-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO"]
+
+  web:
+    image: node:20-bookworm
+    working_dir: /app
+    environment:
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-only-replace}
+      API_BASE_URL: http://api:8000
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/shield}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-shield-web}
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - ./package.json:/app/package.json
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - node-modules-web:/app/apps/web/node_modules
+    command: ["sleep", "infinity"]
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  keycloak-data:
+  node-modules-web:

@@ -1,0 +1,34 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".venv", "node_modules", "reference-docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "ASYNC", "C4", "SIM", "TCH"]
+ignore = ["S101"]  # assert in tests is fine
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S105", "S106"]  # hardcoded creds OK in test fixtures
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+exclude = ["reference-docs", ".venv", "node_modules"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests"]
+markers = [
+    "unit: fast in-process tests",
+    "integration: tests that hit a real database",
+    "e2e: end-to-end via running services",
+]
+addopts = "-ra -q"
+
+[tool.bandit]
+exclude_dirs = ["reference-docs", ".venv", "node_modules", "tests"]

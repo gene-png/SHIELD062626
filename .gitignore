@@ -1,0 +1,59 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Node
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+
+# Build artifacts
+*.log
+.cache/
+.parcel-cache/
+
+# Docker
+.docker/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Local data
+postgres-data/
+redis-data/
+minio-data/
+keycloak-data/
