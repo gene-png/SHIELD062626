@@ -246,11 +246,13 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 ## Phase 2 — Intake — Complete (`v0.2.0`) — 2026-05-19
 
 ### Acceptance criteria
+
 - [x] A new client can complete intake end-to-end without internal vocabulary, raw JSON, or stack traces.
 - [x] Submitting intake reflects correctly in the admin queue with the new-lead timestamp.
 - [x] All intake data round-trips correctly: client enters X, admin reads X.
 
 ### Notable features shipped
+
 - Self-service 6-step intake wizard with auto-save on every blur and a live "Saved Xs ago" indicator.
 - Drag-and-drop document upload with up-front redaction disclosure (the user-facing copy of the Master Spec §12 policy).
 - Generic section-tabbed questionnaire renderer with full WAI-ARIA tab semantics — load-bearing for Phases 4 and 5.
@@ -259,29 +261,34 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - 72 unit tests across the API; web typecheck + lint + prettier + next build all green.
 
 ### Security review (OWASP Top 10) — full matrix in BUILD_REPORT.md
-- A01 Access Control:                PASS (role-based guards at route + layout layer)
-- A02 Cryptographic Failures:        PASS
-- A03 Injection:                     PASS
-- A04 Insecure Design:               PASS (audit immutability, MIME allowlist, redaction disclosure)
-- A05 Misconfiguration:              PASS
-- A06 Vulnerable Components:         PARTIAL (Dependabot in Phase 6)
-- A07 Auth Failures:                 PASS WITH NOTES (MFA still deferred per spec)
-- A08 Software & Data Integrity:    PASS (sha256 captured + audited on upload)
-- A09 Logging & Monitoring:          PASS (audit + notification fan-out)
-- A10 SSRF:                           PASS
+
+- A01 Access Control: PASS (role-based guards at route + layout layer)
+- A02 Cryptographic Failures: PASS
+- A03 Injection: PASS
+- A04 Insecure Design: PASS (audit immutability, MIME allowlist, redaction disclosure)
+- A05 Misconfiguration: PASS
+- A06 Vulnerable Components: PARTIAL (Dependabot in Phase 6)
+- A07 Auth Failures: PASS WITH NOTES (MFA still deferred per spec)
+- A08 Software & Data Integrity: PASS (sha256 captured + audited on upload)
+- A09 Logging & Monitoring: PASS (audit + notification fan-out)
+- A10 SSRF: PASS
 
 ### What's stubbed or deferred
+
 - Notification bell UI in the header — API + data layer shipped; visual surfacing is a small follow-up.
 - Postgres audit-trigger integration smoke — waits on Docker availability.
 - The redactor module — lands in Phase 3 with the first AI extraction (Tech Debt capability list).
 
 ### Known issues
+
 - None blocking Phase 3.
 
 ### How to try it
+
 A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps"). For the full stack: `cp .env.example .env`, paste `ANTHROPIC_API_KEY`, generate `NEXTAUTH_SECRET`, then `docker compose up`.
 
 ### Decisions logged this phase
+
 - No new DECISIONS.md entries beyond stages tracked in this CHANGELOG; the seven §17 open questions were already settled in Phase 1's D-003 through D-009.
 
 ## [Unreleased — Phase 3 in progress]
@@ -324,3 +331,17 @@ A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps
 - Bad-JSON path: extractor raises `ValueError`, route maps to **502 Bad Gateway** (the `llm_calls` row is already written, so the operator can debug; client error code is wrong here because it's the upstream provider that misbehaved).
 - 8 new pytest tests (111 total): admin can open service; client role gets 403; full extract flow with PII in CSV → redacted payload reaches the FixtureProvider (verified end-to-end); subsequent extracts version incrementally; unsupported artifact MIME (PDF) returns 415; non-existent service returns 404; bad JSON from the LLM returns 502; latest-list is admin-only until release.
 - Demo DB migrated to head; `openpyxl` added to the API dev environment.
+
+### Phase 3 stage 5 — Editable extraction table (`v0.3.5`) — 2026-05-19
+
+- Two new API routes:
+  - `PATCH /tech-debt/capability-items/{id}` — partial-update; clears `confidence_pct` on every human edit (the row is no longer an AI guess); rejects edits on items in a released list (409); audit row `capability_item.edited` records the list of fields touched.
+  - `POST /tech-debt/capability-lists/{id}/approve` — flips `status: draft → approved`, stamps `approved_at` + `approved_by`, audits.
+- New web workspace at `/admin/services/{id}/tech-debt` (admin-gated by the existing `/admin` layout):
+  - Inventory upload via the existing `Dropzone` + `RedactionDisclosure` (Phase 2 stage 6) — drop a CSV/XLSX, the workspace auto-runs `POST /tech-debt/services/{id}/capability-lists/extract`.
+  - `EditableCapabilityTable` renders the AI-extracted rows as a **real editable table** (AI Prompt §6.2: no raw JSON in user-facing UI). Each cell auto-saves on blur via `PATCH`; per-row status pill flips to "Saving…" → "Saved" or "Save failed". Low-confidence rows (`confidence_pct < 70`) get a warning row tint.
+  - Confidence pill per row: `Human-curated` (success, after edit) | `AI 85%+` (info) | `AI 70–84%` (warning) | `AI <70%` (neutral with warning row tint).
+  - Header strip shows total cost, low-confidence count, and the **Approve list** button (disabled if already approved/released).
+  - Released lists render read-only.
+- Six new server-side proxies (`/api/proxy/tech-debt/*`) consolidated through a shared `_proxy.ts` helper that handles bearer attachment + `ApiError` mapping. Adding a new tech-debt proxy is now a 4-line file.
+- 6 new pytest tests (117 total): patch clears confidence + persists edits, patch rejects empty body 422, patch 404 for unknown item, patch rejects client role 403, approve writes status + actor, approve 404 for unknown list.

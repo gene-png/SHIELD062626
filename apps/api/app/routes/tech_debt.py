@@ -29,7 +29,10 @@ from app.models.capability import CapabilityItem, CapabilityList
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
+from app.models._common import utcnow
+from app.models.capability import CapabilityListStatus
 from app.schemas.tech_debt import (
+    CapabilityItemPatch,
     CapabilityItemResponse,
     CapabilityListResponse,
     ExtractRequest,
@@ -246,4 +249,93 @@ def latest_capability_list(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Capability lists are admin-only until release.",
         )
+    return _serialize_list_with_items(db, cap_list)
+
+
+@router.patch(
+    "/capability-items/{item_id}",
+    response_model=CapabilityItemResponse,
+    summary="Inline-edit a single capability item (admin)",
+)
+def patch_capability_item(
+    item_id: uuid.UUID,
+    body: CapabilityItemPatch,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> CapabilityItemResponse:
+    item = db.get(CapabilityItem, item_id)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Capability item not found.",
+        )
+    # Refuse edits to items that belong to a released list.
+    cap_list = db.get(CapabilityList, item.capability_list_id)
+    if cap_list is not None and cap_list.status == CapabilityListStatus.RELEASED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This capability list has been released and is locked.",
+        )
+
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Patch body is empty.",
+        )
+    for field, value in data.items():
+        setattr(item, field, value)
+    # Human edit -> no longer an AI guess.
+    item.confidence_pct = None
+
+    audit(
+        db,
+        action="capability_item.edited",
+        target_type="capability_item",
+        target_id=item.id,
+        actor_user_id=user.id,
+        details={
+            "fields": sorted(data.keys()),
+            "capability_list_id": str(item.capability_list_id),
+        },
+    )
+    db.commit()
+    db.refresh(item)
+    return CapabilityItemResponse.model_validate(item, from_attributes=True)
+
+
+@router.post(
+    "/capability-lists/{list_id}/approve",
+    response_model=CapabilityListResponse,
+    summary="Approve a capability list (admin)",
+)
+def approve_capability_list(
+    list_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> CapabilityListResponse:
+    cap_list = db.get(CapabilityList, list_id)
+    if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Capability list not found.",
+        )
+    if cap_list.status == CapabilityListStatus.RELEASED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This capability list has been released and is locked.",
+        )
+    cap_list.status = CapabilityListStatus.APPROVED
+    cap_list.approved_at = utcnow()
+    cap_list.approved_by = user.id
+    audit(
+        db,
+        action="capability_list.approved",
+        target_type="capability_list",
+        target_id=cap_list.id,
+        actor_user_id=user.id,
+        details={"service_id": str(cap_list.service_id), "version": cap_list.version},
+    )
+    db.commit()
+    db.refresh(cap_list)
     return _serialize_list_with_items(db, cap_list)

@@ -345,3 +345,140 @@ def test_extract_503_when_llm_returns_bad_json(app_client) -> None:
         json={"artifact_id": artifact_id},
     )
     assert r.status_code == 502
+
+
+def _create_list_with_item(
+    c: TestClient, bearer: str, provider: FixtureProvider
+) -> tuple[str, str]:
+    """Helper for stage-5 tests: open service + extract a single-item list.
+    Returns (service_id, item_id)."""
+    provider.register(
+        "extract.capabilities",
+        lambda _p: LLMResponse(
+            json.dumps(
+                {
+                    "items": [
+                        {
+                            "name": "Wiz",
+                            "vendor": "Wiz, Inc.",
+                            "category": "CNAPP",
+                            "function": "Posture",
+                            "annual_cost_usd": 350000,
+                            "license_count": 200,
+                            "confidence_pct": 75,
+                        }
+                    ]
+                }
+            )
+        ),
+    )
+    sr = c.post(
+        "/tech-debt/services",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"title": "x"},
+    )
+    svc_id = sr.json()["id"]
+    artifact_id = _upload_csv(c, bearer, "x.csv", b"A\n1\n")
+    er = c.post(
+        f"/tech-debt/services/{svc_id}/capability-lists/extract",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"artifact_id": artifact_id},
+    )
+    return svc_id, er.json()["items"][0]["id"]
+
+
+@pytest.mark.unit
+def test_patch_capability_item_clears_confidence_and_persists_edits(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    _, item_id = _create_list_with_item(c, bearer, provider)
+    r = c.patch(
+        f"/tech-debt/capability-items/{item_id}",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"vendor": "Wiz Corp.", "annual_cost_usd": 360000},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["vendor"] == "Wiz Corp."
+    assert body["annual_cost_usd"] == 360000.0
+    # Confidence cleared on human edit.
+    assert body["confidence_pct"] is None
+    # Untouched fields preserved.
+    assert body["name"] == "Wiz"
+
+
+@pytest.mark.unit
+def test_patch_capability_item_rejects_empty_body(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    _, item_id = _create_list_with_item(c, bearer, provider)
+    r = c.patch(
+        f"/tech-debt/capability-items/{item_id}",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.unit
+def test_patch_capability_item_404_for_unknown(app_client) -> None:
+    c, _, _ = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    r = c.patch(
+        f"/tech-debt/capability-items/{_uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"name": "x"},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.unit
+def test_patch_capability_item_rejects_client_role(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    client = _register(c, "client@example.com")
+    _, item_id = _create_list_with_item(c, admin["tokens"]["access_token"], provider)
+    r = c.patch(
+        f"/tech-debt/capability-items/{item_id}",
+        headers={"Authorization": f"Bearer {client['tokens']['access_token']}"},
+        json={"name": "x"},
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.unit
+def test_approve_capability_list_writes_status_and_actor(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, _item_id = _create_list_with_item(c, bearer, provider)
+    latest = c.get(
+        f"/tech-debt/services/{svc_id}/capability-lists/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    list_id = latest.json()["id"]
+
+    r = c.post(
+        f"/tech-debt/capability-lists/{list_id}/approve",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "approved"
+    assert body["approved_at"] is not None
+    assert body["approved_by"] == admin["user"]["id"]
+
+
+@pytest.mark.unit
+def test_approve_capability_list_404_for_unknown(app_client) -> None:
+    c, _, _ = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    r = c.post(
+        f"/tech-debt/capability-lists/{_uuid.uuid4()}/approve",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 404

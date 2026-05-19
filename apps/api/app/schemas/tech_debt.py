@@ -60,3 +60,20 @@ class CapabilityListResponse(BaseModel):
     items: list[CapabilityItemResponse]
     approved_at: datetime | None
     approved_by: uuid.UUID | None
+
+
+class CapabilityItemPatch(BaseModel):
+    """Partial-update body for inline edits in the admin table.
+
+    Every field is optional so the editable table can PATCH on every blur
+    without re-sending the rest of the row. Sending any field marks the row
+    human-curated (clears `confidence_pct`).
+    """
+
+    name: str | None = Field(default=None, max_length=255)
+    vendor: str | None = Field(default=None, max_length=255)
+    category: str | None = Field(default=None, max_length=128)
+    function: str | None = Field(default=None, max_length=255)
+    annual_cost_usd: float | None = None
+    license_count: int | None = None
+    notes: str | None = None

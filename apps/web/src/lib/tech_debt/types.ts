@@ -1,0 +1,62 @@
+/** Wire types mirroring apps/api/app/schemas/tech_debt.py. */
+
+export type ServiceKind =
+  | "tech_debt"
+  | "zero_trust_cisa"
+  | "zero_trust_dod"
+  | "nist_csf"
+  | "attack_coverage";
+
+export type ServiceStatus =
+  | "draft"
+  | "in_progress"
+  | "review"
+  | "released"
+  | "archived";
+
+export type CapabilityListStatus = "draft" | "approved" | "released";
+
+export interface ServiceResponse {
+  id: string;
+  kind: ServiceKind;
+  status: ServiceStatus;
+  title: string;
+  source_request_id: string | null;
+  opened_by: string;
+  released_at: string | null;
+  created_at: string;
+}
+
+export interface CapabilityItem {
+  id: string;
+  capability_list_id: string;
+  name: string;
+  vendor: string | null;
+  category: string | null;
+  function: string | null;
+  annual_cost_usd: number | null;
+  license_count: number | null;
+  notes: string | null;
+  confidence_pct: number | null;
+  source_artifact_id: string | null;
+}
+
+export interface CapabilityList {
+  id: string;
+  service_id: string;
+  version: number;
+  status: CapabilityListStatus;
+  items: CapabilityItem[];
+  approved_at: string | null;
+  approved_by: string | null;
+}
+
+export interface CapabilityItemPatch {
+  name?: string;
+  vendor?: string;
+  category?: string;
+  function?: string;
+  annual_cost_usd?: number | null;
+  license_count?: number | null;
+  notes?: string;
+}
