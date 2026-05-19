@@ -1,24 +1,30 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import * as React from "react";
 
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-} from "@shield/design-system";
+import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
-import { fetchIntake } from "@/lib/intake/client";
+import { fetchIntake, submitIntake } from "@/lib/intake/client";
 import {
   WIZARD_STEPS,
+  type ClientProfilePatch,
+  type IntakePatchRequest,
   type IntakeStateResponse,
+  type ServiceRequestInput,
+  type ServiceType,
   type WizardStepKey,
 } from "@/lib/intake/types";
 
 import { IntakeProgress } from "./IntakeProgress";
-import { SaveStatus, type SaveState } from "./SaveStatus";
+import { SaveStatus } from "./SaveStatus";
+import { Step1Services } from "./steps/Step1Services";
+import { Step2Organization } from "./steps/Step2Organization";
+import { Step3Contact } from "./steps/Step3Contact";
+import { Step4Systems } from "./steps/Step4Systems";
+import { Step5Notes } from "./steps/Step5Notes";
+import { Step6Review } from "./steps/Step6Review";
+import { useIntakeAutoSave } from "./useIntakeAutoSave";
 
 const STEP_INDEX: Record<WizardStepKey, number> = WIZARD_STEPS.reduce(
   (acc, step, i) => {
@@ -28,31 +34,23 @@ const STEP_INDEX: Record<WizardStepKey, number> = WIZARD_STEPS.reduce(
   {} as Record<WizardStepKey, number>,
 );
 
-interface PlaceholderProps {
-  stepKey: WizardStepKey;
-}
-
-function StepPlaceholder({ stepKey }: PlaceholderProps): JSX.Element {
-  const step = WIZARD_STEPS.find((s) => s.key === stepKey);
-  return (
-    <EmptyState
-      title={`Step ${(STEP_INDEX[stepKey] ?? 0) + 1}: ${step?.label ?? stepKey}`}
-      description="The form for this step lands in Phase 2 stage 4. The wizard frame, navigation, progress indicator, and auto-save plumbing are wired and live; only the per-step fields are still placeholders."
-    />
-  );
-}
-
 export function IntakeWizard(): JSX.Element {
+  const session = useSession();
   const [state, setState] = React.useState<IntakeStateResponse | null>(null);
   const [step, setStep] = React.useState<WizardStepKey>("services");
   const [completed, setCompleted] = React.useState<Set<WizardStepKey>>(
     new Set(),
   );
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  // Stage-3 baseline: the wizard frame is wired; per-step forms in
-  // stage 4 will flip this through `setSaveState` once `patchIntake`
-  // returns / fails.
-  const saveState: SaveState = { kind: "idle" };
+
+  const [serviceInputs, setServiceInputs] = React.useState<
+    Record<ServiceType, ServiceRequestInput>
+  >({} as Record<ServiceType, ServiceRequestInput>);
+
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  const autoSave = useIntakeAutoSave((next) => setState(next));
 
   React.useEffect(() => {
     let cancelled = false;
@@ -60,8 +58,6 @@ export function IntakeWizard(): JSX.Element {
       .then((s) => {
         if (cancelled) return;
         setState(s);
-        // When intake is already submitted, jump to review so the user can
-        // verify what's on file instead of starting over.
         if (s.intake_completed_at) setStep("review");
       })
       .catch((err) => {
@@ -92,6 +88,62 @@ export function IntakeWizard(): JSX.Element {
     setStep(WIZARD_STEPS[idx + 1].key);
   }
 
+  function onServicesChange(services: ServiceType[]): void {
+    void autoSave.save({ client: { service_interests: services } });
+  }
+
+  function onClientFieldChange(patch: ClientProfilePatch): void {
+    void autoSave.save({ client: patch });
+  }
+
+  function onProfileFieldChange(patch: IntakePatchRequest): void {
+    void autoSave.save(patch);
+  }
+
+  function onSystemsChange(prompting_context: string): void {
+    void autoSave.save({
+      client: { prompting_context: prompting_context || undefined },
+    });
+  }
+
+  async function onSubmit(): Promise<void> {
+    if (!state?.client) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    const picks = (state.client.service_interests ?? []) as ServiceType[];
+    const requests = picks.map((svc) => ({
+      ...(serviceInputs[svc] ?? { service_type: svc }),
+      service_type: svc,
+    }));
+    try {
+      const next = await submitIntake({
+        client: {
+          legal_name: state.client.legal_name,
+          dba_name: state.client.dba_name ?? undefined,
+          website: state.client.website ?? undefined,
+          size_band: state.client.size_band ?? undefined,
+          industry: state.client.industry ?? undefined,
+          address_line1: state.client.address_line1 ?? undefined,
+          address_line2: state.client.address_line2 ?? undefined,
+          city: state.client.city ?? undefined,
+          state: state.client.state ?? undefined,
+          postal_code: state.client.postal_code ?? undefined,
+          country: state.client.country ?? undefined,
+          prompting_context: state.client.prompting_context ?? undefined,
+          service_interests: picks,
+        },
+        service_requests: requests,
+      });
+      setState(next);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to submit intake.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const isFirst = STEP_INDEX[step] === 0;
   const isLast = STEP_INDEX[step] === WIZARD_STEPS.length - 1;
 
@@ -108,6 +160,9 @@ export function IntakeWizard(): JSX.Element {
     );
   }
 
+  const userEmail = session.data?.user?.email ?? null;
+  const userName = session.data?.user?.name ?? null;
+
   return (
     <div className="flex flex-col gap-6">
       <IntakeProgress currentStep={step} completed={completed} />
@@ -117,14 +172,44 @@ export function IntakeWizard(): JSX.Element {
             <CardTitle>
               {WIZARD_STEPS.find((s) => s.key === step)?.label}
             </CardTitle>
-            <SaveStatus state={saveState} />
+            <SaveStatus state={autoSave.saveState} />
           </div>
         </CardHeader>
         <CardBody>
-          {state ? (
-            <StepPlaceholder stepKey={step} />
-          ) : (
+          {!state ? (
             <p className="text-sm text-ink-tertiary">Loading your intake…</p>
+          ) : step === "services" ? (
+            <Step1Services state={state} onSave={onServicesChange} />
+          ) : step === "organization" ? (
+            <Step2Organization state={state} onSave={onClientFieldChange} />
+          ) : step === "contact" ? (
+            <Step3Contact
+              defaults={{
+                display_name: userName,
+                title: null,
+                phone: null,
+                timezone: null,
+                email: userEmail,
+              }}
+              onSave={onProfileFieldChange}
+            />
+          ) : step === "systems" ? (
+            <Step4Systems state={state} onSave={onSystemsChange} />
+          ) : step === "notes" ? (
+            <Step5Notes
+              state={state}
+              serviceInputs={serviceInputs}
+              onChange={setServiceInputs}
+            />
+          ) : (
+            <Step6Review
+              state={state}
+              serviceInputs={serviceInputs}
+              submitting={submitting}
+              submitError={submitError}
+              alreadySubmittedAt={state.intake_completed_at}
+              onSubmit={onSubmit}
+            />
           )}
         </CardBody>
       </Card>

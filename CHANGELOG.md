@@ -187,3 +187,17 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - Client-side wrappers (`lib/intake/client.ts`) cover `fetchIntake`, `patchIntake`, `submitIntake` with typed return values; per-step forms in stage 4 call these.
 - TS types in `lib/intake/types.ts` mirror `apps/api/app/schemas/intake.py` 1:1; `SERVICE_LABELS` gives the plain-English copy the wizard renders (Master Spec §15 Phase 2: "All copy in plain English").
 - Smoke: typecheck clean, eslint 0 warnings, prettier clean, `next build` clean — now 12 routes total (3 new: `/intake`, `/api/proxy/intake`, `/api/proxy/intake/submit`). `/intake` is server-rendered on demand (dynamic) because it reads the session at request time.
+
+### Phase 2 stage 4 — Per-step form fields + real auto-save (`v0.2.4`) — 2026-05-19
+
+- `useIntakeAutoSave` hook wraps `patchIntake` with a discriminated `SaveState` and surfaces the updated intake state back to the wizard via an `onUpdate` callback.
+- Six step components (`apps/web/src/components/intake/steps/Step*.tsx`):
+  - **Step 1 — Services:** card-grid of the 6 service types with USWDS-style checkboxes. Picking "I'm not sure" is exclusive (clears the four real services); picking a real service clears "I'm not sure". Each card is keyboard-focusable; descriptions are wired via `aria-describedby`.
+  - **Step 2 — Organization:** legal_name (required) + dba_name + website + size_band (`<select>`) + industry, plus 6-field address block. Every input is wired to PATCH on blur.
+  - **Step 3 — Contact:** display_name + title + phone + timezone for the user. Email shown read-only with hint copy (locked to the signed-in account).
+  - **Step 4 — Systems:** single textarea writing to `client.prompting_context`. Real systems table comes in Phase 4 with the CSF assessment.
+  - **Step 5 — Notes:** per-picked-service notes + optional target deadline. Lives in wizard local state until submit (the API only writes `service_requests` at POST `/intake/submit`).
+  - **Step 6 — Review:** read-only summary (organization / services / context). Submit button disabled unless legal_name is real and at least one service is picked. Pre-existing `intake_completed_at` surfaces as "submitted on …; you can re-submit" copy.
+- New `Field` component (`apps/web/src/components/intake/Field.tsx`) wires label / hint / error with `aria-describedby` and `aria-invalid` per USWDS accessibility patterns. Exports shared Tailwind class strings (`inputClasses`, `textareaClasses`, `selectClasses`) so every input renders identically.
+- `IntakeWizard` rewires the placeholder step renderer to dispatch to the real step components; submit handler bundles client state + service_inputs into `POST /intake/submit` and reflects the response.
+- Smoke: typecheck clean, ESLint 0 warnings, prettier clean, `next build` clean — `/intake` route now 8.0 kB (up from 3.56 kB), 112 kB First Load JS. 12 routes total; no schema changes so the 55 API unit tests still pass.
