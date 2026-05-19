@@ -211,3 +211,26 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - **`QuestionnaireRenderer`** renders the active section as a `role="tabpanel"` with `aria-labelledby` wired to the active tab. Computes `sectionProgress` via `useMemo` from the responses map — Phase 4 reuses this for the "needs answers" badge on the admin queue.
 - **Dev preview** at `/dev/questionnaire-preview` exercises every question type end-to-end with a hand-rolled definition (3 sections, 10 questions). Unlisted route; the page header makes the dev-only nature obvious.
 - Smoke: typecheck clean, ESLint 0 warnings, prettier clean, `next build` clean. 13 routes total (1 new: `/dev/questionnaire-preview`).
+
+### Phase 2 stage 6 — Document upload + redaction disclosure (`v0.2.6`) — 2026-05-19
+
+- Storage abstraction (`apps/api/app/storage/`): `StorageBackend` Protocol with `LocalFilesystemStorage` for tests/dev and `S3Storage` for production (KMS-encrypted, boto3 imported lazily).
+- `Artifact` model + migration `0004_artifacts.py` matching Master Spec §11 (origin enum, indexes on uploaded_at / uploaded_by / sha256).
+- Three API routes: `POST /artifacts` (multipart, MIME allowlist, 50 MB cap, filename sanitization, sha256 + audit row), `GET /artifacts` (current user's uploads), `GET /artifacts/{id}` (404 for unknown id or wrong owner).
+- Server-side multipart proxy `/api/proxy/artifacts` forwards FormData with the session bearer; browser never sees the API host name.
+- Web components: `Dropzone` (drag/drop + click + keyboard, multi-file, per-file status with `aria-label`), `RedactionDisclosure` (plain-English copy of §12 policy), `EmptyArtifactsHint`.
+- Wired into intake **Step 5** above the per-service notes: redaction disclosure → dropzone → live upload list (refreshes on mount via `GET /artifacts`).
+- 7 new pytest tests (62 total): upload writes row + storage object + audit; rejects unknown MIME (415); rejects empty (422); sanitizes path-traversal filenames; list returns own only; GET unknown id 404; routes 401 without auth.
+- Smoke: pytest 62/62 green, ruff + black + bandit clean, prettier + ESLint + tsc clean, `next build` clean. 14 routes total.
+
+### Phase 2 stage 7 — Admin queue (`v0.2.7`) — 2026-05-19
+
+- `require_role(*allowed)` FastAPI dependency factory (`apps/api/app/dependencies.py`) returns 403 (not 401) when authenticated callers lack the required role — matches RFC 7231 and lets clients distinguish "sign in" from "you're signed in but not allowed".
+- `GET /admin/intake-queue` (`apps/api/app/routes/admin.py`) returns the singleton client (with `intake_completed_at`), all service requests (with requester user summary joined in), all artifacts, and the total user count. Per Master Spec §15 Phase 2 acceptance: the admin queue surfaces the new-lead timestamp and reflects exactly what the client entered.
+- `AdminUserSummary` schema redacts password hash + lockout state but keeps the identity bits the consultant needs (email, display name, title, role, last_login_at).
+- Server-side proxy `/api/proxy/admin/intake-queue` attaches the session bearer.
+- `/admin/queue` page gated by `app/admin/layout.tsx`: redirects to `/sign-in?callbackUrl=/admin/queue` if unauthenticated; renders a "Not authorized" landing if signed in as a non-admin (session intact so navigation elsewhere works).
+- `IntakeQueue` component (`apps/web/src/components/admin/IntakeQueue.tsx`) renders the organization panel, service requests list (with `Open`/`Fulfilled`/`Declined` `StatusPill` per row + the requester's name/email/title), and uploaded documents. Empty states for no-intake-yet and no-service-requests.
+- `PublicHeader` is now an async Server Component: shows "Intake" + "Admin queue" (admin-only) when signed in, sign-in/get-started CTAs when not. Surfaces the signed-in user's email.
+- 4 new pytest tests (66 total): empty queue, reflects submitted intake with requester summary, client role gets 403, unauthenticated gets 401.
+- Smoke: pytest 66/66 green, ruff + black + bandit clean, prettier + ESLint + tsc clean, `next build` clean. 16 routes total (2 new: `/admin/queue`, `/api/proxy/admin/intake-queue`).

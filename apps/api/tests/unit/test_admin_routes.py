@@ -1,0 +1,130 @@
+"""Admin queue route + role-guard tests."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+
+@pytest.fixture()
+def app_client(tmp_path) -> Iterator[TestClient]:
+    db_path = tmp_path / "shield-admin.db"
+    url = f"sqlite:///{db_path}"
+    os.environ["DATABASE_URL"] = url
+    api_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(api_root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(api_root / "alembic"))
+    cfg.set_main_option("sqlalchemy.url", url)
+    command.upgrade(cfg, "head")
+
+    test_engine = create_engine(url, future=True)
+    TestSession = sessionmaker(bind=test_engine, autoflush=False, autocommit=False, future=True)
+
+    from app.db.session import get_db
+    from app.main import create_app
+
+    def override_get_db() -> Iterator[Session]:
+        db = TestSession()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app = create_app()
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as c:
+        yield c
+
+
+def _register(
+    client: TestClient, email: str, password: str = "correct horse battery staple!"
+) -> dict:
+    r = client.post(
+        "/auth/register",
+        json={"email": email, "password": password, "display_name": email.split("@")[0]},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+@pytest.mark.unit
+def test_admin_queue_empty_on_fresh_deployment(app_client: TestClient) -> None:
+    body = _register(app_client, "admin@example.com")
+    bearer = body["tokens"]["access_token"]
+    # First registrant becomes admin per D-004.
+    assert body["user"]["role"] == "admin"
+    r = app_client.get("/admin/intake-queue", headers={"Authorization": f"Bearer {bearer}"})
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["client"] is None or payload["client"]["legal_name"] == "(pending intake)"
+    assert payload["service_requests"] == []
+    assert payload["artifacts"] == []
+    assert payload["total_users"] == 1
+
+
+@pytest.mark.unit
+def test_admin_queue_reflects_submitted_intake(app_client: TestClient) -> None:
+    admin_body = _register(app_client, "admin@example.com")
+    admin_bearer = admin_body["tokens"]["access_token"]
+
+    # Second registrant is role=client.
+    client_body = _register(app_client, "client@example.com")
+    assert client_body["user"]["role"] == "client"
+    client_bearer = client_body["tokens"]["access_token"]
+
+    r = app_client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+        json={
+            "client": {
+                "legal_name": "Atlas Defense Solutions",
+                "industry": "Defense",
+                "address_line1": "123 Pentagon Way",
+            },
+            "service_requests": [
+                {"service_type": "nist_csf", "notes": "Annual refresh."},
+                {"service_type": "consultation"},
+            ],
+            "title": "CISO",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    r = app_client.get("/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"})
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["client"]["legal_name"] == "Atlas Defense Solutions"
+    assert payload["client"]["industry"] == "Defense"
+    assert payload["intake_completed_at"] is not None
+    assert len(payload["service_requests"]) == 2
+    types = sorted(req["service_type"] for req in payload["service_requests"])
+    assert types == ["consultation", "nist_csf"]
+    # Each row carries the requester summary so the admin can see who asked.
+    assert all(
+        req["requested_by"]["email"] == "client@example.com" for req in payload["service_requests"]
+    )
+    assert payload["total_users"] == 2
+
+
+@pytest.mark.unit
+def test_admin_queue_rejects_client_role_with_403(app_client: TestClient) -> None:
+    _register(app_client, "admin@example.com")
+    client_body = _register(app_client, "client@example.com")
+    client_bearer = client_body["tokens"]["access_token"]
+    r = app_client.get("/admin/intake-queue", headers={"Authorization": f"Bearer {client_bearer}"})
+    assert r.status_code == 403
+
+
+@pytest.mark.unit
+def test_admin_queue_rejects_unauthenticated_with_401(app_client: TestClient) -> None:
+    r = app_client.get("/admin/intake-queue")
+    assert r.status_code == 401

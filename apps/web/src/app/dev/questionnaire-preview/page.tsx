@@ -1,9 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
-import { PublicFooter } from "@/components/site/PublicFooter";
-import { PublicHeader } from "@/components/site/PublicHeader";
 import { QuestionnaireRenderer } from "@/components/questionnaire";
 import type {
   QuestionnaireDefinition,
@@ -121,27 +120,28 @@ export default function QuestionnairePreviewPage(): JSX.Element {
   }
 
   return (
-    <>
-      <PublicHeader />
-      <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <p className="mb-2 inline-flex rounded-pill bg-status-warning-bg px-2.5 py-0.5 text-xs font-semibold text-status-warning-fg">
+    <main className="mx-auto w-full max-w-4xl px-6 py-10">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="inline-flex rounded-pill bg-status-warning-bg px-2.5 py-0.5 text-xs font-semibold text-status-warning-fg">
           Dev preview
         </p>
-        <QuestionnaireRenderer
-          definition={PREVIEW}
-          responses={responses}
-          onChange={onChange}
-        />
-        <details className="mt-8 rounded-md border border-border-subtle bg-surface-card p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-ink-primary">
-            Live responses
-          </summary>
-          <pre className="mt-2 overflow-x-auto text-xs text-ink-secondary">
-            {JSON.stringify(responses, null, 2)}
-          </pre>
-        </details>
-      </main>
-      <PublicFooter />
-    </>
+        <Link href="/" className="text-sm text-brand-500 hover:text-brand-600">
+          ← Back to landing
+        </Link>
+      </div>
+      <QuestionnaireRenderer
+        definition={PREVIEW}
+        responses={responses}
+        onChange={onChange}
+      />
+      <details className="mt-8 rounded-md border border-border-subtle bg-surface-card p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-ink-primary">
+          Live responses
+        </summary>
+        <pre className="mt-2 overflow-x-auto text-xs text-ink-secondary">
+          {JSON.stringify(responses, null, 2)}
+        </pre>
+      </details>
+    </main>
   );
 }
