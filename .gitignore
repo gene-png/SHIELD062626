@@ -57,3 +57,6 @@ postgres-data/
 redis-data/
 minio-data/
 keycloak-data/
+*.db
+*.sqlite
+*.sqlite3
