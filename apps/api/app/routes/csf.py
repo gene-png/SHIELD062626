@@ -34,6 +34,7 @@ from app.csf.catalog import (
     SUBCATEGORIES,
     all_codes,
 )
+from app.csf.gap import analyze as analyze_gaps
 from app.csf.maturity import TIER_DEFINITIONS
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
@@ -59,6 +60,8 @@ from app.schemas.csf import (
     CsfServiceCreateRequest,
     CsfServiceResponse,
     FunctionScore,
+    GapAnalysisResponse,
+    GapItem,
 )
 
 router = APIRouter(prefix="/csf", tags=["csf"])
@@ -454,5 +457,76 @@ def score_latest(
                 weakest_subcategory_codes=list(fs.weakest_subcategory_codes),
             )
             for fs in score.by_function
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gap analysis
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/services/{service_id}/gap-analysis",
+    response_model=GapAnalysisResponse,
+    summary="Prioritized remediation gaps for the latest assessment (admin)",
+)
+def gap_analysis(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+    target_tier: int = 3,
+    top_n: int = 20,
+) -> GapAnalysisResponse:
+    svc = db.get(Service, service_id)
+    if svc is None or svc.kind != ServiceKind.NIST_CSF:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CSF service not found.",
+        )
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    rows = (
+        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
+        .scalars()
+        .all()
+    )
+    valid = all_codes()
+    answers: dict[str, int | None] = {
+        r.subcategory_code: r.maturity_tier for r in rows if r.subcategory_code in valid
+    }
+    notes: dict[str, str | None] = {
+        r.subcategory_code: r.notes for r in rows if r.subcategory_code in valid
+    }
+    analysis = analyze_gaps(
+        answers, notes=notes, target_tier=target_tier, top_n=top_n
+    )
+    return GapAnalysisResponse(
+        assessment_id=a.id,
+        version=a.version,
+        target_tier=analysis.target_tier,
+        target_label=analysis.target_label,
+        total_gap_count=analysis.total_gap_count,
+        unscored_count=len(analysis.unscored_codes),
+        gap_count_by_function=analysis.gap_count_by_function,
+        gaps=[
+            GapItem(
+                code=g.code,
+                function=g.function.value,
+                function_name=g.function_name,
+                category=g.category,
+                name=g.name,
+                outcome=g.outcome,
+                current_tier=g.current_tier,
+                target_tier=g.target_tier,
+                gap_size=g.gap_size,
+                priority_score=g.priority_score,
+                notes=g.notes,
+            )
+            for g in analysis.gaps
         ],
     )

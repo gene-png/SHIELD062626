@@ -137,3 +137,33 @@ class CsfScoreSummary(BaseModel):
     average_tier: float | None
     overall_maturity_label: str
     by_function: list[FunctionScore]
+
+
+# ---------------------------------------------------------------------------
+# Gap analysis
+# ---------------------------------------------------------------------------
+
+
+class GapItem(BaseModel):
+    code: str
+    function: str
+    function_name: str
+    category: str
+    name: str
+    outcome: str
+    current_tier: int
+    target_tier: int
+    gap_size: int
+    priority_score: float
+    notes: str | None
+
+
+class GapAnalysisResponse(BaseModel):
+    assessment_id: uuid.UUID
+    version: int
+    target_tier: int
+    target_label: str
+    total_gap_count: int
+    unscored_count: int
+    gap_count_by_function: dict[str, int]
+    gaps: list[GapItem]
