@@ -34,19 +34,26 @@ from app.csf.catalog import (
     SUBCATEGORIES,
     all_codes,
 )
+from app.csf.exporters import build_context as build_csf_context
+from app.csf.exporters import render_pdf as render_csf_pdf
+from app.csf.exporters import render_xlsx as render_csf_xlsx
 from app.csf.gap import analyze as analyze_gaps
 from app.csf.maturity import TIER_DEFINITIONS
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
 from app.dependencies import current_user, require_role
 from app.models._common import utcnow
+from app.models.artifact import Artifact, ArtifactOrigin
+from app.models.client import Client
 from app.models.csf_assessment import (
     CsfAnswer,
     CsfAssessment,
     CsfAssessmentStatus,
 )
+from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
+from app.routes.artifacts import _storage_dep
 from app.schemas.csf import (
     CatalogCategory,
     CatalogFunction,
@@ -62,6 +69,12 @@ from app.schemas.csf import (
     FunctionScore,
     GapAnalysisResponse,
     GapItem,
+)
+from app.schemas.tech_debt import DeliverableResponse
+from app.storage import StorageBackend
+from app.tech_debt.filename import (
+    SERVICE_SLUG_NIST_CSF,
+    deliverable_filename,
 )
 
 router = APIRouter(prefix="/csf", tags=["csf"])
@@ -530,3 +543,302 @@ def gap_analysis(
             for g in analysis.gaps
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Deliverables
+# ---------------------------------------------------------------------------
+
+
+def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableResponse:
+    pdf_title = None
+    xlsx_title = None
+    if deliv.pdf_artifact_id:
+        a = db.get(Artifact, deliv.pdf_artifact_id)
+        pdf_title = a.title if a else None
+    if deliv.xlsx_artifact_id:
+        a = db.get(Artifact, deliv.xlsx_artifact_id)
+        xlsx_title = a.title if a else None
+    return DeliverableResponse(
+        id=deliv.id,
+        service_id=deliv.service_id,
+        title=deliv.title,
+        summary=deliv.summary,
+        version=deliv.version,
+        pdf_artifact_id=deliv.pdf_artifact_id,
+        xlsx_artifact_id=deliv.xlsx_artifact_id,
+        pdf_filename=pdf_title,
+        xlsx_filename=xlsx_title,
+        finalized_at=deliv.finalized_at,
+        finalized_by=deliv.finalized_by,
+        released_to_client_at=deliv.released_to_client_at,
+        superseded_by=deliv.superseded_by,
+    )
+
+
+def _write_artifact(
+    db: Session,
+    *,
+    storage: StorageBackend,
+    user: User,
+    filename: str,
+    mime_type: str,
+    data: bytes,
+) -> Artifact:
+    from hashlib import sha256
+
+    key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
+    storage.put(key, data, content_type=mime_type)
+    art = Artifact(
+        title=filename,
+        file_storage_key=key,
+        mime_type=mime_type,
+        size_bytes=len(data),
+        sha256=sha256(data).hexdigest(),
+        origin=ArtifactOrigin.CONSULTANT_APPROVED,
+        stage="csf.deliverable",
+        uploaded_by=user.id,
+    )
+    db.add(art)
+    db.flush()
+    return art
+
+
+@router.post(
+    "/services/{service_id}/deliverables/finalize",
+    response_model=DeliverableResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Render PDF + XLSX deliverable from the latest approved CSF assessment (admin)",
+)
+def finalize_csf_deliverable(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[StorageBackend, Depends(_storage_dep)],
+) -> DeliverableResponse:
+    svc = db.get(Service, service_id)
+    if svc is None or svc.kind != ServiceKind.NIST_CSF:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CSF service not found.",
+        )
+    assessment = _latest_assessment(db, svc.id)
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    if assessment.status not in (
+        CsfAssessmentStatus.APPROVED,
+        CsfAssessmentStatus.RELEASED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Assessment must be approved before finalizing the deliverable.",
+        )
+    answers = (
+        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == assessment.id))
+        .scalars()
+        .all()
+    )
+    valid = all_codes()
+    tier_map: dict[str, int | None] = {
+        r.subcategory_code: r.maturity_tier
+        for r in answers
+        if r.subcategory_code in valid
+    }
+    notes_map: dict[str, str | None] = {
+        r.subcategory_code: r.notes for r in answers if r.subcategory_code in valid
+    }
+    score = compute_score(tier_map)
+    gap = analyze_gaps(tier_map, notes=notes_map)
+
+    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
+    client_name = client.legal_name if client is not None else None
+    if client_name == "(pending intake)":
+        client_name = None
+
+    # Filename version: same-day re-finalize -> v2, v3, ...
+    today = utcnow().date()
+    existing_count = db.execute(
+        select(Deliverable).where(Deliverable.service_id == svc.id)
+    ).all()
+    next_version = len(existing_count) + 1
+
+    pdf_name = deliverable_filename(
+        company=client_name,
+        service_slug=SERVICE_SLUG_NIST_CSF,
+        extension="pdf",
+        day=today,
+        version=next_version,
+    )
+    xlsx_name = deliverable_filename(
+        company=client_name,
+        service_slug=SERVICE_SLUG_NIST_CSF,
+        extension="xlsx",
+        day=today,
+        version=next_version,
+    )
+
+    ctx = build_csf_context(
+        client_legal_name=client_name,
+        service_title=svc.title,
+        assessment=assessment,
+        answers=answers,
+        score=score,
+        gap=gap,
+    )
+    pdf_bytes = render_csf_pdf(ctx)
+    xlsx_bytes = render_csf_xlsx(ctx)
+
+    pdf_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        filename=pdf_name,
+        mime_type="application/pdf",
+        data=pdf_bytes,
+    )
+    xlsx_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        filename=xlsx_name,
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        data=xlsx_bytes,
+    )
+
+    summary_line = (
+        f"Overall maturity: {score.overall_maturity_label}. "
+        f"{score.answered_subcategories}/{score.total_subcategories} subcategories scored; "
+        f"{gap.total_gap_count} gap(s) at target T{gap.target_tier}."
+    )
+
+    deliv = Deliverable(
+        service_id=svc.id,
+        title=f"{svc.title} v{next_version}",
+        summary=summary_line,
+        version=next_version,
+        pdf_artifact_id=pdf_artifact.id,
+        xlsx_artifact_id=xlsx_artifact.id,
+        finalized_at=utcnow(),
+        finalized_by=user.id,
+    )
+    db.add(deliv)
+    db.flush()
+
+    audit(
+        db,
+        action="csf.deliverable.finalized",
+        target_type="deliverable",
+        target_id=deliv.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(svc.id),
+            "assessment_id": str(assessment.id),
+            "assessment_version": assessment.version,
+            "version": next_version,
+            "overall_maturity_label": score.overall_maturity_label,
+            "average_tier": score.average_tier,
+            "coverage_pct": score.coverage_pct,
+            "gap_count": gap.total_gap_count,
+        },
+    )
+    db.commit()
+    db.refresh(deliv)
+    return _serialize_deliverable(db, deliv)
+
+
+@router.post(
+    "/deliverables/{deliverable_id}/release",
+    response_model=DeliverableResponse,
+    summary="Release a finalized CSF deliverable to the client (admin)",
+)
+def release_csf_deliverable(
+    deliverable_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    deliv = db.get(Deliverable, deliverable_id)
+    if deliv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deliverable not found.",
+        )
+    if deliv.finalized_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Deliverable must be finalized before release.",
+        )
+    if deliv.released_to_client_at is not None:
+        return _serialize_deliverable(db, deliv)
+    deliv.released_to_client_at = utcnow()
+    earlier = (
+        db.execute(
+            select(Deliverable).where(
+                Deliverable.service_id == deliv.service_id,
+                Deliverable.id != deliv.id,
+                Deliverable.superseded_by.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for prev in earlier:
+        prev.superseded_by = deliv.id
+    # Mirror the assessment status so the latest-assessment client
+    # gate (admin-only until released) unlocks.
+    a = _latest_assessment(db, deliv.service_id)
+    if a is not None and a.status != CsfAssessmentStatus.RELEASED:
+        a.status = CsfAssessmentStatus.RELEASED
+
+    audit(
+        db,
+        action="csf.deliverable.released",
+        target_type="deliverable",
+        target_id=deliv.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(deliv.service_id),
+            "version": deliv.version,
+            "superseded": [str(p.id) for p in earlier],
+        },
+    )
+    db.commit()
+    db.refresh(deliv)
+    return _serialize_deliverable(db, deliv)
+
+
+@router.get(
+    "/services/{service_id}/deliverables/latest",
+    response_model=DeliverableResponse,
+    summary="Most recent CSF deliverable for a service",
+)
+def latest_csf_deliverable(
+    service_id: uuid.UUID,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    svc = db.get(Service, service_id)
+    if svc is None or svc.kind != ServiceKind.NIST_CSF:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CSF service not found.",
+        )
+    deliv = db.execute(
+        select(Deliverable)
+        .where(Deliverable.service_id == svc.id)
+        .order_by(Deliverable.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if deliv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No deliverable yet. Finalize one first.",
+        )
+    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No released deliverable yet.",
+        )
+    return _serialize_deliverable(db, deliv)

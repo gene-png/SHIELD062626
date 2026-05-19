@@ -109,3 +109,19 @@ export interface GapAnalysis {
   gap_count_by_function: Record<string, number>;
   gaps: GapItem[];
 }
+
+export interface CsfDeliverable {
+  id: string;
+  service_id: string;
+  title: string;
+  summary: string | null;
+  version: number;
+  pdf_artifact_id: string | null;
+  xlsx_artifact_id: string | null;
+  pdf_filename: string | null;
+  xlsx_filename: string | null;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  released_to_client_at: string | null;
+  superseded_by: string | null;
+}

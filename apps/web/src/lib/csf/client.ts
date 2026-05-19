@@ -5,6 +5,7 @@ import type {
   CsfAnswerPatch,
   CsfAssessment,
   CsfCatalog,
+  CsfDeliverable,
   CsfScoreSummary,
   GapAnalysis,
 } from "./types";
@@ -112,6 +113,39 @@ export async function fetchScore(
     }
     throw err;
   }
+}
+
+export async function fetchLatestDeliverable(
+  serviceId: string,
+): Promise<CsfDeliverable | null> {
+  try {
+    return await jsonRequest<CsfDeliverable>(
+      `/api/proxy/csf/services/${serviceId}/deliverables/latest`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function finalizeCsfDeliverable(
+  serviceId: string,
+): Promise<CsfDeliverable> {
+  return jsonRequest<CsfDeliverable>(
+    `/api/proxy/csf/services/${serviceId}/deliverables/finalize`,
+    { method: "POST" },
+  );
+}
+
+export async function releaseCsfDeliverable(
+  deliverableId: string,
+): Promise<CsfDeliverable> {
+  return jsonRequest<CsfDeliverable>(
+    `/api/proxy/csf/deliverables/${deliverableId}/release`,
+    { method: "POST" },
+  );
 }
 
 export async function fetchGapAnalysis(

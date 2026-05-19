@@ -18,6 +18,7 @@ import {
   fetchCatalog,
   fetchGapAnalysis,
   fetchLatestAssessment,
+  fetchLatestDeliverable,
   fetchScore,
   patchAnswer,
 } from "@/lib/csf/client";
@@ -26,10 +27,12 @@ import type {
   CsfAnswerPatch,
   CsfAssessment,
   CsfCatalog,
+  CsfDeliverable,
   CsfScoreSummary,
   GapAnalysis,
 } from "@/lib/csf/types";
 
+import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
 import { CsfQuestionnaire } from "./CsfQuestionnaire";
 import { CsfScoreCard } from "./CsfScoreCard";
@@ -63,6 +66,9 @@ export function CsfWorkspace({
   );
   const [score, setScore] = React.useState<CsfScoreSummary | null>(null);
   const [gap, setGap] = React.useState<GapAnalysis | null>(null);
+  const [deliverable, setDeliverable] = React.useState<CsfDeliverable | null>(
+    null,
+  );
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
   const [targetTier, setTargetTier] = React.useState(3);
@@ -106,6 +112,12 @@ export function CsfWorkspace({
       setAssessment(a);
       if (a) {
         await refreshScoreAndGap(targetTier);
+        try {
+          const d = await fetchLatestDeliverable(serviceId);
+          setDeliverable(d);
+        } catch {
+          // non-blocking; deliverable card shows "not finalized yet".
+        }
       }
     } catch (err) {
       setLoadError(describeError(err));
@@ -281,6 +293,12 @@ export function CsfWorkspace({
             analysis={gap}
             targetTier={targetTier}
             onChangeTargetTier={(t) => void onChangeTargetTier(t)}
+          />
+          <CsfDeliverableCard
+            serviceId={serviceId}
+            assessmentStatus={assessment.status}
+            deliverable={deliverable}
+            onChange={setDeliverable}
           />
           <CsfQuestionnaire
             catalog={catalog}
