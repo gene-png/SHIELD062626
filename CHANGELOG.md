@@ -283,3 +283,15 @@ A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps
 
 ### Decisions logged this phase
 - No new DECISIONS.md entries beyond stages tracked in this CHANGELOG; the seven §17 open questions were already settled in Phase 1's D-003 through D-009.
+
+## [Unreleased — Phase 3 in progress]
+
+### Phase 3 stage 1 — Tech Debt data model (`v0.3.1`) — 2026-05-19
+
+- New ORM models matching Master Spec §11 verbatim:
+  - **`Service`** — the workspace that opens when an admin promotes a `ServiceRequest` to live work. Carries `kind` (StrEnum: `tech_debt` / `zero_trust_cisa` / `zero_trust_dod` / `nist_csf` / `attack_coverage`), `status` (`draft`/`in_progress`/`review`/`released`/`archived`), `title`, `source_request_id` (FK back to the originating request), `opened_by`, `released_at`. Other service kinds are listed in the enum so Phase 4 + 5 don't need a schema change.
+  - **`CapabilityList`** — versioned per service (unique constraint on `(service_id, version)`); `draft` / `approved` / `released` status.
+  - **`CapabilityItem`** — `name` / `vendor` / `category` / `function` / `annual_cost_usd` (Numeric(14,2)) / `license_count` / `notes` / `confidence_pct` (0-100, AI-set; cleared on human edit) / `source_artifact_id` (FK to the uploaded artifact the item was extracted from).
+  - **`Deliverable`** — `service_id`, `title`, `summary`, `version`, `pdf_artifact_id`, `xlsx_artifact_id`, `finalized_at`/`finalized_by`, `released_to_client_at`, `superseded_by` (self-FK for re-releases).
+- Migration `0006_tech_debt.py`: creates all four tables + indexes (`services.kind`, `services.status`, `capability_items.capability_list_id`, `deliverables.service_id`, `deliverables.released_to_client_at`).
+- 3 new pytest tests (75 total): migration creates Phase 3 tables; full round-trip through Service → CapabilityList → CapabilityItem → Deliverable with realistic financial data; unique-constraint on `(service_id, version)` enforced.
