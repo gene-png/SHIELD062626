@@ -73,7 +73,7 @@ the build.
 
 In this exact order:
 
-  1. SHIELDv2_AI_Build_Prompt.txt          (this file)
+  1. AI Prompt                              (this file - note: no file extension)
   2. SHIELDv2_Master_Spec.txt              (THE SPEC - read end-to-end)
   3. SHIELDv2_README.docx                  (orientation document)
   4. Shield UX fix round 6 full design update for 2.0.txt
@@ -95,11 +95,15 @@ In this exact order:
 Existing CSF toolkit (in the same folder - load as reference data):
 
   8. CSF2 Implementation Playbook Final.docx
-  9. Step 1.1 / 1.2 / 1.3 Interview Questionnaire HIGH / MODERATE / LOW.docx
- 10. Step 2.1 / 2.2 / 2.3 CSF2 Working Profile HIGH / MODERATE / LOW.xlsx
- 11. Step 3.1 Read Gap Analysis Methodology.docx
- 12. Step 3.2.1 CSF2 Organization Enterprise Profile Choose This One.xlsx
- 13. Ongoing CSF2 Artifact Tracker.xlsx
+  9. Step 1.1 Interview Questionnaire HIGH.docx
+       Step 1.2 Interview Questionnaire MODERATE (1).docx
+       Step 1.3 Interview Questionnaire LOW (1).docx
+ 10. Step 2.1 CSF2 Working Profile HIGH (1).xlsx
+        Step 2.2 CSF2 Working Profile MODERATE (1).xlsx
+        Step 2.3 CSF2 Working Profile LOW (1).xlsx
+ 11. Step 3.1 Read Gap Analysis Methodology (1).docx
+ 12. Step 3.2.1 CSF2 Organization Enterprise Profile Choose This One (1).xlsx
+ 13. Ongoing CSF2 Artifact Tracker (1).xlsx
 
 After reading: log a brief "files read" entry to the decision log
 (see Section 7). Then proceed.
@@ -155,7 +159,7 @@ Eugene answered these directly. They are baked into the spec:
                         request.
 
   Filename convention:  Company_Name_Service_Name{MMDDYY}.{ext}.
-                        Centralize the slugifier. See spec section 16.5.
+                        Centralize the slugifier. See spec section 15.5.
 
 ================================================================================
 3. WORKSPACE AND ENVIRONMENT BOUNDARIES (READ AND OBEY)
@@ -1323,7 +1327,7 @@ When Eugene first launches you with this prompt:
   Step A1: Read every reference file listed in Section 1.
 
   Step A2: Produce ONE message to Eugene that contains:
-             a) Confirmation that you have read all 12 reference
+             a) Confirmation that you have read all 13 reference
                 files. List them by name with a one-line summary
                 of what each contained.
              b) A one-paragraph summary of the platform you are
