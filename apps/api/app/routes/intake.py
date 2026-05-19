@@ -29,7 +29,8 @@ from app.dependencies import current_user
 from app.models._common import utcnow
 from app.models.client import Client
 from app.models.service_request import ServiceRequest
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.notifications import notify_role
 from app.schemas.intake import (
     IntakePatchRequest,
     IntakeStateResponse,
@@ -204,6 +205,19 @@ def submit_intake(
             "services": sorted(seen),
             "user_count": 1,
         },
+    )
+
+    # Master Spec §15 Phase 2: "Admin notification fires on intake submit."
+    # Fan out to every admin so any consultant on the engagement sees it.
+    # AI Prompt §6.12: the link must resolve to a working page.
+    services_label = ", ".join(sorted(seen))
+    notify_role(
+        db,
+        role=UserRole.ADMIN,
+        event_type="intake.submitted",
+        title="New intake submitted",
+        body=(f"{client.legal_name} requested: {services_label}. " "Review in the admin queue."),
+        link="/admin/queue",
     )
 
     db.commit()

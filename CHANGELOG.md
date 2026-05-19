@@ -234,3 +234,52 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - `PublicHeader` is now an async Server Component: shows "Intake" + "Admin queue" (admin-only) when signed in, sign-in/get-started CTAs when not. Surfaces the signed-in user's email.
 - 4 new pytest tests (66 total): empty queue, reflects submitted intake with requester summary, client role gets 403, unauthenticated gets 401.
 - Smoke: pytest 66/66 green, ruff + black + bandit clean, prettier + ESLint + tsc clean, `next build` clean. 16 routes total (2 new: `/admin/queue`, `/api/proxy/admin/intake-queue`).
+
+### Phase 2 stage 8 — Notifications + Phase 2 acceptance gate (`v0.2.8` / `v0.2.0`) — 2026-05-19
+
+- `Notification` model + migration `0005_notifications.py` matching Master Spec §11: user_id, event_type, title, body, link, created_at, read_at. Indexes on `(user_id, created_at)` and `(user_id, read_at)` so per-user list + unread count both stay index-backed.
+- `notify(...)` and `notify_role(role, ...)` helpers (`apps/api/app/notifications/spine.py`) — blessed write surface, mirrors the audit-spine pattern. `notify_role` fans out one row per user with the given role.
+- Three notification routes: `GET /notifications` (newest first, capped at 50, returns `unread_count`); `POST /notifications/{id}/read` (404 for unknown id or wrong owner); `POST /notifications/read-all`.
+- **Intake submit now fans out a `intake.submitted` admin notification** with `link=/admin/queue` (AI Prompt §6.12: bell links must resolve to a working page). Body includes the client legal name + sorted services list.
+- 6 new pytest tests (72 total): intake submit writes admin notification; submitter (client role) does NOT get a copy; `GET /notifications` reflects unread count; mark-read updates `read_at` and clears unread count; cross-user mark-read returns 404; all routes 401 without auth.
+
+## Phase 2 — Intake — Complete (`v0.2.0`) — 2026-05-19
+
+### Acceptance criteria
+- [x] A new client can complete intake end-to-end without internal vocabulary, raw JSON, or stack traces.
+- [x] Submitting intake reflects correctly in the admin queue with the new-lead timestamp.
+- [x] All intake data round-trips correctly: client enters X, admin reads X.
+
+### Notable features shipped
+- Self-service 6-step intake wizard with auto-save on every blur and a live "Saved Xs ago" indicator.
+- Drag-and-drop document upload with up-front redaction disclosure (the user-facing copy of the Master Spec §12 policy).
+- Generic section-tabbed questionnaire renderer with full WAI-ARIA tab semantics — load-bearing for Phases 4 and 5.
+- Admin queue at `/admin/queue` with role-based authz; reflects the singleton client + every service request (with requester user joined in) + every uploaded document.
+- Admin notification fan-out on intake submit, with link pointing at `/admin/queue`.
+- 72 unit tests across the API; web typecheck + lint + prettier + next build all green.
+
+### Security review (OWASP Top 10) — full matrix in BUILD_REPORT.md
+- A01 Access Control:                PASS (role-based guards at route + layout layer)
+- A02 Cryptographic Failures:        PASS
+- A03 Injection:                     PASS
+- A04 Insecure Design:               PASS (audit immutability, MIME allowlist, redaction disclosure)
+- A05 Misconfiguration:              PASS
+- A06 Vulnerable Components:         PARTIAL (Dependabot in Phase 6)
+- A07 Auth Failures:                 PASS WITH NOTES (MFA still deferred per spec)
+- A08 Software & Data Integrity:    PASS (sha256 captured + audited on upload)
+- A09 Logging & Monitoring:          PASS (audit + notification fan-out)
+- A10 SSRF:                           PASS
+
+### What's stubbed or deferred
+- Notification bell UI in the header — API + data layer shipped; visual surfacing is a small follow-up.
+- Postgres audit-trigger integration smoke — waits on Docker availability.
+- The redactor module — lands in Phase 3 with the first AI extraction (Tech Debt capability list).
+
+### Known issues
+- None blocking Phase 3.
+
+### How to try it
+A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps"). For the full stack: `cp .env.example .env`, paste `ANTHROPIC_API_KEY`, generate `NEXTAUTH_SECRET`, then `docker compose up`.
+
+### Decisions logged this phase
+- No new DECISIONS.md entries beyond stages tracked in this CHANGELOG; the seven §17 open questions were already settled in Phase 1's D-003 through D-009.
