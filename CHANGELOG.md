@@ -94,3 +94,11 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - `AuthSessionProvider` (NextAuth `SessionProvider`) and `ToastProvider` wired into the root layout.
 - `next.config.mjs` `typedRoutes` left OFF intentionally (requires `next build` to populate the route manifest before `tsc --noEmit`, which we run as a pre-build smoke).
 - Smoke: `pnpm typecheck` clean across workspace; `pnpm build` succeeded — 9 routes total (`/`, `/_not-found`, `/sign-in`, `/sign-up`, `/accessibility`, `/privacy`, `/security`, `/api/auth/[...nextauth]`, `/api/proxy/auth/register`). First Load JS shared 87.2 kB; biggest route (`/sign-up`) at 105 kB.
+
+### Phase 1 stage 8 — CI green (`v0.1.8`) — 2026-05-19
+
+- All linters and formatters configured and clean across the whole tree:
+  - **Python:** `ruff` (curated rule set, with TCH dropped because SQLAlchemy 2's `Mapped[uuid.UUID]` etc. need their referent types resolvable at runtime; per-file ignores for test fixtures and Alembic env), `black`, `bandit` (0 issues), `pytest -m unit` (43 passing). Targeted `# noqa` for FastAPI's `Depends(...)` default and the OAuth `token_type="bearer"` field (false positives, not credentials).
+  - **Web:** `prettier --check`, `eslint`, `tsc --noEmit`, `next build` (9 routes). Added `.prettierignore` so the lockfile and `reference-docs/` are not reformatted.
+- CI workflow rewritten (`.github/workflows/ci.yml`) to actually run those checks against the codebase. Three jobs: `python` (ruff, black, pytest, bandit), `web` (prettier, eslint, typecheck, build), `secret-scan` (gitleaks).
+- `apps/api/app/models/user.py`: `UserRole(str, Enum)` → `UserRole(StrEnum)` (Python 3.11+ idiom; what ruff UP042 wanted).

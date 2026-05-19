@@ -4,32 +4,32 @@
 
 ## Threat model (v1)
 
-| Asset | Threat | Primary control | Compensating |
-|---|---|---|---|
-| Client engagement data in Postgres | Unauthorized read/write | Row-level role checks at route layer; deployment-isolated DB | Audit log; least-privilege DB role |
-| Deliverable artifacts in S3 | Exfiltration | Signed URLs with short TTL; KMS-encrypted at rest | Bucket policy denies anonymous access |
-| Session tokens | Replay / theft | 15-min access JWT, 30-min idle, daily forced re-auth | HttpOnly + Secure + SameSite=Strict cookies |
-| LLM egress | PII leakage to non-FedRAMP provider | **Mandatory redactor** on every call | Audit row proves redactor ran; provider env-swappable to FedRAMP-authorized |
-| Credentials in source | Accidental commit | gitleaks pre-commit; `detect-private-key` hook | `.env` gitignored; SECURITY.md policy |
-| Supply chain | Malicious dependency | `pnpm audit` + `pip-audit` in CI; pinned versions | Dependabot weekly |
-| File uploads | Malicious payload | Server-side MIME sniff; size cap; AV scan (Phase 6) | Quarantine bucket |
+| Asset                              | Threat                              | Primary control                                              | Compensating                                                                |
+| ---------------------------------- | ----------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Client engagement data in Postgres | Unauthorized read/write             | Row-level role checks at route layer; deployment-isolated DB | Audit log; least-privilege DB role                                          |
+| Deliverable artifacts in S3        | Exfiltration                        | Signed URLs with short TTL; KMS-encrypted at rest            | Bucket policy denies anonymous access                                       |
+| Session tokens                     | Replay / theft                      | 15-min access JWT, 30-min idle, daily forced re-auth         | HttpOnly + Secure + SameSite=Strict cookies                                 |
+| LLM egress                         | PII leakage to non-FedRAMP provider | **Mandatory redactor** on every call                         | Audit row proves redactor ran; provider env-swappable to FedRAMP-authorized |
+| Credentials in source              | Accidental commit                   | gitleaks pre-commit; `detect-private-key` hook               | `.env` gitignored; SECURITY.md policy                                       |
+| Supply chain                       | Malicious dependency                | `pnpm audit` + `pip-audit` in CI; pinned versions            | Dependabot weekly                                                           |
+| File uploads                       | Malicious payload                   | Server-side MIME sniff; size cap; AV scan (Phase 6)          | Quarantine bucket                                                           |
 
 ## OWASP Top 10 (2021) - per-commit review process
 
 Every commit message must reference which OWASP category it touches if any. CHANGELOG entries per phase summarize the cumulative posture. The matrix below is filled in across phases.
 
-| ID | Category | v1 status |
-|---|---|---|
-| A01 | Broken Access Control | Pending Phase 1 (role-based route guards + audit) |
-| A02 | Cryptographic Failures | TLS 1.2+ everywhere; bcrypt/Argon2 for passwords; AES-256 + KMS for at-rest |
-| A03 | Injection | SQLAlchemy parameterized queries only; no raw SQL in app code |
-| A04 | Insecure Design | Threat model in this doc; per-phase review |
-| A05 | Security Misconfiguration | `ENVIRONMENT=production` disables debug; CSP + HSTS at edge |
-| A06 | Vulnerable Components | Dependabot + audit hooks |
-| A07 | Identification & Auth Failures | Deferred MFA, with documented compensating controls (see SECURITY.md) |
-| A08 | Software + Data Integrity Failures | Subresource integrity on CDN-free deploys; signed CI artifacts |
-| A09 | Logging + Monitoring | Structured JSON logs; correlation IDs; audit log; alerting in Phase 6 |
-| A10 | SSRF | LLM endpoint is env-configured only; no user-supplied URLs |
+| ID  | Category                           | v1 status                                                                   |
+| --- | ---------------------------------- | --------------------------------------------------------------------------- |
+| A01 | Broken Access Control              | Pending Phase 1 (role-based route guards + audit)                           |
+| A02 | Cryptographic Failures             | TLS 1.2+ everywhere; bcrypt/Argon2 for passwords; AES-256 + KMS for at-rest |
+| A03 | Injection                          | SQLAlchemy parameterized queries only; no raw SQL in app code               |
+| A04 | Insecure Design                    | Threat model in this doc; per-phase review                                  |
+| A05 | Security Misconfiguration          | `ENVIRONMENT=production` disables debug; CSP + HSTS at edge                 |
+| A06 | Vulnerable Components              | Dependabot + audit hooks                                                    |
+| A07 | Identification & Auth Failures     | Deferred MFA, with documented compensating controls (see SECURITY.md)       |
+| A08 | Software + Data Integrity Failures | Subresource integrity on CDN-free deploys; signed CI artifacts              |
+| A09 | Logging + Monitoring               | Structured JSON logs; correlation IDs; audit log; alerting in Phase 6       |
+| A10 | SSRF                               | LLM endpoint is env-configured only; no user-supplied URLs                  |
 
 ## Redaction (Master Spec §12 - primary control)
 

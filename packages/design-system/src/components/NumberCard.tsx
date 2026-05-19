@@ -33,9 +33,13 @@ export function NumberCard({
       <p className="text-xs font-medium uppercase tracking-wider text-ink-tertiary">
         {label}
       </p>
-      <p className="mt-2 text-3xl font-semibold leading-tight text-ink-primary">{value}</p>
+      <p className="mt-2 text-3xl font-semibold leading-tight text-ink-primary">
+        {value}
+      </p>
       {delta ? (
-        <p className={cn("mt-2 text-sm font-medium", DELTA_TONE[deltaTone])}>{delta}</p>
+        <p className={cn("mt-2 text-sm font-medium", DELTA_TONE[deltaTone])}>
+          {delta}
+        </p>
       ) : null}
       {hint ? <p className="mt-1 text-xs text-ink-tertiary">{hint}</p> : null}
     </Card>

@@ -28,7 +28,7 @@ def _bearer_token_from(request: Request) -> str:
 
 def current_user(
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db),  # noqa: B008 - FastAPI dependency-injection idiom
 ) -> User:
     token = _bearer_token_from(request)
     try:

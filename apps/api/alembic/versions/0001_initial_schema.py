@@ -105,42 +105,32 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_audit_entries_at", "audit_entries", ["at"])
-    op.create_index(
-        "ix_audit_entries_target", "audit_entries", ["target_type", "target_id"]
-    )
-    op.create_index(
-        "ix_audit_entries_correlation", "audit_entries", ["correlation_id"]
-    )
+    op.create_index("ix_audit_entries_target", "audit_entries", ["target_type", "target_id"])
+    op.create_index("ix_audit_entries_correlation", "audit_entries", ["correlation_id"])
 
     # Append-only enforcement at the DB layer (Postgres only).
     # The application also enforces this via SQLAlchemy event listeners
     # (apps/api/app/models/audit_entry.py) so SQLite tests catch logic
     # bugs that try to mutate audit rows.
     if dialect_name == "postgresql":
-        op.execute(
-            """
+        op.execute("""
             CREATE OR REPLACE FUNCTION audit_entries_block_mutation()
             RETURNS trigger AS $$
             BEGIN
                 RAISE EXCEPTION 'audit_entries rows are append-only (%)', TG_OP;
             END;
             $$ LANGUAGE plpgsql;
-            """
-        )
-        op.execute(
-            """
+            """)
+        op.execute("""
             CREATE TRIGGER audit_entries_no_update
             BEFORE UPDATE ON audit_entries
             FOR EACH ROW EXECUTE FUNCTION audit_entries_block_mutation();
-            """
-        )
-        op.execute(
-            """
+            """)
+        op.execute("""
             CREATE TRIGGER audit_entries_no_delete
             BEFORE DELETE ON audit_entries
             FOR EACH ROW EXECUTE FUNCTION audit_entries_block_mutation();
-            """
-        )
+            """)
 
 
 def downgrade() -> None:

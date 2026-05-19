@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.security.password import (
     PasswordPolicyError,
     hash_password,

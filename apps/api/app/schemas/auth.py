@@ -31,7 +31,7 @@ class RefreshRequest(BaseModel):
 class TokenPairResponse(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 - OAuth 2.0 token_type field, not a credential
     access_expires_at: datetime
     refresh_expires_at: datetime
 

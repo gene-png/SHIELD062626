@@ -59,7 +59,10 @@ export const authOptions: NextAuthOptions = {
           };
           return user;
         } catch (err) {
-          if (err instanceof ApiError && (err.status === 401 || err.status === 423)) {
+          if (
+            err instanceof ApiError &&
+            (err.status === 401 || err.status === 423)
+          ) {
             return null;
           }
           throw err;

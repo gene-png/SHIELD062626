@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     s3_endpoint_url: str = "http://minio:9000"
     s3_bucket: str = "shield-artifacts"
     s3_access_key: str = "shield-minio"
-    s3_secret_key: str = "shield-minio-secret"
+    s3_secret_key: str = (
+        "shield-minio-secret"  # noqa: S105 - dev placeholder, refused in prod via assert_safe_for_runtime
+    )
     s3_kms_key_id: str = "dev-stub-key"
 
     # OIDC (Keycloak)
@@ -69,7 +71,9 @@ class Settings(BaseSettings):
     shield_forced_reauth_seconds: int = Field(default=86400, ge=300)
 
     # JWT signing
-    jwt_signing_secret: str = "dev-only-replace-via-secrets-manager"
+    jwt_signing_secret: str = (
+        "dev-only-replace-via-secrets-manager"  # noqa: S105 - dev placeholder, refused in prod via assert_safe_for_runtime
+    )
 
     # Mail (MailHog in dev)
     smtp_host: str = "mailhog"
@@ -87,9 +91,7 @@ class Settings(BaseSettings):
                 "(Master Spec §12)."
             )
         if self.is_production() and self.jwt_signing_secret.startswith("dev-only"):
-            raise RuntimeError(
-                "JWT_SIGNING_SECRET is still the default placeholder in production."
-            )
+            raise RuntimeError("JWT_SIGNING_SECRET is still the default placeholder in production.")
 
 
 @lru_cache(maxsize=1)

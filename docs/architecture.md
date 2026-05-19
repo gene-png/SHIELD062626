@@ -51,17 +51,17 @@ All three experiences are delivered by one Next.js app talking to one FastAPI se
 
 ## Tech stack (Master Spec §2 - locked)
 
-| Layer | Choice | Rationale |
-|---|---|---|
-| Frontend | Next.js 14 App Router + React + TypeScript + Tailwind + shadcn/ui (self-hosted, copied in) | Locked by spec; matches Round 6 design language; SSR for executive PDFs |
-| Backend | FastAPI on Python 3.12 | Locked by spec; native async; OpenAPI for type generation |
-| Database | PostgreSQL 16 | Locked by spec; row-level security available; Alembic migrations |
-| Cache + queue | Redis 7 | Locked by spec; Celery broker |
-| Object storage | S3-compatible (MinIO in dev; AWS S3 + KMS or Azure Blob in prod) | Locked by spec |
-| IdP | Keycloak 25 (OIDC) | Federable to any external IdP for v1.x |
-| Async | Celery 5 | Standard Python async pattern |
-| Migrations | Alembic | Locked by spec - no manual schema edits, ever |
-| Tests | pytest + Playwright + axe-core/Pa11y | Tests run as part of CI; accessibility enforced |
+| Layer          | Choice                                                                                     | Rationale                                                               |
+| -------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Frontend       | Next.js 14 App Router + React + TypeScript + Tailwind + shadcn/ui (self-hosted, copied in) | Locked by spec; matches Round 6 design language; SSR for executive PDFs |
+| Backend        | FastAPI on Python 3.12                                                                     | Locked by spec; native async; OpenAPI for type generation               |
+| Database       | PostgreSQL 16                                                                              | Locked by spec; row-level security available; Alembic migrations        |
+| Cache + queue  | Redis 7                                                                                    | Locked by spec; Celery broker                                           |
+| Object storage | S3-compatible (MinIO in dev; AWS S3 + KMS or Azure Blob in prod)                           | Locked by spec                                                          |
+| IdP            | Keycloak 25 (OIDC)                                                                         | Federable to any external IdP for v1.x                                  |
+| Async          | Celery 5                                                                                   | Standard Python async pattern                                           |
+| Migrations     | Alembic                                                                                    | Locked by spec - no manual schema edits, ever                           |
+| Tests          | pytest + Playwright + axe-core/Pa11y                                                       | Tests run as part of CI; accessibility enforced                         |
 
 ## Data isolation
 

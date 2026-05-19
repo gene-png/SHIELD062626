@@ -64,7 +64,12 @@ export function DataTable<Row>(props: DataTableProps<Row>): JSX.Element {
   }
 
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-border-subtle", className)}>
+    <div
+      className={cn(
+        "overflow-x-auto rounded-lg border border-border-subtle",
+        className,
+      )}
+    >
       <table className="min-w-full border-separate border-spacing-0 text-sm">
         {caption ? (
           <caption className="bg-surface-sunken px-4 py-2 text-left text-xs text-ink-secondary">
@@ -87,7 +92,8 @@ export function DataTable<Row>(props: DataTableProps<Row>): JSX.Element {
                   className={cn(
                     "border-b border-border-subtle px-4 py-2 font-semibold",
                     ALIGN[col.align ?? "left"],
-                    col.sortable && "cursor-pointer select-none hover:text-ink-primary",
+                    col.sortable &&
+                      "cursor-pointer select-none hover:text-ink-primary",
                   )}
                   style={col.width ? { width: col.width } : undefined}
                   aria-sort={
@@ -99,7 +105,9 @@ export function DataTable<Row>(props: DataTableProps<Row>): JSX.Element {
                         ? "none"
                         : undefined
                   }
-                  onClick={col.sortable ? () => handleHeaderClick(col) : undefined}
+                  onClick={
+                    col.sortable ? () => handleHeaderClick(col) : undefined
+                  }
                   onKeyDown={
                     col.sortable
                       ? (e) => {
@@ -128,7 +136,10 @@ export function DataTable<Row>(props: DataTableProps<Row>): JSX.Element {
         <tbody className="bg-surface-card">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-12 text-center text-ink-tertiary">
+              <td
+                colSpan={columns.length}
+                className="px-4 py-12 text-center text-ink-tertiary"
+              >
                 {emptyState ?? "No records."}
               </td>
             </tr>
@@ -140,7 +151,9 @@ export function DataTable<Row>(props: DataTableProps<Row>): JSX.Element {
                   "border-b border-border-subtle last:border-b-0",
                   onRowClick && "cursor-pointer hover:bg-surface-sunken",
                 )}
-                onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
+                onClick={
+                  onRowClick ? () => onRowClick(row, rowIndex) : undefined
+                }
               >
                 {columns.map((col) => (
                   <td

@@ -5,7 +5,9 @@ export function PublicHeader(): JSX.Element {
     <header className="border-b border-border-subtle bg-surface-card">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex flex-col leading-tight">
-          <span className="text-lg font-semibold tracking-tight text-ink-primary">SHIELD</span>
+          <span className="text-lg font-semibold tracking-tight text-ink-primary">
+            SHIELD
+          </span>
           <span className="text-xs font-medium uppercase tracking-wider text-ink-tertiary">
             by Kentro
           </span>

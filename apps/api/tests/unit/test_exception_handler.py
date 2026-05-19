@@ -6,10 +6,9 @@ AI Prompt §4.4 + Master Spec §6.3: stack traces must NEVER leak.
 from __future__ import annotations
 
 import pytest
+from app.main import create_app
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-
-from app.main import create_app
 
 
 @pytest.fixture()

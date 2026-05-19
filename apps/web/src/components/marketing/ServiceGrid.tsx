@@ -1,4 +1,10 @@
-import { Card, CardBody, CardDescription, CardHeader, CardTitle } from "@shield/design-system";
+import {
+  Card,
+  CardBody,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@shield/design-system";
 
 const SERVICES: { title: string; description: string }[] = [
   {
@@ -25,13 +31,20 @@ const SERVICES: { title: string; description: string }[] = [
 
 export function ServiceGrid(): JSX.Element {
   return (
-    <section aria-labelledby="services-heading" className="mx-auto max-w-6xl px-6 py-16">
-      <h2 id="services-heading" className="text-2xl font-semibold text-ink-primary">
+    <section
+      aria-labelledby="services-heading"
+      className="mx-auto max-w-6xl px-6 py-16"
+    >
+      <h2
+        id="services-heading"
+        className="text-2xl font-semibold text-ink-primary"
+      >
         Four assessments. One operating system.
       </h2>
       <p className="mt-2 max-w-2xl text-ink-secondary">
-        Each service ships in-app with editable workspaces, plain-English client views, and PDF +
-        XLSX deliverables that follow your filename conventions.
+        Each service ships in-app with editable workspaces, plain-English client
+        views, and PDF + XLSX deliverables that follow your filename
+        conventions.
       </p>
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         {SERVICES.map((s) => (

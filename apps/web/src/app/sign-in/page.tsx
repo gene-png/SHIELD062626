@@ -17,16 +17,25 @@ export default function SignInPage(): JSX.Element {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold text-ink-primary">Sign in</h1>
           <p className="text-sm text-ink-secondary">
-            Use the email and password you registered with. MFA enrollment is on the v1.x
-            roadmap.
+            Use the email and password you registered with. MFA enrollment is on
+            the v1.x roadmap.
           </p>
         </header>
-        <Suspense fallback={<div aria-busy="true" className="text-sm text-ink-tertiary">Loading…</div>}>
+        <Suspense
+          fallback={
+            <div aria-busy="true" className="text-sm text-ink-tertiary">
+              Loading…
+            </div>
+          }
+        >
           <SignInForm />
         </Suspense>
         <p className="text-sm text-ink-secondary">
           New here?{" "}
-          <Link href="/sign-up" className="font-medium text-brand-500 hover:text-brand-600">
+          <Link
+            href="/sign-up"
+            className="font-medium text-brand-500 hover:text-brand-600"
+          >
             Create an account
           </Link>
         </p>

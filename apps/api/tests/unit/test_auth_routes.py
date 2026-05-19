@@ -46,7 +46,11 @@ def app_client(tmp_path) -> Iterator[TestClient]:
         yield c
 
 
-def _register(client: TestClient, email: str = "first@example.com", password: str = "correct horse battery staple!") -> dict:
+def _register(
+    client: TestClient,
+    email: str = "first@example.com",
+    password: str = "correct horse battery staple!",
+) -> dict:
     r = client.post(
         "/auth/register",
         json={

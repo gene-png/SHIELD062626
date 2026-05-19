@@ -36,12 +36,16 @@ export function SignUpForm(): JSX.Element {
     }
     if (res.status === 422) {
       const body = (await res.json()) as { error?: { message?: string } };
-      setErrors({ password: body.error?.message ?? "Password does not meet policy." });
+      setErrors({
+        password: body.error?.message ?? "Password does not meet policy.",
+      });
       setPending(false);
       return;
     }
     if (!res.ok) {
-      setErrors({ form: "Something went wrong creating your account. Try again." });
+      setErrors({
+        form: "Something went wrong creating your account. Try again.",
+      });
       setPending(false);
       return;
     }
@@ -61,7 +65,10 @@ export function SignUpForm(): JSX.Element {
   return (
     <form className="flex flex-col gap-5" onSubmit={onSubmit} noValidate>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="display_name" className="text-sm font-medium text-ink-primary">
+        <label
+          htmlFor="display_name"
+          className="text-sm font-medium text-ink-primary"
+        >
           Full name
         </label>
         <input
@@ -94,7 +101,10 @@ export function SignUpForm(): JSX.Element {
         ) : null}
       </div>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="password" className="text-sm font-medium text-ink-primary">
+        <label
+          htmlFor="password"
+          className="text-sm font-medium text-ink-primary"
+        >
           Password
         </label>
         <input
@@ -108,7 +118,9 @@ export function SignUpForm(): JSX.Element {
           aria-invalid={errors.password ? "true" : undefined}
           className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-none"
         />
-        <p className="text-xs text-ink-tertiary">12+ characters. Choose something memorable.</p>
+        <p className="text-xs text-ink-tertiary">
+          12+ characters. Choose something memorable.
+        </p>
         {errors.password ? (
           <p className="text-xs text-status-danger-fg">{errors.password}</p>
         ) : null}

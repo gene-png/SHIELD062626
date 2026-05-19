@@ -7,8 +7,8 @@ export function PublicFooter(): JSX.Element {
         <div>
           <p className="font-semibold text-ink-primary">SHIELD by Kentro</p>
           <p className="mt-1 max-w-prose">
-            Enterprise cybersecurity assessment platform. Operated by Kentro on behalf of customer
-            engagements.
+            Enterprise cybersecurity assessment platform. Operated by Kentro on
+            behalf of customer engagements.
           </p>
         </div>
         <nav aria-label="Compliance" className="flex flex-col gap-1">

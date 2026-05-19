@@ -21,11 +21,11 @@ The server starts on http://localhost:3000.
 
 Loaded from the repo-root `.env` (mounted into the web container). The keys this app reads:
 
-| Var | Purpose |
-|---|---|
-| `NEXTAUTH_URL` | Canonical public URL (e.g. `http://localhost:3000`) |
-| `NEXTAUTH_SECRET` | Session signing secret (generate with `openssl rand -hex 32`) |
-| `API_BASE_URL` | Server-side base URL for the FastAPI backend (default `http://api:8000` inside compose) |
+| Var               | Purpose                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `NEXTAUTH_URL`    | Canonical public URL (e.g. `http://localhost:3000`)                                     |
+| `NEXTAUTH_SECRET` | Session signing secret (generate with `openssl rand -hex 32`)                           |
+| `API_BASE_URL`    | Server-side base URL for the FastAPI backend (default `http://api:8000` inside compose) |
 
 ## Auth (v1)
 

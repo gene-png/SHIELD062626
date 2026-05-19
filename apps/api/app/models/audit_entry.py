@@ -31,9 +31,7 @@ class AuditEntry(UUIDPKMixin, Base):
         Index("ix_audit_entries_correlation", "correlation_id"),
     )
 
-    at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False
-    )
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
     )

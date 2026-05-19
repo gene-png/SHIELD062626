@@ -66,9 +66,7 @@ def _normalize_email(raw: str) -> str:
 
 
 def _issue_pair(user: User) -> TokenPairResponse:
-    access_token, access_payload = issue_token(
-        subject=user.id, role=user.role.value, typ="access"
-    )
+    access_token, access_payload = issue_token(subject=user.id, role=user.role.value, typ="access")
     refresh_token, refresh_payload = issue_token(
         subject=user.id, role=user.role.value, typ="refresh"
     )

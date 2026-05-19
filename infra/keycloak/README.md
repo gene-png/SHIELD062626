@@ -16,6 +16,7 @@
 ## v1 vs v1.x federation
 
 For v1, the FastAPI API issues its own JWTs (see `apps/api/app/security/jwt.py`); Keycloak is deployed but the API does not consume Keycloak tokens yet. Flipping to Keycloak federation in v1.x requires no schema migration:
+
 - The web app already uses NextAuth, which can switch its provider from Credentials to Keycloak by changing one config object.
 - The API's audience (`KEYCLOAK_AUDIENCE=shield-api`) and issuer claims are stable across the switch — the same JWTs validate.
 

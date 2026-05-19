@@ -9,7 +9,11 @@ export {
   CardTitle,
   type CardProps,
 } from "./components/Card";
-export { StatusPill, type StatusPillProps, type StatusTone } from "./components/StatusPill";
+export {
+  StatusPill,
+  type StatusPillProps,
+  type StatusTone,
+} from "./components/StatusPill";
 export { NumberCard, type NumberCardProps } from "./components/NumberCard";
 export {
   DataTable,

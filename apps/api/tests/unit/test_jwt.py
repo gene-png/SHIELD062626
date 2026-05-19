@@ -7,7 +7,6 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-
 from app.security.jwt import (
     TokenError,
     issue_token,
@@ -58,10 +57,9 @@ def test_expired_token_rejected() -> None:
     """Synthesize an already-expired token directly via jose, then verify."""
     import uuid as _uuid
 
-    from jose import jwt
-
     from app.config import get_settings
     from app.security.jwt import ALGORITHM, ISSUER
+    from jose import jwt
 
     s = get_settings()
     past = int(time.time()) - 60
@@ -83,7 +81,7 @@ def test_expired_token_rejected() -> None:
 
 @pytest.mark.unit
 def test_wrong_audience_rejected(monkeypatch) -> None:
-    from app.config import Settings, get_settings
+    from app.config import get_settings
 
     uid = uuid.uuid4()
     token, _ = issue_token(subject=uid, role="admin")

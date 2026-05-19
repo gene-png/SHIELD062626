@@ -24,7 +24,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     body = (await request.json()) as ProxyBody;
   } catch {
-    return NextResponse.json({ error: { message: "Invalid JSON body." } }, { status: 400 });
+    return NextResponse.json(
+      { error: { message: "Invalid JSON body." } },
+      { status: 400 },
+    );
   }
   try {
     const result = await apiFetch<unknown>("/auth/register", {

@@ -11,11 +11,14 @@ export interface StatusPillProps extends React.HTMLAttributes<HTMLSpanElement> {
 }
 
 const TONE_CLASSES: Record<StatusTone, string> = {
-  success: "bg-status-success-bg text-status-success-fg ring-status-success-border",
-  warning: "bg-status-warning-bg text-status-warning-fg ring-status-warning-border",
+  success:
+    "bg-status-success-bg text-status-success-fg ring-status-success-border",
+  warning:
+    "bg-status-warning-bg text-status-warning-fg ring-status-warning-border",
   danger: "bg-status-danger-bg text-status-danger-fg ring-status-danger-border",
   info: "bg-status-info-bg text-status-info-fg ring-status-info-border",
-  neutral: "bg-status-neutral-bg text-status-neutral-fg ring-status-neutral-border",
+  neutral:
+    "bg-status-neutral-bg text-status-neutral-fg ring-status-neutral-border",
 };
 
 const DOT_CLASSES: Record<StatusTone, string> = {
@@ -26,24 +29,26 @@ const DOT_CLASSES: Record<StatusTone, string> = {
   neutral: "bg-status-neutral-fg",
 };
 
-export const StatusPill = React.forwardRef<HTMLSpanElement, StatusPillProps>(function StatusPill(
-  { tone, withDot, className, children, ...rest },
-  ref,
-) {
-  return (
-    <span
-      ref={ref}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-pill px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
-        TONE_CLASSES[tone],
-        className,
-      )}
-      {...rest}
-    >
-      {withDot ? (
-        <span className={cn("h-1.5 w-1.5 rounded-pill", DOT_CLASSES[tone])} aria-hidden="true" />
-      ) : null}
-      {children}
-    </span>
-  );
-});
+export const StatusPill = React.forwardRef<HTMLSpanElement, StatusPillProps>(
+  function StatusPill({ tone, withDot, className, children, ...rest }, ref) {
+    return (
+      <span
+        ref={ref}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-pill px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
+          TONE_CLASSES[tone],
+          className,
+        )}
+        {...rest}
+      >
+        {withDot ? (
+          <span
+            className={cn("h-1.5 w-1.5 rounded-pill", DOT_CLASSES[tone])}
+            aria-hidden="true"
+          />
+        ) : null}
+        {children}
+      </span>
+    );
+  },
+);

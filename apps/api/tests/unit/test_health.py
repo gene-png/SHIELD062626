@@ -30,9 +30,7 @@ def test_health_echoes_inbound_correlation_id(client) -> None:
 
 @pytest.mark.unit
 def test_health_rejects_malformed_inbound_correlation_id(client) -> None:
-    response = client.get(
-        "/health", headers={"X-Request-ID": "has spaces and / slashes"}
-    )
+    response = client.get("/health", headers={"X-Request-ID": "has spaces and / slashes"})
     cid = response.headers["X-Request-ID"]
     assert cid != "has spaces and / slashes"
     assert cid

@@ -35,9 +35,7 @@ async def _handle_http_exception(request: Request, exc: HTTPException) -> JSONRe
     )
 
 
-async def _handle_validation_error(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=422,
         content={

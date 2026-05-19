@@ -44,13 +44,9 @@ def _check_policy(password: str) -> None:
     if not isinstance(password, str):
         raise PasswordPolicyError("Password must be a string.")
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise PasswordPolicyError(
-            f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
-        )
+        raise PasswordPolicyError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
     if len(password) > MAX_PASSWORD_LENGTH:
-        raise PasswordPolicyError(
-            f"Password must be at most {MAX_PASSWORD_LENGTH} characters."
-        )
+        raise PasswordPolicyError(f"Password must be at most {MAX_PASSWORD_LENGTH} characters.")
     # A full HIBP top-100k check belongs in a Phase 6 hardening pass.
     # Cover the obvious offenders here so even dev fixtures fail policy.
     lower = password.lower()

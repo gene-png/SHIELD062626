@@ -18,11 +18,10 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 from app.models import AuditEntry, Client, User, UserRole
 from app.models.audit_entry import AuditEntryImmutableError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
 @pytest.fixture()
@@ -44,10 +43,13 @@ def migrated_sqlite(tmp_path) -> str:
 def test_migration_creates_all_three_tables(migrated_sqlite: str) -> None:
     engine = create_engine(migrated_sqlite)
     with engine.connect() as conn:
-        names = {row[0] for row in conn.exec_driver_sql(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
-            "AND name NOT LIKE 'alembic%'"
-        )}
+        names = {
+            row[0]
+            for row in conn.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                "AND name NOT LIKE 'alembic%'"
+            )
+        }
     assert {"client", "users", "audit_entries"} <= names
 
 

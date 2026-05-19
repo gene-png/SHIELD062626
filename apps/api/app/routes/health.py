@@ -44,7 +44,7 @@ def health() -> HealthResponse:
     response_model=ReadyResponse,
     summary="Readiness probe (touches downstream dependencies)",
 )
-def ready(db: Session = Depends(get_db)) -> ReadyResponse:
+def ready(db: Session = Depends(get_db)) -> ReadyResponse:  # noqa: B008 - FastAPI DI idiom
     checks: dict[str, str] = {}
     try:
         db.execute(text("SELECT 1"))

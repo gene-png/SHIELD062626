@@ -29,7 +29,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  opts: ApiOptions = {},
+): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const headers: Record<string, string> = {
     Accept: "application/json",

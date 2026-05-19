@@ -34,14 +34,21 @@ export function useToast(): ToastContextValue {
 }
 
 const TONE_CLASSES: Record<StatusTone, string> = {
-  success: "border-status-success-border bg-status-success-bg text-status-success-fg",
-  warning: "border-status-warning-border bg-status-warning-bg text-status-warning-fg",
-  danger: "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
+  success:
+    "border-status-success-border bg-status-success-bg text-status-success-fg",
+  warning:
+    "border-status-warning-border bg-status-warning-bg text-status-warning-fg",
+  danger:
+    "border-status-danger-border bg-status-danger-bg text-status-danger-fg",
   info: "border-status-info-border bg-status-info-bg text-status-info-fg",
   neutral: "border-border-subtle bg-surface-card text-ink-primary",
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }): JSX.Element {
+export function ToastProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
   const [toasts, setToasts] = React.useState<ToastInternal[]>([]);
   const idRef = React.useRef(0);
 

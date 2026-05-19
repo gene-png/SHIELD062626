@@ -74,32 +74,32 @@ docker compose run --service-ports --rm web bash scripts/dev-web.sh
 
 ### URLs once everything is up
 
-| Service           | URL                          |
-| ----------------- | ---------------------------- |
-| Web (Next.js)     | http://localhost:3000        |
-| API (FastAPI)     | http://localhost:8000/docs   |
-| Keycloak admin    | http://localhost:8080        |
-| MinIO console     | http://localhost:9001        |
-| MailHog UI        | http://localhost:8025        |
-| Postgres          | postgres://localhost:5432    |
+| Service        | URL                        |
+| -------------- | -------------------------- |
+| Web (Next.js)  | http://localhost:3000      |
+| API (FastAPI)  | http://localhost:8000/docs |
+| Keycloak admin | http://localhost:8080      |
+| MinIO console  | http://localhost:9001      |
+| MailHog UI     | http://localhost:8025      |
+| Postgres       | postgres://localhost:5432  |
 
 ## Environment variables
 
 Every variable in [`.env.example`](.env.example) is required. Summary:
 
-| Group | Vars | Notes |
-|---|---|---|
-| Runtime | `ENVIRONMENT`, `LOG_LEVEL` | |
-| Database | `DATABASE_URL` | Postgres 16, locked in Master Spec §2 |
-| Redis | `REDIS_URL` | Celery queue + ephemeral cache |
-| Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID` | MinIO in dev, S3+KMS in prod |
-| OIDC | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD` | |
-| NextAuth | `NEXTAUTH_URL`, `NEXTAUTH_SECRET` | Generate secret with `openssl rand -hex 32` |
-| LLM | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY` | `MODE=fixture` for offline tests |
-| Feature flags | `SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`, `SHIELD_EMAIL_DELIVERY_ENABLED` | All `false` for v1 |
-| Redaction | `SHIELD_REDACTION_MODE` | `strict` in prod; `off` forbidden outside dev |
-| Sessions | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`, `SHIELD_ACCOUNT_LOCKOUT_*`, `SHIELD_IDLE_TIMEOUT_SECONDS`, `SHIELD_FORCED_REAUTH_SECONDS` | Compensating controls for deferred MFA |
-| Mail | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | MailHog locally |
+| Group          | Vars                                                                                                                                           | Notes                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Runtime        | `ENVIRONMENT`, `LOG_LEVEL`                                                                                                                     |                                               |
+| Database       | `DATABASE_URL`                                                                                                                                 | Postgres 16, locked in Master Spec §2         |
+| Redis          | `REDIS_URL`                                                                                                                                    | Celery queue + ephemeral cache                |
+| Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID`                                                              | MinIO in dev, S3+KMS in prod                  |
+| OIDC           | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`                                      |                                               |
+| NextAuth       | `NEXTAUTH_URL`, `NEXTAUTH_SECRET`                                                                                                              | Generate secret with `openssl rand -hex 32`   |
+| LLM            | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY`                                                              | `MODE=fixture` for offline tests              |
+| Feature flags  | `SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`, `SHIELD_EMAIL_DELIVERY_ENABLED`                                                 | All `false` for v1                            |
+| Redaction      | `SHIELD_REDACTION_MODE`                                                                                                                        | `strict` in prod; `off` forbidden outside dev |
+| Sessions       | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`, `SHIELD_ACCOUNT_LOCKOUT_*`, `SHIELD_IDLE_TIMEOUT_SECONDS`, `SHIELD_FORCED_REAUTH_SECONDS` | Compensating controls for deferred MFA        |
+| Mail           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`                                                                                                          | MailHog locally                               |
 
 ## Running tests
 

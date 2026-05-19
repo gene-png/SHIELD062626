@@ -27,13 +27,17 @@ export default function HomePage() {
               Single-tenant per engagement
             </StatusPill>
           </div>
-          <h2 id="trust-heading" className="mt-4 text-xl font-semibold text-ink-primary">
+          <h2
+            id="trust-heading"
+            className="mt-4 text-xl font-semibold text-ink-primary"
+          >
             Built for federal mission systems
           </h2>
           <p className="mt-2 max-w-2xl text-ink-secondary">
-            Mandatory PII redaction on every AI call, append-only audit log, short-lived JWT
-            sessions with account lockout, and self-hosted infrastructure - no third-party CDNs.
-            Targeted for AWS GovCloud and Azure Government.
+            Mandatory PII redaction on every AI call, append-only audit log,
+            short-lived JWT sessions with account lockout, and self-hosted
+            infrastructure - no third-party CDNs. Targeted for AWS GovCloud and
+            Azure Government.
           </p>
         </div>
       </section>

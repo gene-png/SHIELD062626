@@ -10,16 +10,16 @@
 
 ## Runtime components
 
-| Component | Image | Notes |
-|---|---|---|
-| api | `infra/docker/api.Dockerfile` (least-privilege user, no sudo) | uvicorn + workers per `WEB_CONCURRENCY` |
-| worker | same image as `api`, different entry | Celery worker |
-| web | `infra/docker/web.Dockerfile` | Next.js standalone output |
-| db | managed Postgres 16 (RDS / Azure Database for Postgres) | KMS-encrypted at rest; PITR enabled |
-| redis | managed Redis 7 (ElastiCache / Azure Cache) | Multi-AZ |
-| object storage | S3 + KMS or Azure Blob + KMS | Versioning ON; bucket-level encryption; deny anonymous; tight bucket policy |
-| OIDC | Keycloak (self-hosted) or federated to customer IdP | Realm export checked into `infra/keycloak/` |
-| secrets | AWS Secrets Manager or Azure Key Vault | Bootstrapped via Terraform; rotated quarterly |
+| Component      | Image                                                         | Notes                                                                       |
+| -------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| api            | `infra/docker/api.Dockerfile` (least-privilege user, no sudo) | uvicorn + workers per `WEB_CONCURRENCY`                                     |
+| worker         | same image as `api`, different entry                          | Celery worker                                                               |
+| web            | `infra/docker/web.Dockerfile`                                 | Next.js standalone output                                                   |
+| db             | managed Postgres 16 (RDS / Azure Database for Postgres)       | KMS-encrypted at rest; PITR enabled                                         |
+| redis          | managed Redis 7 (ElastiCache / Azure Cache)                   | Multi-AZ                                                                    |
+| object storage | S3 + KMS or Azure Blob + KMS                                  | Versioning ON; bucket-level encryption; deny anonymous; tight bucket policy |
+| OIDC           | Keycloak (self-hosted) or federated to customer IdP           | Realm export checked into `infra/keycloak/`                                 |
+| secrets        | AWS Secrets Manager or Azure Key Vault                        | Bootstrapped via Terraform; rotated quarterly                               |
 
 ## Backups
 

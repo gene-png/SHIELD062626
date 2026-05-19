@@ -4,11 +4,17 @@ line-length = 100
 extend-exclude = [".venv", "node_modules", "reference-docs"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "S", "ASYNC", "C4", "SIM", "TCH"]
+select = ["E", "F", "I", "B", "UP", "S", "ASYNC", "C4", "SIM"]
+# TCH (type-checking-block) deliberately omitted: SQLAlchemy 2's
+# Mapped[uuid.UUID] / Mapped[datetime] annotations need their referent
+# types resolvable at runtime, which conflicts with moving stdlib imports
+# into TYPE_CHECKING blocks.
 ignore = ["S101"]  # assert in tests is fine
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S105", "S106"]  # hardcoded creds OK in test fixtures
+"**/tests/**" = ["S105", "S106", "S107", "E501"]  # hardcoded creds + long signatures OK in tests
+"**/alembic/env.py" = ["E402"]  # late import is intentional (registers models against metadata)
+"**/alembic/versions/**" = ["E501"]  # generated migration headers can exceed 100 chars
 
 [tool.black]
 line-length = 100

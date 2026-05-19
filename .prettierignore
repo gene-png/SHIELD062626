@@ -1,0 +1,23 @@
+# Lock files - managed by the package manager.
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+node_modules/
+
+# Reference docs - leave whitespace alone.
+reference-docs/
+
+# Generated
+*.tsbuildinfo
+next-env.d.ts
+
+# Coverage / artifacts
+coverage/
+test-results/
+playwright-report/
