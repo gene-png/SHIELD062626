@@ -36,8 +36,7 @@ export default function HomePage() {
           <p className="mt-2 max-w-2xl text-ink-secondary">
             Mandatory PII redaction on every AI call, append-only audit log,
             short-lived JWT sessions with account lockout, and self-hosted
-            infrastructure - no third-party CDNs. Targeted for AWS GovCloud and
-            Azure Government.
+            infrastructure — no third-party CDNs.
           </p>
         </div>
       </section>

@@ -125,3 +125,21 @@ class OverlapAnalysisResponse(BaseModel):
     uncategorized_count: int
     no_vendor_count: int
     no_cost_count: int
+
+
+class DeliverableResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    service_id: uuid.UUID
+    title: str
+    summary: str | None
+    version: int
+    pdf_artifact_id: uuid.UUID | None
+    xlsx_artifact_id: uuid.UUID | None
+    pdf_filename: str | None
+    xlsx_filename: str | None
+    finalized_at: datetime | None
+    finalized_by: uuid.UUID | None
+    released_to_client_at: datetime | None
+    superseded_by: uuid.UUID | None

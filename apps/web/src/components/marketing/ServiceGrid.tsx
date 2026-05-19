@@ -10,22 +10,22 @@ const SERVICES: { title: string; description: string }[] = [
   {
     title: "Technical Debt Review",
     description:
-      "Inventory the security stack, surface overlap and gaps, produce a defensible consolidation plan.",
+      "Identify overlapping tools, capability gaps, and modernization opportunities across your cybersecurity stack.",
   },
   {
     title: "Zero Trust Assessment",
     description:
-      "Score current and target maturity per pillar against CISA ZTMM 2.0 or the DoD Zero Trust Reference Architecture.",
+      "Measure Zero Trust maturity against CISA ZTMM 2.0 and DoD reference architectures with prioritized implementation roadmaps.",
   },
   {
     title: "NIST CSF 2.0 Assessment",
     description:
-      "Run the full 10-step Playbook with HIGH / MODERATE / LOW tiered profiles, 5-dimension scoring, weighted-floor roll-up, and a prioritized gap plan.",
+      "Assess organizational cybersecurity maturity using NIST CSF 2.0 with weighted scoring, prioritized gaps, and actionable remediation planning.",
   },
   {
-    title: "MITRE ATT&CK Coverage",
+    title: "Attack Surface Mapping",
     description:
-      "Score the full Enterprise matrix against the approved capability list. Detect, prevent, and respond columns reconciled with a clear roadmap.",
+      "Visualize defensive coverage, identify exposure gaps, and understand how security investments support real operational defense.",
   },
 ];
 

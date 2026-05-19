@@ -25,8 +25,10 @@ from app.audit import audit
 from app.db.session import get_db
 from app.dependencies import current_user, require_role
 from app.models._common import utcnow
-from app.models.artifact import Artifact
+from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
+from app.models.client import Client
+from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
@@ -35,6 +37,7 @@ from app.schemas.tech_debt import (
     CapabilityItemResponse,
     CapabilityListResponse,
     ConsolidationPlanSummary,
+    DeliverableResponse,
     ExtractRequest,
     OverlapAnalysisResponse,
     OverlapBucketResponse,
@@ -43,10 +46,15 @@ from app.schemas.tech_debt import (
     TopCostItemResponse,
 )
 from app.storage import StorageBackend
+from app.tech_debt.exporters import build_context, render_pdf, render_xlsx
 from app.tech_debt.extract import (
     client_org_name_for_deployment,
     extract_capabilities,
     name_hints_for_deployment,
+)
+from app.tech_debt.filename import (
+    SERVICE_SLUG_BY_KIND,
+    deliverable_filename,
 )
 from app.tech_debt.overlap import analyze_overlap
 from app.tech_debt.parsers import SUPPORTED_MIME, UnsupportedInventoryFormat
@@ -469,3 +477,285 @@ def consolidation_plan_summary(
         estimated_annual_savings=cut_savings,
         savings_cost_known=savings_cost_known,
     )
+
+
+# ---------------------------------------------------------------------------
+# Deliverable workflow (Phase 3 stage 8)
+# ---------------------------------------------------------------------------
+
+
+def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableResponse:
+    pdf_title = None
+    xlsx_title = None
+    if deliv.pdf_artifact_id:
+        a = db.get(Artifact, deliv.pdf_artifact_id)
+        pdf_title = a.title if a else None
+    if deliv.xlsx_artifact_id:
+        a = db.get(Artifact, deliv.xlsx_artifact_id)
+        xlsx_title = a.title if a else None
+    return DeliverableResponse(
+        id=deliv.id,
+        service_id=deliv.service_id,
+        title=deliv.title,
+        summary=deliv.summary,
+        version=deliv.version,
+        pdf_artifact_id=deliv.pdf_artifact_id,
+        xlsx_artifact_id=deliv.xlsx_artifact_id,
+        pdf_filename=pdf_title,
+        xlsx_filename=xlsx_title,
+        finalized_at=deliv.finalized_at,
+        finalized_by=deliv.finalized_by,
+        released_to_client_at=deliv.released_to_client_at,
+        superseded_by=deliv.superseded_by,
+    )
+
+
+def _write_artifact(
+    db: Session,
+    *,
+    storage: StorageBackend,
+    user: User,
+    filename: str,
+    mime_type: str,
+    data: bytes,
+) -> Artifact:
+    from hashlib import sha256
+
+    key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
+    storage.put(key, data, content_type=mime_type)
+    art = Artifact(
+        title=filename,
+        file_storage_key=key,
+        mime_type=mime_type,
+        size_bytes=len(data),
+        sha256=sha256(data).hexdigest(),
+        origin=ArtifactOrigin.CONSULTANT_APPROVED,
+        stage="tech_debt.deliverable",
+        uploaded_by=user.id,
+    )
+    db.add(art)
+    db.flush()
+    return art
+
+
+@router.post(
+    "/services/{service_id}/deliverables/finalize",
+    response_model=DeliverableResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Render PDF + XLSX deliverable from the latest approved capability list (admin)",
+)
+def finalize_deliverable(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[StorageBackend, Depends(_storage_dep)],
+) -> DeliverableResponse:
+    svc = db.get(Service, service_id)
+    if svc is None or svc.kind != ServiceKind.TECH_DEBT:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tech-Debt service not found.",
+        )
+    cap_list = _latest_list_or_none(db, svc.id)
+    if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No capability list yet.",
+        )
+    if cap_list.status != CapabilityListStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Capability list must be approved before finalizing the deliverable.",
+        )
+    items = (
+        db.execute(select(CapabilityItem).where(CapabilityItem.capability_list_id == cap_list.id))
+        .scalars()
+        .all()
+    )
+
+    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
+    client_name = client.legal_name if client is not None else None
+    if client_name == "(pending intake)":
+        client_name = None
+
+    # Filename version: same-day re-finalize -> v2, v3, ...
+    today = utcnow().date()
+    existing_count = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
+    next_version = len(existing_count) + 1
+
+    service_slug = SERVICE_SLUG_BY_KIND.get(svc.kind.value, "Tech_Debt_Review")
+    pdf_name = deliverable_filename(
+        company=client_name,
+        service_slug=service_slug,
+        extension="pdf",
+        day=today,
+        version=next_version,
+    )
+    xlsx_name = deliverable_filename(
+        company=client_name,
+        service_slug=service_slug,
+        extension="xlsx",
+        day=today,
+        version=next_version,
+    )
+
+    ctx = build_context(
+        client_legal_name=client_name,
+        service_title=svc.title,
+        cap_list=cap_list,
+        items=items,
+    )
+    pdf_bytes = render_pdf(ctx)
+    xlsx_bytes = render_xlsx(ctx)
+
+    pdf_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        filename=pdf_name,
+        mime_type="application/pdf",
+        data=pdf_bytes,
+    )
+    xlsx_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        filename=xlsx_name,
+        mime_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+        data=xlsx_bytes,
+    )
+
+    summary_line = (
+        f"{len(items)} capabilities reviewed; "
+        f"{'≥ ' if not ctx.savings_cost_known else ''}"
+        f"${ctx.estimated_savings:,.0f} estimated annual savings."
+    )
+
+    deliv = Deliverable(
+        service_id=svc.id,
+        title=f"{svc.title} v{next_version}",
+        summary=summary_line,
+        version=next_version,
+        pdf_artifact_id=pdf_artifact.id,
+        xlsx_artifact_id=xlsx_artifact.id,
+        finalized_at=utcnow(),
+        finalized_by=user.id,
+    )
+    db.add(deliv)
+    db.flush()
+
+    audit(
+        db,
+        action="deliverable.finalized",
+        target_type="deliverable",
+        target_id=deliv.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(svc.id),
+            "capability_list_id": str(cap_list.id),
+            "capability_list_version": cap_list.version,
+            "version": next_version,
+            "pdf_artifact_id": str(pdf_artifact.id),
+            "xlsx_artifact_id": str(xlsx_artifact.id),
+            "estimated_annual_savings": ctx.estimated_savings,
+            "savings_cost_known": ctx.savings_cost_known,
+        },
+    )
+    db.commit()
+    db.refresh(deliv)
+    return _serialize_deliverable(db, deliv)
+
+
+@router.post(
+    "/deliverables/{deliverable_id}/release",
+    response_model=DeliverableResponse,
+    summary="Release a finalized deliverable to the client (admin)",
+)
+def release_deliverable(
+    deliverable_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    deliv = db.get(Deliverable, deliverable_id)
+    if deliv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deliverable not found.",
+        )
+    if deliv.finalized_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Deliverable must be finalized before release.",
+        )
+    if deliv.released_to_client_at is not None:
+        # Idempotent re-release returns the existing state without
+        # changing the stamp (preserves the original release timestamp).
+        return _serialize_deliverable(db, deliv)
+    deliv.released_to_client_at = utcnow()
+    # Mark earlier deliverables for this service as superseded.
+    earlier = (
+        db.execute(
+            select(Deliverable).where(
+                Deliverable.service_id == deliv.service_id,
+                Deliverable.id != deliv.id,
+                Deliverable.superseded_by.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for prev in earlier:
+        prev.superseded_by = deliv.id
+
+    audit(
+        db,
+        action="deliverable.released",
+        target_type="deliverable",
+        target_id=deliv.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(deliv.service_id),
+            "version": deliv.version,
+            "superseded": [str(p.id) for p in earlier],
+        },
+    )
+    db.commit()
+    db.refresh(deliv)
+    return _serialize_deliverable(db, deliv)
+
+
+@router.get(
+    "/services/{service_id}/deliverables/latest",
+    response_model=DeliverableResponse,
+    summary="Most recent deliverable for a service (admin)",
+)
+def latest_deliverable(
+    service_id: uuid.UUID,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found.",
+        )
+    deliv = db.execute(
+        select(Deliverable)
+        .where(Deliverable.service_id == svc.id)
+        .order_by(Deliverable.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if deliv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No deliverable yet. Finalize one first.",
+        )
+    # v1: admins always see; clients only see released deliverables.
+    # The actual client-facing route lands in stage 9 under /deliverables/.
+    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No released deliverable yet.",
+        )
+    return _serialize_deliverable(db, deliv)

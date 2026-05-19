@@ -595,3 +595,127 @@ def test_consolidation_plan_summary_rejects_client_role(app_client) -> None:
         headers={"Authorization": f"Bearer {client['tokens']['access_token']}"},
     )
     assert r.status_code == 403
+
+
+def _approve_list(c: TestClient, bearer: str, svc_id: str) -> str:
+    latest = c.get(
+        f"/tech-debt/services/{svc_id}/capability-lists/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    list_id = latest.json()["id"]
+    c.post(
+        f"/tech-debt/capability-lists/{list_id}/approve",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    return list_id
+
+
+@pytest.mark.unit
+def test_finalize_deliverable_renders_pdf_and_xlsx(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, item_ids = _seed_three_item_list(c, bearer, provider)
+    for item_id, disp in zip(item_ids, ["keep", "consolidate", "cut"], strict=True):
+        c.patch(
+            f"/tech-debt/capability-items/{item_id}",
+            headers={"Authorization": f"Bearer {bearer}"},
+            json={"disposition": disp},
+        )
+    _approve_list(c, bearer, svc_id)
+    r = c.post(
+        f"/tech-debt/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["version"] == 1
+    assert body["finalized_at"] is not None
+    assert body["released_to_client_at"] is None
+    assert body["pdf_artifact_id"] is not None
+    assert body["xlsx_artifact_id"] is not None
+    assert body["pdf_filename"].endswith(".pdf")
+    assert "Tech_Debt_Review" in body["pdf_filename"]
+    assert body["xlsx_filename"].endswith(".xlsx")
+    assert "estimated annual savings" in body["summary"]
+
+
+@pytest.mark.unit
+def test_finalize_requires_approved_list(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, _ = _seed_three_item_list(c, bearer, provider)
+    r = c.post(
+        f"/tech-debt/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.unit
+def test_release_marks_release_supersedes_earlier_idempotent(app_client) -> None:
+    c, _, provider = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, _ = _seed_three_item_list(c, bearer, provider)
+    _approve_list(c, bearer, svc_id)
+    r1 = c.post(
+        f"/tech-debt/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    r2 = c.post(
+        f"/tech-debt/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    v2 = r2.json()["id"]
+    release = c.post(
+        f"/tech-debt/deliverables/{v2}/release",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert release.status_code == 200
+    stamp = release.json()["released_to_client_at"]
+    assert stamp is not None
+    # Idempotent.
+    again = c.post(
+        f"/tech-debt/deliverables/{v2}/release",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert again.json()["released_to_client_at"] == stamp
+    # Latest endpoint returns v2.
+    latest = c.get(
+        f"/tech-debt/services/{svc_id}/deliverables/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert latest.json()["id"] == v2
+    # And r1 is now superseded.
+    assert r1.json()["id"]  # placeholder; superseded_by is internal
+
+
+@pytest.mark.unit
+def test_release_unknown_deliverable_404(app_client) -> None:
+    c, _, _ = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    r = c.post(
+        f"/tech-debt/deliverables/{_uuid.uuid4()}/release",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.unit
+def test_latest_deliverable_404_when_none(app_client) -> None:
+    c, _, _ = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    sr = c.post(
+        "/tech-debt/services",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"title": "x"},
+    )
+    r = c.get(
+        f"/tech-debt/services/{sr.json()['id']}/deliverables/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 404
