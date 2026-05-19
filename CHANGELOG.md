@@ -106,12 +106,14 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 ## Phase 1 — Foundation — Complete (`v0.1.0`) — 2026-05-19
 
 ### Acceptance criteria
+
 - [x] User can self-register, sign in. (MFA + email verification deferred per Master Spec §2 risk acceptance; columns + feature flags in place to enable in v1.x.)
 - [x] Three roles distinguishable (admin / reviewer / client).
 - [x] Audit log records every login (and registration, lockout, logout).
 - [x] No stack trace surfaces to user under any forced error.
 
 ### Notable features shipped
+
 - API skeleton with structured JSON logs and correlation IDs end-to-end.
 - Data model for `client` (singleton), `users` (with role enum + lockout bookkeeping), `audit_entries` (append-only at two layers).
 - Auth backbone: Argon2id hashing, JWT issue/verify, register/login/refresh/logout/me routes, account lockout, account-existence oracle defense.
@@ -121,33 +123,38 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 - CI green across the whole tree: ruff, black, bandit, pytest, prettier, eslint, tsc, next build.
 
 ### Security review (OWASP Top 10) — see BUILD_REPORT.md for full matrix
-- A01 Access Control:                PARTIAL (authn done; role-based route guards in Phase 2)
-- A02 Cryptographic Failures:        PASS
-- A03 Injection:                     PASS
-- A04 Insecure Design:               PASS
-- A05 Misconfiguration:              PASS
-- A06 Vulnerable Components:         PARTIAL (pinned versions; audit hooks in Phase 6)
-- A07 Auth Failures:                 PASS WITH NOTES (MFA deferred per spec)
-- A08 Software Integrity:            PASS
-- A09 Logging and Monitoring:        PASS
-- A10 SSRF:                          PASS
+
+- A01 Access Control: PARTIAL (authn done; role-based route guards in Phase 2)
+- A02 Cryptographic Failures: PASS
+- A03 Injection: PASS
+- A04 Insecure Design: PASS
+- A05 Misconfiguration: PASS
+- A06 Vulnerable Components: PARTIAL (pinned versions; audit hooks in Phase 6)
+- A07 Auth Failures: PASS WITH NOTES (MFA deferred per spec)
+- A08 Software Integrity: PASS
+- A09 Logging and Monitoring: PASS
+- A10 SSRF: PASS
 
 ### What's stubbed or deferred
+
 - MFA enrollment + email verification — feature-flagged off; columns and feature flags ready.
 - Postgres audit-trigger integration smoke — waits on Docker availability in the dev container.
 - axe-core / Playwright accessibility CI job — deferred to Phase 6 hardening; WCAG 2.1 AA is implemented at the component layer.
 - Redactor module (`apps/api/app/ai/redact.py`) — lands in Phase 3 with the first AI-extraction use case (Tech Debt capability list).
 
 ### Known issues
+
 - None blocking Phase 2.
 
 ### How to try it
+
 1. `cp .env.example .env`; paste `ANTHROPIC_API_KEY` (only needed when `SHIELD_LLM_MODE=live`); generate `NEXTAUTH_SECRET` via `openssl rand -hex 32`.
 2. `docker compose up -d db redis minio keycloak mailhog && docker compose up -d --build api worker`.
 3. `docker compose run --service-ports --rm web bash scripts/dev-web.sh`.
 4. Open http://localhost:3000.
 
 ### Decisions logged this phase
+
 - D-001 through D-014 (opening commit). No new decisions added during stages 1–9 beyond DECISIONS.md entries already on `main`.
 
 ## [Unreleased — Phase 2 in progress]
@@ -169,3 +176,14 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
   - `POST /intake/submit` — finalizes submission: validates a real legal name, writes `ServiceRequest` rows (dedupes by service_type), stamps `client.intake_completed_at = utcnow()`, and writes a `client.intake_submitted` audit row whose `details.services` are sorted for stable diffing.
 - `IntakePatchRequest` / `IntakeSubmitRequest` / `IntakeStateResponse` Pydantic schemas (`apps/api/app/schemas/intake.py`). `IntakeSubmitRequest.service_requests` enforces `min_length=1`; `consultation` is a valid first pick so the "I'm not sure" path doesn't get blocked.
 - 7 new route tests (55 total): GET creates the singleton, PATCH writes partial updates, submit writes service_requests + audit row, submit rejects empty service list, submit rejects the pending placeholder legal name, submit dedupes duplicates, all three routes return 401 when unauthenticated.
+
+### Phase 2 stage 3 — Web intake wizard skeleton (`v0.2.3`) — 2026-05-19
+
+- `/intake` route gated by `getServerSession()` in `app/intake/layout.tsx`; unauthenticated users are redirected to `/sign-in?callbackUrl=/intake`.
+- `IntakeWizard` client component manages step state (`services` → `organization` → `contact` → `systems` → `notes` → `review`) and pulls the current intake from `/api/proxy/intake` on mount. If the intake is already submitted, jumps to `review` so the user can verify what's on file instead of re-starting.
+- `IntakeProgress` renders a 6-step indicator with `aria-current="step"`, success-tone tick marks for completed steps, focus-tone for the current step, and ink-tertiary for upcoming steps.
+- `SaveStatus` reads a discriminated `SaveState` (`idle | saving | saved | error`) and renders an `aria-live=polite` indicator with "Saved X seconds/minutes ago" that updates once a second.
+- Server-side proxy routes (`/api/proxy/intake`, `/api/proxy/intake/submit`) attach the session's access token as a Bearer header and forward to FastAPI; ApiError shapes pass through with the upstream status preserved.
+- Client-side wrappers (`lib/intake/client.ts`) cover `fetchIntake`, `patchIntake`, `submitIntake` with typed return values; per-step forms in stage 4 call these.
+- TS types in `lib/intake/types.ts` mirror `apps/api/app/schemas/intake.py` 1:1; `SERVICE_LABELS` gives the plain-English copy the wizard renders (Master Spec §15 Phase 2: "All copy in plain English").
+- Smoke: typecheck clean, eslint 0 warnings, prettier clean, `next build` clean — now 12 routes total (3 new: `/intake`, `/api/proxy/intake`, `/api/proxy/intake/submit`). `/intake` is server-rendered on demand (dynamic) because it reads the session at request time.
