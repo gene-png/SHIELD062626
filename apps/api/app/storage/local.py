@@ -33,6 +33,12 @@ class LocalFilesystemStorage(StorageBackend):
         path.write_bytes(data)
         return StoredObject(key=key, size_bytes=len(data), sha256=sha256_of(data))
 
+    def get(self, key: str) -> bytes:
+        path = self._path_for(key)
+        if not path.exists():
+            raise FileNotFoundError(key)
+        return path.read_bytes()
+
     def exists(self, key: str) -> bool:
         return self._path_for(key).exists()
 

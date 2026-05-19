@@ -110,3 +110,19 @@ export interface OverlapAnalysis {
   no_vendor_count: number;
   no_cost_count: number;
 }
+
+export interface Deliverable {
+  id: string;
+  service_id: string;
+  title: string;
+  summary: string | null;
+  version: number;
+  pdf_artifact_id: string | null;
+  xlsx_artifact_id: string | null;
+  pdf_filename: string | null;
+  xlsx_filename: string | null;
+  finalized_at: string | null;
+  finalized_by: string | null;
+  released_to_client_at: string | null;
+  superseded_by: string | null;
+}

@@ -17,6 +17,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -169,3 +170,33 @@ def get_artifact(
             detail="Artifact not found.",
         )
     return ArtifactResponse.model_validate(row, from_attributes=True)
+
+
+@router.get(
+    "/{artifact_id}/download",
+    summary="Stream the raw artifact bytes",
+)
+def download_artifact(
+    artifact_id: uuid.UUID,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[StorageBackend, Depends(_storage_dep)],
+) -> Response:
+    row = db.get(Artifact, artifact_id)
+    if row is None or row.uploaded_by != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact not found.",
+        )
+    try:
+        data = storage.get(row.file_storage_key)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Artifact bytes no longer available.",
+        ) from exc
+    return Response(
+        content=data,
+        media_type=row.mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{row.title}"'},
+    )

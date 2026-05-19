@@ -40,6 +40,13 @@ class S3Storage(StorageBackend):
         self._client.put_object(**kwargs)
         return StoredObject(key=key, size_bytes=len(data), sha256=sha256_of(data))
 
+    def get(self, key: str) -> bytes:
+        try:
+            resp = self._client.get_object(Bucket=self._bucket, Key=key)
+        except Exception as exc:  # noqa: BLE001 - boto raises a family of errors
+            raise FileNotFoundError(key) from exc
+        return resp["Body"].read()
+
     def exists(self, key: str) -> bool:
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)

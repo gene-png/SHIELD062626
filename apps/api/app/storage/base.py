@@ -31,6 +31,10 @@ class StorageBackend(Protocol):
         """Write `data` to `key`. Returns size + sha256."""
         ...
 
+    def get(self, key: str) -> bytes:
+        """Return the raw bytes at `key`. Raises FileNotFoundError if missing."""
+        ...
+
     def exists(self, key: str) -> bool: ...
 
     def signed_url(self, key: str, *, ttl_seconds: int = 600) -> str:

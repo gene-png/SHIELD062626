@@ -18,6 +18,7 @@ import {
   approveCapabilityList,
   extractCapabilities,
   fetchConsolidationPlan,
+  fetchLatestDeliverable,
   fetchLatestList,
   fetchOverlapAnalysis,
   TechDebtProxyError,
@@ -26,10 +27,12 @@ import type {
   CapabilityItem,
   CapabilityList,
   ConsolidationPlanSummary,
+  Deliverable,
   OverlapAnalysis,
 } from "@/lib/tech_debt/types";
 
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
+import { DeliverableCard } from "./DeliverableCard";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { OverlapDashboard } from "./OverlapDashboard";
 
@@ -47,6 +50,9 @@ export function TechDebtWorkspace({
   const [overlapError, setOverlapError] = React.useState<string | null>(null);
   const [overlapLoading, setOverlapLoading] = React.useState(false);
   const [plan, setPlan] = React.useState<ConsolidationPlanSummary | null>(null);
+  const [deliverable, setDeliverable] = React.useState<Deliverable | null>(
+    null,
+  );
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
@@ -82,6 +88,12 @@ export function TechDebtWorkspace({
       setLoadError(err instanceof Error ? err.message : "Failed to load list.");
     }
     await refreshOverlap();
+    try {
+      const deliv = await fetchLatestDeliverable(serviceId);
+      setDeliverable(deliv);
+    } catch {
+      // non-blocking; deliverable section will just show "not finalized yet".
+    }
   }, [serviceId, refreshOverlap]);
 
   React.useEffect(() => {
@@ -279,6 +291,12 @@ export function TechDebtWorkspace({
             analysis={overlap}
             loading={overlapLoading && overlap === null}
             error={overlapError}
+          />
+          <DeliverableCard
+            serviceId={serviceId}
+            capabilityListStatus={list.status}
+            deliverable={deliverable}
+            onChange={setDeliverable}
           />
         </>
       ) : null}

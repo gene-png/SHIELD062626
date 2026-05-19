@@ -5,6 +5,7 @@ import type {
   CapabilityItemPatch,
   CapabilityList,
   ConsolidationPlanSummary,
+  Deliverable,
   OverlapAnalysis,
   ServiceResponse,
 } from "./types";
@@ -139,4 +140,37 @@ export async function fetchOverlapAnalysis(
     }
     throw err;
   }
+}
+
+export async function fetchLatestDeliverable(
+  serviceId: string,
+): Promise<Deliverable | null> {
+  try {
+    return await jsonRequest<Deliverable>(
+      `/api/proxy/tech-debt/services/${serviceId}/deliverables/latest`,
+    );
+  } catch (err) {
+    if (err instanceof TechDebtProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function finalizeDeliverable(
+  serviceId: string,
+): Promise<Deliverable> {
+  return jsonRequest<Deliverable>(
+    `/api/proxy/tech-debt/services/${serviceId}/deliverables/finalize`,
+    { method: "POST" },
+  );
+}
+
+export async function releaseDeliverable(
+  deliverableId: string,
+): Promise<Deliverable> {
+  return jsonRequest<Deliverable>(
+    `/api/proxy/tech-debt/deliverables/${deliverableId}/release`,
+    { method: "POST" },
+  );
 }
