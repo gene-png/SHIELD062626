@@ -15,6 +15,7 @@ from app.models.capability import (
 )
 from app.models.client import Client
 from app.models.deliverable import Deliverable
+from app.models.llm_call import LLMCall, LLMCallMode, LLMCallStatus
 from app.models.notification import Notification
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
@@ -29,6 +30,9 @@ __all__ = [
     "CapabilityListStatus",
     "Client",
     "Deliverable",
+    "LLMCall",
+    "LLMCallMode",
+    "LLMCallStatus",
     "Notification",
     "Service",
     "ServiceKind",
