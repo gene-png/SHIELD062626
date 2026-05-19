@@ -295,3 +295,13 @@ A SQLite-only dev demo is documented in BUILD_REPORT.md ("Recommended next steps
   - **`Deliverable`** — `service_id`, `title`, `summary`, `version`, `pdf_artifact_id`, `xlsx_artifact_id`, `finalized_at`/`finalized_by`, `released_to_client_at`, `superseded_by` (self-FK for re-releases).
 - Migration `0006_tech_debt.py`: creates all four tables + indexes (`services.kind`, `services.status`, `capability_items.capability_list_id`, `deliverables.service_id`, `deliverables.released_to_client_at`).
 - 3 new pytest tests (75 total): migration creates Phase 3 tables; full round-trip through Service → CapabilityList → CapabilityItem → Deliverable with realistic financial data; unique-constraint on `(service_id, version)` enforced.
+
+### Phase 3 stage 2 — PII redactor (`v0.3.2`) — 2026-05-19
+
+- **`app.ai.redact`** module — the §12 security boundary in front of every LLM call. Intentionally pure (no I/O, no DB, no clock) so it can be reviewed line-by-line in an OWASP audit.
+- Two public functions: `redact_for_ai(text, *, mode, client_org_name, name_hints)` for strings and `redact_payload(obj, ...)` that walks dicts/lists/tuples recursively. Both return `(cleaned, removed_counts)` — the counts dict (e.g. `{"email": 3, "phone": 1}`) is what `artifact_redactions.removed_items` (Master Spec §11) and the `llm_calls` audit row both record. **Counts only, never payload content.**
+- Eight categories redacted in `strict` mode: emails, phones (US + international, 10–20 char digit-run-with-separators), SSNs, EINs, CAGE codes (introducer-keyword form only), govcon contract numbers (e.g. `W91QUZ-23-C-0001`), street addresses + Suite/Apt/PO Box, signature blocks (everything from `Sincerely,` / `Regards,` / `V/R` etc. onwards), name hints supplied by the caller, and the client's org name.
+- `standard` mode keeps addresses + org name (when the prompt explicitly needs the org context).
+- `off` mode is pass-through. The runtime config refuses it outside development via `Settings.assert_safe_for_runtime()` (Phase 1); tests use it to compare raw-vs-redacted paths.
+- Order of operations matters: signature block → email → SSN → EIN → contract → phone → CAGE → names → addresses → org. SSN runs before phone so `123-45-6789` is replaced with `[SSN]` before the phone pass sees it.
+- 23 new pytest tests (98 total): every PII pattern + every mode + nested-payload walk + non-string-scalar preservation.
