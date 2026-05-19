@@ -14,6 +14,11 @@ from app.models.capability import (
     CapabilityListStatus,
 )
 from app.models.client import Client
+from app.models.csf_assessment import (
+    CsfAnswer,
+    CsfAssessment,
+    CsfAssessmentStatus,
+)
 from app.models.deliverable import Deliverable
 from app.models.llm_call import LLMCall, LLMCallMode, LLMCallStatus
 from app.models.notification import Notification
@@ -29,6 +34,9 @@ __all__ = [
     "CapabilityList",
     "CapabilityListStatus",
     "Client",
+    "CsfAnswer",
+    "CsfAssessment",
+    "CsfAssessmentStatus",
     "Deliverable",
     "LLMCall",
     "LLMCallMode",
