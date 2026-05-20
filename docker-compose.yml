@@ -166,12 +166,27 @@ services:
       - ./packages:/app/packages
       - ./package.json:/app/package.json
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      # pnpm hoists the real packages into the workspace-root node_modules/.pnpm
+      # store; both this and the per-app dir must persist or symlinks dangle on
+      # recreate.
+      - node-modules-root:/app/node_modules
       - node-modules-web:/app/apps/web/node_modules
-    command: ["sleep", "infinity"]
+    # First boot installs deps into the volumes; later boots skip the install
+    # (the next binary is already present) and start the dev server directly.
+    command:
+      - sh
+      - -c
+      - >
+        corepack enable >/dev/null 2>&1;
+        corepack prepare pnpm@9.12.0 --activate >/dev/null 2>&1;
+        cd /app;
+        [ -f apps/web/node_modules/next/dist/bin/next ] || pnpm install;
+        exec pnpm -F web dev
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
   keycloak-data:
+  node-modules-root:
   node-modules-web:
