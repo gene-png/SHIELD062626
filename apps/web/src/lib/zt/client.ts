@@ -6,6 +6,7 @@ import type {
   ZtAnswerPatch,
   ZtAssessment,
   ZtCatalog,
+  ZtDeliverable,
   ZtFramework,
   ZtScoreSummary,
 } from "./types";
@@ -136,4 +137,37 @@ export async function fetchGapAnalysis(
     }
     throw err;
   }
+}
+
+export async function fetchLatestDeliverable(
+  serviceId: string,
+): Promise<ZtDeliverable | null> {
+  try {
+    return await jsonRequest<ZtDeliverable>(
+      `/api/proxy/zt/services/${serviceId}/deliverables/latest`,
+    );
+  } catch (err) {
+    if (err instanceof ZtProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function finalizeZtDeliverable(
+  serviceId: string,
+): Promise<ZtDeliverable> {
+  return jsonRequest<ZtDeliverable>(
+    `/api/proxy/zt/services/${serviceId}/deliverables/finalize`,
+    { method: "POST" },
+  );
+}
+
+export async function releaseZtDeliverable(
+  deliverableId: string,
+): Promise<ZtDeliverable> {
+  return jsonRequest<ZtDeliverable>(
+    `/api/proxy/zt/deliverables/${deliverableId}/release`,
+    { method: "POST" },
+  );
 }

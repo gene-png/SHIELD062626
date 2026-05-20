@@ -17,6 +17,7 @@ import {
   fetchCatalog,
   fetchGapAnalysis,
   fetchLatestAssessment,
+  fetchLatestDeliverable,
   fetchScore,
   patchAnswer,
   ZtProxyError,
@@ -27,10 +28,12 @@ import type {
   ZtAnswerPatch,
   ZtAssessment,
   ZtCatalog,
+  ZtDeliverable,
   ZtFramework,
   ZtScoreSummary,
 } from "@/lib/zt/types";
 
+import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
 import { ZtQuestionnaire } from "./ZtQuestionnaire";
 import { ZtScoreCard } from "./ZtScoreCard";
@@ -69,6 +72,9 @@ export function ZtWorkspace({
   const [assessment, setAssessment] = React.useState<ZtAssessment | null>(null);
   const [score, setScore] = React.useState<ZtScoreSummary | null>(null);
   const [gap, setGap] = React.useState<GapAnalysis | null>(null);
+  const [deliverable, setDeliverable] = React.useState<ZtDeliverable | null>(
+    null,
+  );
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
   const [targetStage, setTargetStage] = React.useState(3);
@@ -112,6 +118,12 @@ export function ZtWorkspace({
       setAssessment(a);
       if (a) {
         await refreshScoreAndGap(targetStage);
+        try {
+          const d = await fetchLatestDeliverable(serviceId);
+          setDeliverable(d);
+        } catch {
+          // non-blocking
+        }
       }
     } catch (err) {
       setLoadError(describeError(err));
@@ -285,6 +297,12 @@ export function ZtWorkspace({
             targetStage={targetStage}
             onChangeTargetStage={(s) => void onChangeTargetStage(s)}
             stages={catalog.stages}
+          />
+          <ZtDeliverableCard
+            serviceId={serviceId}
+            assessmentStatus={assessment.status}
+            deliverable={deliverable}
+            onChange={setDeliverable}
           />
           <ZtQuestionnaire
             catalog={catalog}
