@@ -17,6 +17,7 @@ ignore = ["S101"]  # assert in tests is fine
 "**/alembic/versions/**" = ["E501"]  # generated migration headers can exceed 100 chars
 "**/csf/catalog.py" = ["E501"]  # NIST CSF 2.0 outcome statements are prose that exceeds 100 chars
 "**/zt/catalog.py" = ["E501"]   # CISA ZTMM + DoD ZTRA outcome statements are prose that exceeds 100 chars
+"**/attack/catalog.py" = ["E501"]  # MITRE ATT&CK matrix is wide reference data; tactic-alias comments exceed 100 chars
 
 [tool.black]
 line-length = 100
