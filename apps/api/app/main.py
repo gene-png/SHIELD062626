@@ -26,6 +26,7 @@ from app.routes import (
     intake,
     notifications,
     tech_debt,
+    zt,
 )
 
 
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(tech_debt.router)
     app.include_router(csf.router)
+    app.include_router(zt.router)
     app.include_router(deliverables.router)
 
     return app
