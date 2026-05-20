@@ -18,6 +18,7 @@ import {
   fetchCatalog,
   fetchHeatmap,
   fetchLatestAssessment,
+  fetchLatestDeliverable,
   patchCoverage,
 } from "@/lib/attack/client";
 import type {
@@ -25,11 +26,13 @@ import type {
   AttackCatalog,
   AttackCoveragePatch,
   AttackCoverageRow,
+  AttackDeliverable,
   AttackHeatmap,
   CatalogTechnique,
   TacticHeatmapEntry,
 } from "@/lib/attack/types";
 
+import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
 import { AttackMatrix } from "./AttackMatrix";
 import { AttackTechniquePanel } from "./AttackTechniquePanel";
@@ -62,6 +65,8 @@ export function AttackWorkspace({
     null,
   );
   const [heatmap, setHeatmap] = React.useState<AttackHeatmap | null>(null);
+  const [deliverable, setDeliverable] =
+    React.useState<AttackDeliverable | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
   const [selectedCode, setSelectedCode] = React.useState<string | null>(null);
@@ -119,6 +124,12 @@ export function AttackWorkspace({
       setAssessment(a);
       if (a) {
         await refreshHeatmap();
+        try {
+          const d = await fetchLatestDeliverable(serviceId);
+          setDeliverable(d);
+        } catch {
+          // non-blocking
+        }
       }
     } catch (err) {
       setLoadError(describeError(err));
@@ -287,6 +298,12 @@ export function AttackWorkspace({
       ) : (
         <>
           <AttackHeatmapCard heatmap={heatmap} />
+          <AttackDeliverableCard
+            serviceId={serviceId}
+            assessmentStatus={assessment.status}
+            deliverable={deliverable}
+            onChange={setDeliverable}
+          />
           <AttackTechniquePanel
             technique={selectedTechnique}
             coverage={selectedCoverage}
