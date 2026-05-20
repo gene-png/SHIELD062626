@@ -1,0 +1,116 @@
+"""Zero Trust assessment models (Phase 5 stage 1).
+
+One assessment per (Service, framework, version). Service.kind drives
+the framework choice at create time: kind=zero_trust_cisa -> CISA ZTMM
+2.0; kind=zero_trust_dod -> DoD ZTRA. The `framework` column is
+denormalized so the scoring engine + deliverable renderer can pick
+their stage labels without re-querying the parent service.
+
+Per Master Spec §11.1, `client_id` is denormalized on every business
+row.
+"""
+
+from __future__ import annotations
+
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
+)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+from app.models._common import TimestampMixin, UUIDPKMixin
+
+
+class ZtAssessmentStatus(enum.StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    RELEASED = "released"
+
+
+class ZtFramework(enum.StrEnum):
+    CISA_ZTMM_2_0 = "cisa_ztmm_2_0"
+    DOD_ZTRA = "dod_ztra"
+
+
+class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = "zt_assessments"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id", "version", name="uq_zt_assessments_service_version"
+        ),
+    )
+
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("services.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT")
+    )
+
+    framework: Mapped[ZtFramework] = mapped_column(
+        SAEnum(ZtFramework, name="zt_framework", native_enum=False, length=32),
+        nullable=False,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[ZtAssessmentStatus] = mapped_column(
+        SAEnum(
+            ZtAssessmentStatus,
+            name="zt_assessment_status",
+            native_enum=False,
+            length=16,
+        ),
+        default=ZtAssessmentStatus.DRAFT,
+        nullable=False,
+    )
+
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
+    __tablename__ = "zt_answers"
+    __table_args__ = (
+        UniqueConstraint(
+            "assessment_id",
+            "capability_code",
+            name="uq_zt_answers_assessment_capability",
+        ),
+    )
+
+    assessment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("zt_assessments.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT")
+    )
+
+    # Framework-prefixed code (e.g. "CISA.ID.01" or "DOD.USR.01").
+    # Validated against the in-memory catalog at the route boundary.
+    capability_code: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # 1..4 (MaturityStage). NULL = unscored.
+    maturity_stage: Mapped[int | None] = mapped_column(SmallInteger)
+    notes: Mapped[str | None] = mapped_column(Text)
+    evidence_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
+
+    answered_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

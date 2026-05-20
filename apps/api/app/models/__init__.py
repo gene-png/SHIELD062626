@@ -25,6 +25,12 @@ from app.models.notification import Notification
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
+from app.models.zt_assessment import (
+    ZtAnswer,
+    ZtAssessment,
+    ZtAssessmentStatus,
+    ZtFramework,
+)
 
 __all__ = [
     "Artifact",
@@ -49,4 +55,8 @@ __all__ = [
     "ServiceType",
     "User",
     "UserRole",
+    "ZtAnswer",
+    "ZtAssessment",
+    "ZtAssessmentStatus",
+    "ZtFramework",
 ]
