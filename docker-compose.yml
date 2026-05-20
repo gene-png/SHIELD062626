@@ -91,10 +91,13 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
+      # KC 25 serves /health on the management port (9000), not 8080. Use HTTP/1.0
+      # so the server closes the connection and `cat` returns instead of blocking
+      # on keep-alive until the probe times out.
       test:
         [
           "CMD-SHELL",
-          "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\nHost: localhost\\n\\n' >&3 && cat <&3 | grep -q '200 OK'",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'",
         ]
       interval: 10s
       timeout: 5s
