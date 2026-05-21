@@ -33,6 +33,7 @@ x-api-env: &api-env
 
 services:
   db:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: shield
@@ -49,6 +50,7 @@ services:
       - "5432:5432"
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -62,6 +64,7 @@ services:
       - "6379:6379"
 
   minio:
+    restart: unless-stopped
     image: minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
@@ -79,6 +82,7 @@ services:
       - "9001:9001"
 
   keycloak:
+    restart: unless-stopped
     image: quay.io/keycloak/keycloak:25.0
     command: ["start-dev", "--import-realm"]
     environment:
@@ -105,12 +109,14 @@ services:
       start_period: 30s
 
   mailhog:
+    restart: unless-stopped
     image: mailhog/mailhog:latest
     ports:
       - "1025:1025"
       - "8025:8025"
 
   api:
+    restart: unless-stopped
     build:
       context: ./apps/api
     environment:
@@ -138,6 +144,7 @@ services:
       ]
 
   worker:
+    restart: unless-stopped
     build:
       context: ./apps/api
     environment:
@@ -152,6 +159,7 @@ services:
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO"]
 
   web:
+    restart: unless-stopped
     image: node:20-bookworm
     working_dir: /app
     environment:
