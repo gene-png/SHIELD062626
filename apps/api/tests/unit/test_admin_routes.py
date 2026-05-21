@@ -125,6 +125,72 @@ def test_admin_queue_reflects_submitted_intake(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_admin_can_publish_service_request(app_client: TestClient) -> None:
+    admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
+    client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
+
+    app_client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+                {"service_type": "consultation"},
+            ],
+        },
+    )
+
+    queue = app_client.get(
+        "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
+    ).json()
+    by_type = {s["service_type"]: s for s in queue["service_requests"]}
+    csf_id = by_type["nist_csf"]["id"]
+    con_id = by_type["consultation"]["id"]
+
+    # Publishing the CSF request opens a live workspace.
+    r = app_client.post(
+        f"/admin/service-requests/{csf_id}/fulfill",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    )
+    assert r.status_code == 200, r.text
+    pub = r.json()
+    assert pub["already_fulfilled"] is False
+    assert pub["service_type"] == "nist_csf"
+    service_id = pub["service_id"]
+
+    # Idempotent: re-publishing returns the same workspace.
+    r2 = app_client.post(
+        f"/admin/service-requests/{csf_id}/fulfill",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["already_fulfilled"] is True
+    assert r2.json()["service_id"] == service_id
+
+    # Consultation requests can't be published as a service.
+    r3 = app_client.post(
+        f"/admin/service-requests/{con_id}/fulfill",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    )
+    assert r3.status_code == 400
+
+    # The queue now correlates the request to its live service.
+    queue2 = app_client.get(
+        "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
+    ).json()
+    csf_row = next(s for s in queue2["service_requests"] if s["service_type"] == "nist_csf")
+    assert csf_row["fulfilled_service_id"] == service_id
+
+    # Non-admins cannot publish.
+    r4 = app_client.post(
+        f"/admin/service-requests/{csf_id}/fulfill",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+    )
+    assert r4.status_code == 403
+
+
+@pytest.mark.unit
 def test_admin_queue_rejects_client_role_with_403(app_client: TestClient) -> None:
     _register(app_client, "admin@example.com")
     client_body = _register(app_client, "client@example.com")

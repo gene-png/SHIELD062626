@@ -58,3 +58,12 @@ class AdminIntakeQueueResponse(BaseModel):
     service_requests: list[AdminServiceRequestRow]
     artifacts: list[AdminArtifactRow]
     total_users: int
+
+
+class FulfillServiceRequestResponse(BaseModel):
+    """Result of publishing a service request: the live engagement workspace."""
+
+    service_id: uuid.UUID
+    service_type: ServiceType
+    title: str
+    already_fulfilled: bool
