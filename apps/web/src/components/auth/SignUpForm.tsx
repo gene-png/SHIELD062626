@@ -59,10 +59,9 @@ export function SignUpForm(): JSX.Element {
       router.replace("/sign-in?registered=1");
       return;
     }
-    // Invalidate the cached (logged-out) RSC tree so the header/nav reflect the
-    // new session, then drop the client straight into the engagement intake.
-    router.refresh();
-    router.replace("/intake");
+    // Full-page navigation so the server re-renders the header/nav with the new
+    // session and the client lands on the intake form without a manual refresh.
+    window.location.assign("/intake");
   }
 
   return (

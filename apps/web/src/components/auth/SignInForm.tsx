@@ -1,11 +1,10 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 export function SignInForm(): JSX.Element {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
@@ -29,10 +28,10 @@ export function SignInForm(): JSX.Element {
         setPending(false);
         return;
       }
-      // Invalidate the cached (logged-out) RSC tree so the header/nav pick up
-      // the new session, then navigate.
-      router.refresh();
-      router.replace(callbackUrl);
+      // Full-page navigation (not router.replace) so the server re-renders the
+      // header/nav with the new session cookie - a soft nav can serve the
+      // cached logged-out tree and leave the nav stale until a manual refresh.
+      window.location.assign(callbackUrl);
     } catch {
       setError("Something went wrong. Try again.");
       setPending(false);
