@@ -45,3 +45,30 @@ export interface AdminIntakeQueueResponse {
   artifacts: AdminArtifactRow[];
   total_users: number;
 }
+
+export interface FulfillServiceRequestResponse {
+  service_id: string;
+  service_type: ServiceType;
+  title: string;
+  already_fulfilled: boolean;
+}
+
+/** Per-service-type workspace route segment under /admin/services/{id}/. */
+export const WORKSPACE_PATH: Record<ServiceType, string | null> = {
+  tech_debt: "tech-debt",
+  zero_trust_cisa: "zero-trust-cisa",
+  zero_trust_dod: "zero-trust-dod",
+  nist_csf: "csf",
+  attack_coverage: "attack-coverage",
+  consultation: null,
+};
+
+/** Workspace URL for a fulfilled request, or null when not applicable. */
+export function workspaceHref(
+  serviceType: ServiceType,
+  serviceId: string | null,
+): string | null {
+  const seg = WORKSPACE_PATH[serviceType];
+  if (!seg || !serviceId) return null;
+  return `/admin/services/${serviceId}/${seg}`;
+}

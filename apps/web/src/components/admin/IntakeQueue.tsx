@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
 import {
@@ -12,15 +13,19 @@ import {
   StatusPill,
 } from "@shield/design-system";
 
-import { fetchIntakeQueue } from "@/lib/admin/client";
-import type { AdminIntakeQueueResponse } from "@/lib/admin/types";
+import { fetchIntakeQueue, fulfillServiceRequest } from "@/lib/admin/client";
+import {
+  workspaceHref,
+  type AdminIntakeQueueResponse,
+} from "@/lib/admin/types";
 import {
   CSF_PROFILES,
   CSF_TARGET_TIERS,
   SERVICE_LABELS,
   ZT_TARGET_STAGES,
-  type ServiceType,
 } from "@/lib/intake/types";
+
+type ServiceRequestRow = AdminIntakeQueueResponse["service_requests"][number];
 
 /** The maturity target the client set at intake, formatted for display. */
 function clientTarget(
@@ -67,12 +72,178 @@ function serviceTone(
   return "info";
 }
 
-function serviceState(
-  s: AdminIntakeQueueResponse["service_requests"][number],
-): string {
-  if (s.fulfilled_service_id) return "Fulfilled";
+function serviceState(s: ServiceRequestRow): string {
+  if (s.fulfilled_service_id) return "Published";
   if (s.declined_at) return "Declined";
-  return "Open";
+  return "Awaiting review";
+}
+
+function ReadinessItem({
+  ok,
+  label,
+  missingHint,
+}: {
+  ok: boolean;
+  label: string;
+  missingHint: string;
+}): JSX.Element {
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      <span
+        aria-hidden
+        className={ok ? "text-status-success-fg" : "text-status-warning-fg"}
+      >
+        {ok ? "✓" : "⚠"}
+      </span>
+      <span className="text-ink-secondary">
+        <span className="font-medium text-ink-primary">{label}</span>
+        {ok ? "" : ` — ${missingHint}`}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * One service request, with the admin's review checklist + publish action.
+ * "Publish for processing" opens the engagement workspace; the readiness
+ * items flag intake gaps that would skew the AI assessment.
+ */
+function ServiceRequestCard({
+  s,
+  hasContext,
+  hasDocuments,
+  onPublished,
+}: {
+  s: ServiceRequestRow;
+  hasContext: boolean;
+  hasDocuments: boolean;
+  onPublished: () => void;
+}): JSX.Element {
+  const [publishing, setPublishing] = React.useState(false);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
+
+  const isConsultation = s.service_type === "consultation";
+  const fulfilled = Boolean(s.fulfilled_service_id);
+  const target = clientTarget(s);
+  const needsTarget =
+    s.service_type === "nist_csf" ||
+    s.service_type === "zero_trust_cisa" ||
+    s.service_type === "zero_trust_dod";
+  const href = workspaceHref(s.service_type, s.fulfilled_service_id);
+
+  async function onPublish(): Promise<void> {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      await fulfillServiceRequest(s.id);
+      onPublished();
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Failed to publish.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>{SERVICE_LABELS[s.service_type]}</CardTitle>
+          <StatusPill tone={serviceTone(s)} withDot>
+            {serviceState(s)}
+          </StatusPill>
+        </div>
+        <CardDescription>
+          Requested {new Date(s.requested_at).toLocaleString()} by{" "}
+          <span className="font-medium text-ink-primary">
+            {s.requested_by.display_name ?? s.requested_by.email}
+          </span>
+          {s.requested_by.title ? ` · ${s.requested_by.title}` : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardBody>
+        <dl>
+          {row("Email", s.requested_by.email)}
+          {target ? row("Client target", target) : null}
+          {row(
+            "Target deadline",
+            s.deadline ? new Date(s.deadline).toLocaleDateString() : null,
+          )}
+          {row("Notes", s.notes)}
+        </dl>
+
+        {isConsultation ? (
+          <p className="mt-4 text-sm text-ink-secondary">
+            Consultation request — follow up with the client directly. There is
+            nothing to publish for processing.
+          </p>
+        ) : fulfilled ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="text-sm text-status-success-fg">
+              ✓ Published for processing.
+            </span>
+            {href ? (
+              <Link
+                href={href}
+                className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
+              >
+                Open workspace →
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-md border border-border-subtle bg-surface-sunken p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-500">
+              Review before publishing
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink-secondary">
+              <li>
+                Confirm the inputs above are complete and specific — vague scope
+                makes the AI score from guesses.
+              </li>
+              <li>Open each uploaded document and remove any raw PII.</li>
+              <li>
+                Publish to open the engagement workspace and make this intake
+                available for AI processing.
+              </li>
+            </ol>
+            <ul className="mt-3 space-y-1">
+              {needsTarget ? (
+                <ReadinessItem
+                  ok={Boolean(target)}
+                  label="Assessment target set"
+                  missingHint="ask the client to pick a target in step 5"
+                />
+              ) : null}
+              <ReadinessItem
+                ok={hasContext}
+                label="Systems & scope context"
+                missingHint="thin context lowers AI accuracy"
+              />
+              <ReadinessItem
+                ok={hasDocuments}
+                label="Supporting documents uploaded"
+                missingHint="no evidence to ground the assessment"
+              />
+            </ul>
+            {publishError ? (
+              <p role="alert" className="mt-3 text-sm text-status-danger-fg">
+                {publishError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void onPublish()}
+              disabled={publishing}
+              className="mt-3 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {publishing ? "Publishing…" : "Publish for processing"}
+            </button>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
 }
 
 export function IntakeQueue(): JSX.Element {
@@ -81,20 +252,17 @@ export function IntakeQueue(): JSX.Element {
   );
   const [error, setError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    let cancelled = false;
+  const load = React.useCallback(() => {
     fetchIntakeQueue()
-      .then((s) => {
-        if (!cancelled) setState(s);
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Failed to load.");
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then(setState)
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load."),
+      );
   }, []);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
 
   if (error) {
     return (
@@ -118,6 +286,8 @@ export function IntakeQueue(): JSX.Element {
     ? new Date(state.intake_completed_at).toLocaleString()
     : null;
   const hasIntake = c !== null && c.legal_name !== "(pending intake)";
+  const hasContext = Boolean(c?.prompting_context && c.prompting_context.trim());
+  const hasDocuments = state.artifacts.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -211,43 +381,12 @@ export function IntakeQueue(): JSX.Element {
           <ul className="flex flex-col gap-3">
             {state.service_requests.map((s) => (
               <li key={s.id}>
-                <Card>
-                  <CardHeader>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CardTitle>
-                        {SERVICE_LABELS[s.service_type as ServiceType]}
-                      </CardTitle>
-                      <StatusPill tone={serviceTone(s)} withDot>
-                        {serviceState(s)}
-                      </StatusPill>
-                    </div>
-                    <CardDescription>
-                      Requested {new Date(s.requested_at).toLocaleString()} by{" "}
-                      <span className="font-medium text-ink-primary">
-                        {s.requested_by.display_name ?? s.requested_by.email}
-                      </span>
-                      {s.requested_by.title ? ` · ${s.requested_by.title}` : ""}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardBody>
-                    <dl>
-                      {row("Email", s.requested_by.email)}
-                      {clientTarget(s)
-                        ? row("Client target", clientTarget(s))
-                        : null}
-                      {row(
-                        "Target deadline",
-                        s.deadline
-                          ? new Date(s.deadline).toLocaleDateString()
-                          : null,
-                      )}
-                      {row("Notes", s.notes)}
-                      {s.declined_at
-                        ? row("Decline reason", s.declined_reason)
-                        : null}
-                    </dl>
-                  </CardBody>
-                </Card>
+                <ServiceRequestCard
+                  s={s}
+                  hasContext={hasContext}
+                  hasDocuments={hasDocuments}
+                  onPublished={load}
+                />
               </li>
             ))}
           </ul>
