@@ -191,6 +191,62 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_get_service_resolves_owning_client(app_client: TestClient) -> None:
+    admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
+    client_body = _register(app_client, "client@example.com")
+    client_bearer = client_body["tokens"]["access_token"]
+    client_id = client_body["user"]["client_id"]
+
+    app_client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+            ],
+        },
+    )
+    queue = app_client.get(
+        "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
+    ).json()
+    csf_id = next(s["id"] for s in queue["service_requests"] if s["service_type"] == "nist_csf")
+    service_id = app_client.post(
+        f"/admin/service-requests/{csf_id}/fulfill",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    ).json()["service_id"]
+
+    # The workspace shell uses this lookup to discover the owning tenant.
+    r = app_client.get(
+        f"/admin/services/{service_id}",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == service_id
+    assert body["client_id"] == client_id
+    assert body["kind"] == "nist_csf"
+
+    # Unknown service id -> 404.
+    assert (
+        app_client.get(
+            "/admin/services/00000000-0000-0000-0000-000000000000",
+            headers={"Authorization": f"Bearer {admin_bearer}"},
+        ).status_code
+        == 404
+    )
+
+    # Non-admins cannot look up services.
+    assert (
+        app_client.get(
+            f"/admin/services/{service_id}",
+            headers={"Authorization": f"Bearer {client_bearer}"},
+        ).status_code
+        == 403
+    )
+
+
+@pytest.mark.unit
 def test_admin_queue_rejects_client_role_with_403(app_client: TestClient) -> None:
     _register(app_client, "admin@example.com")
     client_body = _register(app_client, "client@example.com")

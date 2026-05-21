@@ -32,6 +32,7 @@ from app.schemas.admin import (
     AdminClientListResponse,
     AdminClientSummary,
     AdminIntakeQueueResponse,
+    AdminServiceDetail,
     AdminServiceRequestRow,
     AdminUserSummary,
     FulfillServiceRequestResponse,
@@ -273,3 +274,28 @@ def fulfill_service_request(
         title=svc.title,
         already_fulfilled=False,
     )
+
+
+@router.get(
+    "/services/{service_id}",
+    response_model=AdminServiceDetail,
+    summary="Service detail (admin) - resolves a workspace's owning tenant",
+)
+def get_service(
+    service_id: uuid.UUID,
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminServiceDetail:
+    """Look up a service by id, including its client_id.
+
+    Cross-tenant on purpose (admin-only, no X-Client-Id): the workspace UI
+    calls this to discover which client a service belongs to, then sets that
+    as the active tenant before its tenant-scoped data calls.
+    """
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Service not found.",
+        )
+    return AdminServiceDetail.model_validate(svc, from_attributes=True)

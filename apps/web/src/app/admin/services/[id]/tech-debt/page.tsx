@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { EnsureActiveClient } from "@/components/admin/EnsureActiveClient";
 import { TechDebtWorkspace } from "@/components/admin/TechDebtWorkspace";
 
 export const metadata: Metadata = {
@@ -11,12 +12,12 @@ export default function TechDebtServicePage({
 }: {
   params: { id: string };
 }): JSX.Element {
-  // Stage 5 baseline: we don't yet have a /tech-debt/services/{id} GET on
-  // the API. The workspace component pulls the latest list on mount; the
-  // service title is a sensible placeholder until stage 9 wires the
-  // service-detail fetch. The page is admin-gated by app/admin/layout.tsx
-  // (Phase 2 stage 7).
+  // EnsureActiveClient aligns the active tenant to this service's client so the
+  // workspace's tenant-scoped calls resolve. The service title is still a
+  // placeholder until a service-detail fetch wires it through.
   return (
-    <TechDebtWorkspace serviceId={params.id} serviceTitle="Tech Debt Review" />
+    <EnsureActiveClient serviceId={params.id}>
+      <TechDebtWorkspace serviceId={params.id} serviceTitle="Tech Debt Review" />
+    </EnsureActiveClient>
   );
 }

@@ -7,9 +7,22 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
+from app.models.service import ServiceKind, ServiceStatus
 from app.models.service_request import ServiceType
 from app.models.user import UserRole
 from app.schemas.intake import ClientProfileResponse
+
+
+class AdminServiceDetail(BaseModel):
+    """Minimal service lookup so a workspace can resolve its owning tenant."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: ServiceKind
+    status: ServiceStatus
+    title: str
+    client_id: uuid.UUID
 
 
 class AdminUserSummary(BaseModel):
