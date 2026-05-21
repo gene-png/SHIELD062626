@@ -34,6 +34,7 @@ import type {
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { DeliverableCard } from "./DeliverableCard";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
+import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
 
 export interface TechDebtWorkspaceProps {
@@ -57,6 +58,7 @@ export function TechDebtWorkspace({
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
   const [approving, setApproving] = React.useState(false);
+  const [docsReloadKey, setDocsReloadKey] = React.useState(0);
 
   const refreshOverlap = React.useCallback(async () => {
     setOverlapLoading(true);
@@ -208,6 +210,7 @@ export function TechDebtWorkspace({
           <RedactionDisclosure />
           <Dropzone
             onUploaded={(a) => {
+              setDocsReloadKey((k) => k + 1);
               void runExtraction(a.id);
             }}
             accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
@@ -224,6 +227,12 @@ export function TechDebtWorkspace({
           ) : null}
         </CardBody>
       </Card>
+
+      <IntakeDocumentsPanel
+        onExtract={(id) => void runExtraction(id)}
+        extracting={extracting}
+        reloadKey={docsReloadKey}
+      />
 
       {loadError ? (
         <Card>
