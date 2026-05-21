@@ -92,6 +92,8 @@ class ZtAssessmentResponse(BaseModel):
     approved_at: datetime | None
     approved_by: uuid.UUID | None
     answers: list[ZtAnswerResponse]
+    # Target stage the client picked at intake (2-4), or null if not set.
+    client_target_stage: int | None = None
 
 
 class ZtAnswerPatch(BaseModel):

@@ -35,6 +35,7 @@ from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
+from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
 from app.models.zt_assessment import (
     ZtAnswer,
@@ -120,6 +121,19 @@ def _serialize_answers(rows: Iterable[ZtAnswer]) -> list[ZtAnswerResponse]:
     return [ZtAnswerResponse.model_validate(r, from_attributes=True) for r in ordered]
 
 
+def _client_target_stage(db: Session, service_id: uuid.UUID) -> int | None:
+    """The ZT target stage the client chose at intake, via the source request.
+
+    Lets the admin workspace default its gap target to the client's goal
+    instead of a hardcoded stage.
+    """
+    svc = db.get(Service, service_id)
+    if svc is None or svc.source_request_id is None:
+        return None
+    sr = db.get(ServiceRequest, svc.source_request_id)
+    return sr.zt_target_stage if sr is not None else None
+
+
 def _serialize_assessment(db: Session, a: ZtAssessment) -> ZtAssessmentResponse:
     rows = (
         db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id))
@@ -135,6 +149,7 @@ def _serialize_assessment(db: Session, a: ZtAssessment) -> ZtAssessmentResponse:
         approved_at=a.approved_at,
         approved_by=a.approved_by,
         answers=_serialize_answers(rows),
+        client_target_stage=_client_target_stage(db, a.service_id),
     )
 
 

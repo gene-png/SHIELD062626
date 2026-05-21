@@ -99,6 +99,8 @@ class CsfAssessmentResponse(BaseModel):
     approved_at: datetime | None
     approved_by: uuid.UUID | None
     answers: list[CsfAnswerResponse]
+    # Target tier the client picked at intake (2-4), or null if not set.
+    client_target_tier: int | None = None
 
 
 class CsfAnswerPatch(BaseModel):

@@ -52,6 +52,7 @@ from app.models.csf_assessment import (
 )
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
+from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
 from app.schemas.csf import (
@@ -93,6 +94,19 @@ def _serialize_answers(rows: Iterable[CsfAnswer]) -> list[CsfAnswerResponse]:
     return [CsfAnswerResponse.model_validate(r, from_attributes=True) for r in ordered]
 
 
+def _client_target_tier(db: Session, service_id: uuid.UUID) -> int | None:
+    """The CSF target tier the client chose at intake, via the source request.
+
+    Lets the admin workspace default its gap target to the client's goal
+    instead of a hardcoded tier.
+    """
+    svc = db.get(Service, service_id)
+    if svc is None or svc.source_request_id is None:
+        return None
+    sr = db.get(ServiceRequest, svc.source_request_id)
+    return sr.csf_target_tier if sr is not None else None
+
+
 def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentResponse:
     rows = (
         db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
@@ -107,6 +121,7 @@ def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentRespons
         approved_at=a.approved_at,
         approved_by=a.approved_by,
         answers=_serialize_answers(rows),
+        client_target_tier=_client_target_tier(db, a.service_id),
     )
 
 
