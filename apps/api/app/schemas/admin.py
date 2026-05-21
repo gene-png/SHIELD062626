@@ -33,6 +33,9 @@ class AdminServiceRequestRow(BaseModel):
     requested_by: AdminUserSummary
     notes: str | None
     deadline: datetime | None
+    csf_target_tier: int | None
+    csf_profile: str | None
+    zt_target_stage: int | None
     fulfilled_service_id: uuid.UUID | None
     declined_at: datetime | None
     declined_reason: str | None

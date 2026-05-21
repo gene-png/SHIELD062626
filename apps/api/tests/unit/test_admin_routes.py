@@ -91,7 +91,12 @@ def test_admin_queue_reflects_submitted_intake(app_client: TestClient) -> None:
                 "address_line1": "123 Pentagon Way",
             },
             "service_requests": [
-                {"service_type": "nist_csf", "notes": "Annual refresh."},
+                {
+                    "service_type": "nist_csf",
+                    "notes": "Annual refresh.",
+                    "csf_target_tier": 3,
+                    "csf_profile": "MOD",
+                },
                 {"service_type": "consultation"},
             ],
             "title": "CISO",
@@ -108,6 +113,10 @@ def test_admin_queue_reflects_submitted_intake(app_client: TestClient) -> None:
     assert len(payload["service_requests"]) == 2
     types = sorted(req["service_type"] for req in payload["service_requests"])
     assert types == ["consultation", "nist_csf"]
+    # Client-supplied CSF targets round-trip to the admin queue.
+    csf_row = next(req for req in payload["service_requests"] if req["service_type"] == "nist_csf")
+    assert csf_row["csf_target_tier"] == 3
+    assert csf_row["csf_profile"] == "MOD"
     # Each row carries the requester summary so the admin can see who asked.
     assert all(
         req["requested_by"]["email"] == "client@example.com" for req in payload["service_requests"]

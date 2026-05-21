@@ -28,14 +28,37 @@ from app.db.session import get_db
 from app.dependencies import current_user
 from app.models._common import utcnow
 from app.models.client import Client
-from app.models.service_request import ServiceRequest
+from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
 from app.notifications import notify_role
 from app.schemas.intake import (
     IntakePatchRequest,
     IntakeStateResponse,
     IntakeSubmitRequest,
+    ServiceRequestInput,
 )
+
+_ZT_SERVICE_TYPES = (ServiceType.ZERO_TRUST_CISA, ServiceType.ZERO_TRUST_DOD)
+
+
+def _validate_targets(item: ServiceRequestInput) -> None:
+    """Enforce client-supplied assessment targets per selected service.
+
+    The wizard gates this in the UI, but we re-check server-side so the
+    target is never silently dropped (the consultant relies on it).
+    """
+    if item.service_type == ServiceType.NIST_CSF:
+        if item.csf_target_tier is None or item.csf_profile is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="NIST CSF requires a target tier and profile before submitting.",
+            )
+    elif item.service_type in _ZT_SERVICE_TYPES:
+        if item.zt_target_stage is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Zero Trust requires a target stage before submitting.",
+            )
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 
@@ -184,11 +207,15 @@ def submit_intake(
         if key in seen:
             continue
         seen.add(key)
+        _validate_targets(item)
         sr = ServiceRequest(
             service_type=item.service_type,
             requested_by=user.id,
             notes=item.notes,
             deadline=item.deadline,
+            csf_target_tier=item.csf_target_tier,
+            csf_profile=item.csf_profile.value if item.csf_profile else None,
+            zt_target_stage=item.zt_target_stage,
         )
         db.add(sr)
         created_requests.append(sr)

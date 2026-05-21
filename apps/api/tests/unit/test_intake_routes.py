@@ -115,8 +115,13 @@ def test_submit_intake_writes_service_requests_and_audit(app_client) -> None:
                 "country": "US",
             },
             "service_requests": [
-                {"service_type": "nist_csf", "notes": "Annual assessment refresh."},
-                {"service_type": "zero_trust_cisa"},
+                {
+                    "service_type": "nist_csf",
+                    "notes": "Annual assessment refresh.",
+                    "csf_target_tier": 3,
+                    "csf_profile": "MOD",
+                },
+                {"service_type": "zero_trust_cisa", "zt_target_stage": 3},
             ],
             "title": "CISO",
             "phone": "+1-555-0123",
@@ -184,14 +189,60 @@ def test_submit_dedupes_duplicate_service_requests(app_client) -> None:
         json={
             "client": {"legal_name": "Atlas Defense Solutions"},
             "service_requests": [
-                {"service_type": "nist_csf"},
-                {"service_type": "nist_csf"},
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
                 {"service_type": "consultation"},
             ],
         },
     )
     assert r.status_code == 200
     assert len(r.json()["service_requests"]) == 2
+
+
+@pytest.mark.unit
+def test_submit_requires_csf_and_zt_targets(app_client) -> None:
+    client, _ = app_client
+    bearer = _register_and_bearer(client)
+
+    # NIST CSF without a target tier + profile is rejected.
+    r = client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [{"service_type": "nist_csf"}],
+        },
+    )
+    assert r.status_code == 422
+
+    # Zero Trust without a target stage is rejected.
+    r = client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [{"service_type": "zero_trust_dod"}],
+        },
+    )
+    assert r.status_code == 422
+
+    # With targets supplied, the same services are accepted and persisted.
+    r = client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 4, "csf_profile": "HIGH"},
+                {"service_type": "zero_trust_dod", "zt_target_stage": 2},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    by_type = {s["service_type"]: s for s in r.json()["service_requests"]}
+    assert by_type["nist_csf"]["csf_target_tier"] == 4
+    assert by_type["nist_csf"]["csf_profile"] == "HIGH"
+    assert by_type["zero_trust_dod"]["zt_target_stage"] == 2
 
 
 @pytest.mark.unit

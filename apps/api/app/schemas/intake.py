@@ -19,7 +19,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
-from app.models.service_request import ServiceType
+from app.models.service_request import CsfProfile, ServiceType
 
 
 class ClientProfilePatch(BaseModel):
@@ -62,6 +62,13 @@ class ServiceRequestInput(BaseModel):
     notes: str | None = Field(default=None, max_length=4000)
     deadline: datetime | None = None
 
+    # Client-supplied assessment targets (validated against service_type in the
+    # submit route). Target tier/stage is 2-4: Tier/Stage 1 is the floor, so a
+    # client never "targets" it.
+    csf_target_tier: int | None = Field(default=None, ge=2, le=4)
+    csf_profile: CsfProfile | None = None
+    zt_target_stage: int | None = Field(default=None, ge=2, le=4)
+
 
 class IntakeSubmitRequest(BaseModel):
     """Final submit. Must include the requested services (at least one)."""
@@ -103,6 +110,9 @@ class ServiceRequestResponse(BaseModel):
     requested_at: datetime
     notes: str | None
     deadline: datetime | None
+    csf_target_tier: int | None
+    csf_profile: str | None
+    zt_target_stage: int | None
     fulfilled_service_id: uuid.UUID | None
     declined_at: datetime | None
     declined_reason: str | None

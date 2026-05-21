@@ -72,7 +72,10 @@ def test_intake_submit_writes_admin_notification(app_client) -> None:
         headers={"Authorization": f"Bearer {poc['tokens']['access_token']}"},
         json={
             "client": {"legal_name": "Atlas Defense Solutions", "industry": "Defense"},
-            "service_requests": [{"service_type": "nist_csf"}, {"service_type": "consultation"}],
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+                {"service_type": "consultation"},
+            ],
         },
     )
     assert r.status_code == 200, r.text

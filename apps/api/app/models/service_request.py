@@ -18,7 +18,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text
+from sqlalchemy import DateTime, ForeignKey, SmallInteger, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,6 +35,18 @@ class ServiceType(enum.StrEnum):
     NIST_CSF = "nist_csf"
     ATTACK_COVERAGE = "attack_coverage"
     CONSULTATION = "consultation"
+
+
+class CsfProfile(enum.StrEnum):
+    """NIST CSF implementation profile the client is targeting.
+
+    Mirrors the FIPS-199 impact bands consultants reason in. Captured at
+    intake so the consultant validates rather than guesses the target.
+    """
+
+    LOW = "LOW"
+    MOD = "MOD"
+    HIGH = "HIGH"
 
 
 class ServiceRequest(UUIDPKMixin, TimestampMixin, Base):
@@ -54,6 +66,16 @@ class ServiceRequest(UUIDPKMixin, TimestampMixin, Base):
 
     notes: Mapped[str | None] = mapped_column(Text)
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Client-supplied assessment targets, captured at intake so the consultant
+    # validates rather than scores the target from scratch (Master Spec §6.4:
+    # "the client should do as much of the work as possible"). Only the columns
+    # relevant to the request's service_type are populated:
+    #   - nist_csf            -> csf_target_tier (2-4) + csf_profile
+    #   - zero_trust_cisa/dod -> zt_target_stage (2-4)
+    csf_target_tier: Mapped[int | None] = mapped_column(SmallInteger)
+    csf_profile: Mapped[str | None] = mapped_column(String(8))
+    zt_target_stage: Mapped[int | None] = mapped_column(SmallInteger)
 
     # Set when an admin opens a real Service row from this request.
     fulfilled_service_id: Mapped[uuid.UUID | None] = mapped_column()
