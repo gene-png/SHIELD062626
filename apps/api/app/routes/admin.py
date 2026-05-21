@@ -28,6 +28,9 @@ from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminArtifactRow,
+    AdminClientCreateRequest,
+    AdminClientListResponse,
+    AdminClientSummary,
     AdminIntakeQueueResponse,
     AdminServiceRequestRow,
     AdminUserSummary,
@@ -57,15 +60,32 @@ _SERVICE_TITLES: dict[ServiceType, str] = {
 def intake_queue(
     _admin: Annotated[User, _admin_required],
     db: Annotated[Session, Depends(get_db)],
+    client_id: uuid.UUID | None = None,
 ) -> AdminIntakeQueueResponse:
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
+    """Cross-tenant intake queue.
 
-    # Pull every service_request with its requester user pre-loaded.
-    rows = db.execute(
-        select(ServiceRequest, User)
-        .join(User, ServiceRequest.requested_by == User.id)
-        .order_by(ServiceRequest.requested_at.desc())
-    ).all()
+    Without `client_id` filter: shows requests/artifacts from all clients
+    (consultant overview). The `client` field in the response is then the
+    most-recently-created tenant for display continuity; treat it as advisory.
+    With `client_id`: scopes to that tenant.
+    """
+    if client_id is not None:
+        client = db.get(Client, client_id)
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Client not found.",
+            )
+    else:
+        client = db.execute(
+            select(Client).order_by(Client.created_at.desc()).limit(1)
+        ).scalar_one_or_none()
+
+    sr_stmt = select(ServiceRequest, User).join(User, ServiceRequest.requested_by == User.id)
+    if client_id is not None:
+        sr_stmt = sr_stmt.where(ServiceRequest.client_id == client_id)
+    sr_stmt = sr_stmt.order_by(ServiceRequest.requested_at.desc())
+    rows = db.execute(sr_stmt).all()
     service_requests: list[AdminServiceRequestRow] = []
     for sr, requester in rows:
         service_requests.append(
@@ -85,12 +105,17 @@ def intake_queue(
             )
         )
 
-    artifact_rows = (
-        db.execute(select(Artifact).order_by(Artifact.uploaded_at.desc())).scalars().all()
-    )
+    art_stmt = select(Artifact)
+    if client_id is not None:
+        art_stmt = art_stmt.where(Artifact.client_id == client_id)
+    art_stmt = art_stmt.order_by(Artifact.uploaded_at.desc())
+    artifact_rows = db.execute(art_stmt).scalars().all()
     artifacts = [AdminArtifactRow.model_validate(a, from_attributes=True) for a in artifact_rows]
 
-    total_users = db.execute(select(func.count()).select_from(User)).scalar_one()
+    user_stmt = select(func.count()).select_from(User)
+    if client_id is not None:
+        user_stmt = user_stmt.where(User.client_id == client_id)
+    total_users = db.execute(user_stmt).scalar_one()
 
     return AdminIntakeQueueResponse(
         client=(
@@ -103,6 +128,82 @@ def intake_queue(
         artifacts=artifacts,
         total_users=total_users,
     )
+
+
+@router.get(
+    "/clients",
+    response_model=AdminClientListResponse,
+    summary="List all clients (admin/reviewer)",
+)
+def list_clients(
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminClientListResponse:
+    rows = (
+        db.execute(select(Client).order_by(Client.created_at.desc()))
+        .scalars()
+        .all()
+    )
+    return AdminClientListResponse(
+        clients=[AdminClientSummary.model_validate(r, from_attributes=True) for r in rows]
+    )
+
+
+@router.post(
+    "/clients",
+    response_model=AdminClientSummary,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new client tenant (admin)",
+)
+def create_client(
+    body: AdminClientCreateRequest,
+    admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminClientSummary:
+    legal_name = body.legal_name.strip()
+    if not legal_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="legal_name is required.",
+        )
+    client = Client(
+        legal_name=legal_name,
+        dba_name=body.dba_name,
+        industry=body.industry,
+        size_band=body.size_band,
+    )
+    db.add(client)
+    db.flush()
+    audit(
+        db,
+        action="client.created",
+        target_type="client",
+        target_id=client.id,
+        actor_user_id=admin.id,
+        details={"legal_name": legal_name, "source": "admin"},
+    )
+    db.commit()
+    db.refresh(client)
+    return AdminClientSummary.model_validate(client, from_attributes=True)
+
+
+@router.get(
+    "/clients/{cid}",
+    response_model=AdminClientSummary,
+    summary="Client detail (admin/reviewer)",
+)
+def get_client(
+    cid: uuid.UUID,
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminClientSummary:
+    client = db.get(Client, cid)
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found.",
+        )
+    return AdminClientSummary.model_validate(client, from_attributes=True)
 
 
 @router.post(
@@ -143,12 +244,13 @@ def fulfill_service_request(
                 already_fulfilled=True,
             )
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
+    client = db.get(Client, sr.client_id)
     org = client.legal_name if client is not None else "Client"
     svc = Service(
         kind=ServiceKind(sr.service_type.value),
         status=ServiceStatus.IN_PROGRESS,
         title=f"{org} — {_SERVICE_TITLES[sr.service_type]}",
+        client_id=sr.client_id,
         source_request_id=sr.id,
         opened_by=admin.id,
     )

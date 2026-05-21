@@ -42,6 +42,12 @@ class ArtifactOrigin(enum.StrEnum):
 class Artifact(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "artifacts"
 
+    # Multi-tenant scope. Set at upload time (intake docs use the uploading
+    # user's client_id; consultant-generated artifacts use the active client).
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     file_storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)

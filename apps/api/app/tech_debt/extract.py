@@ -194,15 +194,19 @@ def extract_capabilities(
     return ExtractionResult(items=items, llm_call=call_row)
 
 
-def name_hints_for_deployment(db: Session) -> list[str]:
-    """Pull display_name + email-local-parts off every user row.
+def name_hints_for_tenant(db: Session, client_id) -> list[str]:
+    """Pull display_name + email-local-parts off every user in this tenant.
 
     The redactor uses these as a name dictionary so the inventory's
-    "owner" / "POC" columns don't leak into the LLM payload.
+    "owner" / "POC" columns don't leak into the LLM payload. Multi-tenant:
+    only the tenant's own user names are leaked into the dictionary so
+    one client's names don't end up in another's redaction pass.
     """
     from sqlalchemy import select
 
-    rows = db.execute(select(User.display_name, User.email)).all()
+    rows = db.execute(
+        select(User.display_name, User.email).where(User.client_id == client_id)
+    ).all()
     hints: list[str] = []
     for name, email in rows:
         if name:
@@ -212,14 +216,27 @@ def name_hints_for_deployment(db: Session) -> list[str]:
     return [h for h in hints if h and len(h) >= 2]
 
 
-def client_org_name_for_deployment(db: Session) -> str | None:
-    """Pull the singleton client's legal name (Master Spec §2)."""
-    from sqlalchemy import select
-
-    row = db.execute(select(Client).limit(1)).scalar_one_or_none()
+def client_org_name_for_tenant(db: Session, client_id) -> str | None:
+    """Pull the named tenant's legal name (or None for placeholders)."""
+    row = db.get(Client, client_id)
     if row is None:
         return None
     name = row.legal_name
     if not name or name == "(pending intake)":
         return None
     return name
+
+
+# Back-compat shims so callers updated incrementally still resolve.
+def name_hints_for_deployment(db: Session) -> list[str]:  # pragma: no cover
+    raise RuntimeError(
+        "name_hints_for_deployment is removed (multi-tenant). "
+        "Use name_hints_for_tenant(db, client_id) instead."
+    )
+
+
+def client_org_name_for_deployment(db: Session) -> str | None:  # pragma: no cover
+    raise RuntimeError(
+        "client_org_name_for_deployment is removed (multi-tenant). "
+        "Use client_org_name_for_tenant(db, client_id) instead."
+    )

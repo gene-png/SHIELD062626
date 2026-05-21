@@ -29,6 +29,9 @@ export function SignInForm(): JSX.Element {
         setPending(false);
         return;
       }
+      // Invalidate the cached (logged-out) RSC tree so the header/nav pick up
+      // the new session, then navigate.
+      router.refresh();
       router.replace(callbackUrl);
     } catch {
       setError("Something went wrong. Try again.");

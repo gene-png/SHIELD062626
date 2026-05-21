@@ -67,3 +67,30 @@ class FulfillServiceRequestResponse(BaseModel):
     service_type: ServiceType
     title: str
     already_fulfilled: bool
+
+
+class AdminClientSummary(BaseModel):
+    """One row in the platform-wide client list (admin/reviewer view)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    legal_name: str
+    dba_name: str | None
+    industry: str | None
+    size_band: str | None
+    intake_completed_at: datetime | None
+    created_at: datetime
+
+
+class AdminClientListResponse(BaseModel):
+    clients: list[AdminClientSummary]
+
+
+class AdminClientCreateRequest(BaseModel):
+    """Minimum payload to create a new tenant. Intake fills in the rest."""
+
+    legal_name: str
+    dba_name: str | None = None
+    industry: str | None = None
+    size_band: str | None = None

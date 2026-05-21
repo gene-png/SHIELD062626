@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.ai.llm import LLMClient
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user, require_role
+from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
@@ -32,6 +32,11 @@ from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
+from app.tenant import (
+    require_artifact_in_tenant,
+    require_deliverable_in_tenant,
+    require_service_in_tenant,
+)
 from app.schemas.tech_debt import (
     CapabilityItemPatch,
     CapabilityItemResponse,
@@ -48,9 +53,9 @@ from app.schemas.tech_debt import (
 from app.storage import StorageBackend
 from app.tech_debt.exporters import build_context, render_pdf, render_xlsx
 from app.tech_debt.extract import (
-    client_org_name_for_deployment,
+    client_org_name_for_tenant,
     extract_capabilities,
-    name_hints_for_deployment,
+    name_hints_for_tenant,
 )
 from app.tech_debt.filename import (
     SERVICE_SLUG_BY_KIND,
@@ -80,12 +85,14 @@ def _llm_dep() -> LLMClient:
 def create_service(
     body: ServiceCreateRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ServiceResponse:
     svc = Service(
         kind=body.kind,
         status=ServiceStatus.IN_PROGRESS,
         title=body.title,
+        client_id=client.id,
         source_request_id=body.source_request_id,
         opened_by=user.id,
     )
@@ -143,22 +150,13 @@ def extract_capability_list(
     service_id: uuid.UUID,
     body: ExtractRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
 ) -> CapabilityListResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.TECH_DEBT:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tech-Debt service not found.",
-        )
-    artifact = db.get(Artifact, body.artifact_id)
-    if artifact is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Source artifact not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.TECH_DEBT)
+    artifact = require_artifact_in_tenant(db, body.artifact_id, client.id)
     if artifact.mime_type not in SUPPORTED_MIME:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -172,8 +170,8 @@ def extract_capability_list(
             artifact=artifact,
             requested_by=user,
             service_id=svc.id,
-            client_org_name=client_org_name_for_deployment(db),
-            name_hints=name_hints_for_deployment(db),
+            client_org_name=client_org_name_for_tenant(db, client.id),
+            name_hints=name_hints_for_tenant(db, client.id),
             llm=llm,
         )
     except UnsupportedInventoryFormat as exc:
@@ -240,14 +238,10 @@ def extract_capability_list(
 def latest_capability_list(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CapabilityListResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     cap_list = _latest_list_or_none(db, svc.id)
     if cap_list is None:
         raise HTTPException(
@@ -273,6 +267,7 @@ def patch_capability_item(
     item_id: uuid.UUID,
     body: CapabilityItemPatch,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CapabilityItemResponse:
     item = db.get(CapabilityItem, item_id)
@@ -283,6 +278,14 @@ def patch_capability_item(
         )
     # Refuse edits to items that belong to a released list.
     cap_list = db.get(CapabilityList, item.capability_list_id)
+    # Tenant check via parent service.
+    if cap_list is not None:
+        svc = db.get(Service, cap_list.service_id)
+        if svc is None or svc.client_id != client.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Capability item not found.",
+            )
     if cap_list is not None and cap_list.status == CapabilityListStatus.RELEASED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -324,10 +327,17 @@ def patch_capability_item(
 def approve_capability_list(
     list_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CapabilityListResponse:
     cap_list = db.get(CapabilityList, list_id)
     if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Capability list not found.",
+        )
+    svc = db.get(Service, cap_list.service_id)
+    if svc is None or svc.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Capability list not found.",
@@ -361,14 +371,10 @@ def approve_capability_list(
 def overlap_analysis(
     service_id: uuid.UUID,
     _user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> OverlapAnalysisResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     cap_list = _latest_list_or_none(db, svc.id)
     if cap_list is None:
         raise HTTPException(
@@ -423,16 +429,12 @@ def overlap_analysis(
 def consolidation_plan_summary(
     service_id: uuid.UUID,
     _user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ConsolidationPlanSummary:
     from app.models.capability import CapabilityDisposition
 
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     cap_list = _latest_list_or_none(db, svc.id)
     if cap_list is None:
         raise HTTPException(
@@ -515,6 +517,7 @@ def _write_artifact(
     *,
     storage: StorageBackend,
     user: User,
+    client_id: uuid.UUID,
     filename: str,
     mime_type: str,
     data: bytes,
@@ -524,6 +527,7 @@ def _write_artifact(
     key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
+        client_id=client_id,
         title=filename,
         file_storage_key=key,
         mime_type=mime_type,
@@ -547,15 +551,11 @@ def _write_artifact(
 def finalize_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.TECH_DEBT:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tech-Debt service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.TECH_DEBT)
     cap_list = _latest_list_or_none(db, svc.id)
     if cap_list is None:
         raise HTTPException(
@@ -573,8 +573,7 @@ def finalize_deliverable(
         .all()
     )
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    client_name = client.legal_name if client is not None else None
+    client_name = client.legal_name
     if client_name == "(pending intake)":
         client_name = None
 
@@ -612,6 +611,7 @@ def finalize_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=pdf_name,
         mime_type="application/pdf",
         data=pdf_bytes,
@@ -620,6 +620,7 @@ def finalize_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=xlsx_name,
         mime_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         data=xlsx_bytes,
@@ -674,14 +675,10 @@ def finalize_deliverable(
 def release_deliverable(
     deliverable_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliverable not found.",
-        )
+    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
     if deliv.finalized_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -732,14 +729,10 @@ def release_deliverable(
 def latest_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     deliv = db.execute(
         select(Deliverable)
         .where(Deliverable.service_id == svc.id)

@@ -3,6 +3,18 @@
 > Live build status. Per AI Prompt §14, Eugene reads this first.
 > See [`How to resume an interrupted build`](#how-to-resume-an-interrupted-build) below for resume instructions.
 
+## Latest change — 2026-05-21
+
+**Multi-tenant: the platform now supports many clients per deployment.** Single-tenant assumption removed end-to-end (schema, auth, every data route, frontend). See `DECISIONS.md` D-015 and `CHANGELOG.md` for the full record.
+
+Highlights:
+
+- Alembic migration `0013` adds `client_id` to `services`, `service_requests`, `artifacts`; backfills + enforces `NOT NULL` on every business `client_id`.
+- New `current_client` FastAPI dependency + `app/tenant.py` helpers; every data route now requires it and 404s on cross-tenant access.
+- New admin endpoints `GET/POST /admin/clients`, `GET /admin/clients/{id}`. Intake queue accepts an optional `client_id` query param.
+- Frontend client switcher added to the top nav (admin/reviewer only). Cookie-driven `X-Client-Id` is forwarded automatically through `apps/web/src/lib/api.ts`.
+- Cross-tenant isolation tests in `apps/api/tests/unit/test_multi_tenant_isolation.py` (not yet executed — local Python env unavailable in this session).
+
 ## Overall status
 
 **Phase 2 complete (`v0.2.0`). Phase 3 (Tech Debt service) next.**

@@ -4,6 +4,7 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     role?: "admin" | "reviewer" | "client";
     accessToken?: string;
+    error?: string;
   }
   interface User extends DefaultUser {
     role?: "admin" | "reviewer" | "client";
@@ -19,5 +20,6 @@ declare module "next-auth/jwt" {
     accessToken?: string;
     refreshToken?: string;
     accessExpiresAt?: string;
+    error?: string;
   }
 }

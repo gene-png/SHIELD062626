@@ -49,6 +49,19 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker]]:
 
 
 def _register_and_bearer(client: TestClient) -> str:
+    # The first registrant becomes the platform admin (client_id IS NULL).
+    # Intake is a client-facing flow, so burn the admin slot first, then drive
+    # intake as a second, client-role user: post-0013 they're auto-bound to
+    # their own "(pending intake)" client and need no X-Client-Id header.
+    admin = client.post(
+        "/auth/register",
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "Admin",
+        },
+    )
+    assert admin.status_code == 201, admin.text
     r = client.post(
         "/auth/register",
         json={

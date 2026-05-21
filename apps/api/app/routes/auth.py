@@ -28,6 +28,7 @@ from app.config import get_settings
 from app.db.session import get_db
 from app.dependencies import current_user
 from app.models._common import utcnow
+from app.models.client import Client
 from app.models.user import User, UserRole
 from app.schemas.auth import (
     LoginRequest,
@@ -162,6 +163,16 @@ def register(
     is_first_user = _user_count(db) == 0
     role = UserRole.ADMIN if is_first_user else UserRole.CLIENT
 
+    # Multi-tenant onboarding: each client-role registrant gets a fresh
+    # placeholder Client row to anchor their intake flow. The intake wizard
+    # fills in the real organization details and flips intake_completed_at.
+    # Platform admins (first user; future invited admins) stay client_id=NULL.
+    client_for_user: Client | None = None
+    if role == UserRole.CLIENT:
+        client_for_user = Client(legal_name="(pending intake)")
+        db.add(client_for_user)
+        db.flush()
+
     user = User(
         email=email,
         password_hash=password_hash,
@@ -171,9 +182,13 @@ def register(
         phone=body.phone,
         timezone=body.timezone,
         last_login_at=utcnow(),
+        client_id=client_for_user.id if client_for_user is not None else None,
     )
     db.add(user)
     db.flush()
+
+    if client_for_user is not None:
+        client_for_user.primary_poc_user_id = user.id
 
     audit(
         db,

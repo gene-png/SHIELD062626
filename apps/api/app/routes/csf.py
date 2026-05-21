@@ -41,7 +41,7 @@ from app.csf.gap import analyze as analyze_gaps
 from app.csf.maturity import TIER_DEFINITIONS
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
-from app.dependencies import current_user, require_role
+from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -55,6 +55,11 @@ from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
+from app.tenant import (
+    require_csf_assessment_in_tenant,
+    require_deliverable_in_tenant,
+    require_service_in_tenant,
+)
 from app.schemas.csf import (
     CatalogCategory,
     CatalogFunction,
@@ -148,6 +153,7 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> CsfAssessment | No
 def create_csf_service(
     body: CsfServiceCreateRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfServiceResponse:
     if body.kind != ServiceKind.NIST_CSF:
@@ -159,6 +165,7 @@ def create_csf_service(
         kind=ServiceKind.NIST_CSF,
         status=ServiceStatus.IN_PROGRESS,
         title=body.title,
+        client_id=client.id,
         source_request_id=body.source_request_id,
         opened_by=user.id,
     )
@@ -249,18 +256,15 @@ def get_catalog(
 def create_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     prior = _latest_assessment(db, svc.id)
     version = (prior.version + 1) if prior else 1
     assessment = CsfAssessment(
         service_id=svc.id,
+        client_id=client.id,
         version=version,
         status=CsfAssessmentStatus.DRAFT,
     )
@@ -272,6 +276,7 @@ def create_assessment(
         db.add(
             CsfAnswer(
                 assessment_id=assessment.id,
+                client_id=client.id,
                 subcategory_code=sc.code,
             )
         )
@@ -296,14 +301,10 @@ def create_assessment(
 def latest_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     assessment = _latest_assessment(db, svc.id)
     if assessment is None:
         raise HTTPException(
@@ -334,6 +335,7 @@ def patch_answer(
     answer_id: uuid.UUID,
     body: CsfAnswerPatch,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAnswerResponse:
     data = body.model_dump(exclude_unset=True)
@@ -343,7 +345,7 @@ def patch_answer(
             detail="At least one field is required.",
         )
     row = db.get(CsfAnswer, answer_id)
-    if row is None:
+    if row is None or row.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Answer not found.",
@@ -400,14 +402,10 @@ def patch_answer(
 def approve_assessment(
     assessment_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    a = db.get(CsfAssessment, assessment_id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found.",
-        )
+    a = require_csf_assessment_in_tenant(db, assessment_id, client.id)
     if a.status == CsfAssessmentStatus.APPROVED:
         return _serialize_assessment(db, a)
     if a.status == CsfAssessmentStatus.RELEASED:
@@ -444,14 +442,10 @@ def approve_assessment(
 def score_latest(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfScoreSummary:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -502,16 +496,12 @@ def score_latest(
 def gap_analysis(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     target_tier: int = 3,
     top_n: int = 20,
 ) -> GapAnalysisResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -596,6 +586,7 @@ def _write_artifact(
     *,
     storage: StorageBackend,
     user: User,
+    client_id: uuid.UUID,
     filename: str,
     mime_type: str,
     data: bytes,
@@ -605,6 +596,7 @@ def _write_artifact(
     key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
+        client_id=client_id,
         title=filename,
         file_storage_key=key,
         mime_type=mime_type,
@@ -628,15 +620,11 @@ def _write_artifact(
 def finalize_csf_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     assessment = _latest_assessment(db, svc.id)
     if assessment is None:
         raise HTTPException(
@@ -668,8 +656,7 @@ def finalize_csf_deliverable(
     score = compute_score(tier_map)
     gap = analyze_gaps(tier_map, notes=notes_map)
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    client_name = client.legal_name if client is not None else None
+    client_name = client.legal_name
     if client_name == "(pending intake)":
         client_name = None
 
@@ -710,6 +697,7 @@ def finalize_csf_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=pdf_name,
         mime_type="application/pdf",
         data=pdf_bytes,
@@ -718,6 +706,7 @@ def finalize_csf_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=xlsx_name,
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=xlsx_bytes,
@@ -772,14 +761,10 @@ def finalize_csf_deliverable(
 def release_csf_deliverable(
     deliverable_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliverable not found.",
-        )
+    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
     if deliv.finalized_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -832,14 +817,10 @@ def release_csf_deliverable(
 def latest_csf_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     deliv = db.execute(
         select(Deliverable)
         .where(Deliverable.service_id == svc.id)

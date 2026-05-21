@@ -64,7 +64,20 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker, FixtureProv
     app.dependency_overrides[_storage_dep] = lambda: storage
     app.dependency_overrides[_llm_dep] = lambda: llm
 
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c, TestSession, provider
 
 
@@ -152,6 +165,7 @@ def test_phase3_acceptance_gate(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     admin_bearer = admin["tokens"]["access_token"]
     client_bearer = client["tokens"]["access_token"]
 
@@ -207,6 +221,7 @@ def test_unreleased_deliverable_invisible_to_client(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     admin_bearer = admin["tokens"]["access_token"]
     client_bearer = client["tokens"]["access_token"]
 
@@ -277,6 +292,7 @@ def test_re_release_supersedes_prior_in_client_list(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     admin_bearer = admin["tokens"]["access_token"]
     client_bearer = client["tokens"]["access_token"]
 

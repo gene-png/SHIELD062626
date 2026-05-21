@@ -59,7 +59,20 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker, FixtureProv
     app.dependency_overrides[_storage_dep] = lambda: storage
     app.dependency_overrides[_llm_dep] = lambda: client
 
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c, TestSession, provider
 
 
@@ -107,6 +120,7 @@ def test_client_role_cannot_open_service(app_client) -> None:
     c, _, _ = app_client
     _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     r = c.post(
         "/tech-debt/services",
         headers={"Authorization": f"Bearer {client['tokens']['access_token']}"},
@@ -290,6 +304,7 @@ def test_latest_capability_list_admin_only(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     a_bearer = admin["tokens"]["access_token"]
     c_bearer = client["tokens"]["access_token"]
     provider.register(
@@ -440,6 +455,7 @@ def test_patch_capability_item_rejects_client_role(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     _, item_id = _create_list_with_item(c, admin["tokens"]["access_token"], provider)
     r = c.patch(
         f"/tech-debt/capability-items/{item_id}",
@@ -589,6 +605,7 @@ def test_consolidation_plan_summary_rejects_client_role(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     svc_id, _ = _seed_three_item_list(c, admin["tokens"]["access_token"], provider)
     r = c.get(
         f"/tech-debt/services/{svc_id}/consolidation-plan",

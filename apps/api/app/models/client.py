@@ -1,9 +1,11 @@
-"""Client - the singleton organization served by this deployment.
+"""Client - a tenant (organization) served by this deployment.
 
-Master Spec §11: single-tenant deployments hold exactly one client row.
-We still keep the table because every other business table carries a
-`client_id` FK to it (Master Spec §11.1: keep client_id on every row so
-future multi-tenant ambitions don't require a schema migration).
+Originally Master Spec §11 was single-tenant (one client row per deployment).
+Migration 0013 turned this into a multi-tenant model: many clients per
+deployment, every business row tagged with its `client_id`. Platform
+admin/reviewer users have `User.client_id = NULL` and can switch between
+clients via the X-Client-Id request header; client-role users are pinned
+to their `User.client_id`.
 """
 
 from __future__ import annotations

@@ -56,6 +56,11 @@ class ServiceRequest(UUIDPKMixin, TimestampMixin, Base):
         SAEnum(ServiceType, name="service_type", native_enum=False, length=32),
         nullable=False,
     )
+    # Multi-tenant scope. Set at intake submit; copied onto the Service when
+    # an admin opens the engagement.
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     requested_by: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,

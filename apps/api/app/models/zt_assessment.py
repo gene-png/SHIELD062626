@@ -56,8 +56,8 @@ class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
     service_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("services.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     framework: Mapped[ZtFramework] = mapped_column(
@@ -95,8 +95,8 @@ class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
     assessment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("zt_assessments.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     # Framework-prefixed code (e.g. "CISA.ID.01" or "DOD.USR.01").

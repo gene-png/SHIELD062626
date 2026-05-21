@@ -52,6 +52,9 @@ def test_migration_creates_service_requests_table(migrated_sqlite: str) -> None:
 def test_service_request_roundtrip(migrated_sqlite: str) -> None:
     engine = create_engine(migrated_sqlite)
     with Session(engine) as db:
+        client = Client(legal_name="Atlas Defense")
+        db.add(client)
+        db.flush()
         user = User(
             email="poc@example.com",
             password_hash="x" * 64,
@@ -62,6 +65,7 @@ def test_service_request_roundtrip(migrated_sqlite: str) -> None:
         db.flush()
         sr = ServiceRequest(
             service_type=ServiceType.NIST_CSF,
+            client_id=client.id,
             requested_by=user.id,
             notes="Initial intake — interested in NIST CSF.",
         )
@@ -82,16 +86,21 @@ def test_consultation_service_type_supported(migrated_sqlite: str) -> None:
     """The 'I'm not sure' path on the intake wizard maps to CONSULTATION."""
     engine = create_engine(migrated_sqlite)
     with Session(engine) as db:
+        client = Client(legal_name="Curious Co")
+        db.add(client)
+        db.flush()
         user = User(
             email="curious@example.com",
             password_hash="x" * 64,
             role=UserRole.CLIENT,
             display_name="Curious",
+            client_id=client.id,
         )
         db.add(user)
         db.flush()
         sr = ServiceRequest(
             service_type=ServiceType.CONSULTATION,
+            client_id=client.id,
             requested_by=user.id,
         )
         db.add(sr)

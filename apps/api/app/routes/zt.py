@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user, require_role
+from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -45,6 +45,11 @@ from app.models.zt_assessment import (
 )
 from app.routes.artifacts import _storage_dep
 from app.schemas.tech_debt import DeliverableResponse
+from app.tenant import (
+    require_deliverable_in_tenant,
+    require_service_in_tenant,
+    require_zt_assessment_in_tenant,
+)
 from app.schemas.zt import (
     CatalogCapability,
     CatalogPillar,
@@ -176,6 +181,7 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> ZtAssessment | Non
 def create_zt_service(
     body: ZtServiceCreateRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtServiceResponse:
     framework = _framework_for_kind(body.kind)
@@ -183,6 +189,7 @@ def create_zt_service(
         kind=body.kind,
         status=ServiceStatus.IN_PROGRESS,
         title=body.title,
+        client_id=client.id,
         source_request_id=body.source_request_id,
         opened_by=user.id,
     )
@@ -270,10 +277,11 @@ def get_catalog(
 def create_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zero Trust service not found.",
@@ -285,6 +293,7 @@ def create_assessment(
     version = (prior.version + 1) if prior else 1
     assessment = ZtAssessment(
         service_id=svc.id,
+        client_id=client.id,
         framework=framework,
         version=version,
         status=ZtAssessmentStatus.DRAFT,
@@ -295,6 +304,7 @@ def create_assessment(
         db.add(
             ZtAnswer(
                 assessment_id=assessment.id,
+                client_id=client.id,
                 capability_code=cap.code,
             )
         )
@@ -323,14 +333,10 @@ def create_assessment(
 def latest_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -359,6 +365,7 @@ def patch_answer(
     answer_id: uuid.UUID,
     body: ZtAnswerPatch,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtAnswerResponse:
     data = body.model_dump(exclude_unset=True)
@@ -368,7 +375,7 @@ def patch_answer(
             detail="At least one field is required.",
         )
     row = db.get(ZtAnswer, answer_id)
-    if row is None:
+    if row is None or row.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Answer not found.",
@@ -422,14 +429,10 @@ def patch_answer(
 def approve_assessment(
     assessment_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtAssessmentResponse:
-    a = db.get(ZtAssessment, assessment_id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found.",
-        )
+    a = require_zt_assessment_in_tenant(db, assessment_id, client.id)
     if a.status == ZtAssessmentStatus.APPROVED:
         return _serialize_assessment(db, a)
     if a.status == ZtAssessmentStatus.RELEASED:
@@ -466,10 +469,11 @@ def approve_assessment(
 def score_latest(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ZtScoreSummary:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zero Trust service not found.",
@@ -525,12 +529,13 @@ def score_latest(
 def gap_analysis(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     target_stage: int = 3,
     top_n: int = 20,
 ) -> GapAnalysisResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zero Trust service not found.",
@@ -628,6 +633,7 @@ def _write_artifact(
     *,
     storage: StorageBackend,
     user: User,
+    client_id: uuid.UUID,
     filename: str,
     mime_type: str,
     data: bytes,
@@ -637,6 +643,7 @@ def _write_artifact(
     key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
+        client_id=client_id,
         title=filename,
         file_storage_key=key,
         mime_type=mime_type,
@@ -660,11 +667,12 @@ def _write_artifact(
 def finalize_zt_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zero Trust service not found.",
@@ -701,8 +709,7 @@ def finalize_zt_deliverable(
     score = compute_score(cat_fw, stage_map)
     gap = analyze_gaps(cat_fw, stage_map, notes=notes_map)
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    client_name = client.legal_name if client is not None else None
+    client_name = client.legal_name
     if client_name == "(pending intake)":
         client_name = None
 
@@ -744,6 +751,7 @@ def finalize_zt_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=pdf_name,
         mime_type="application/pdf",
         data=pdf_bytes,
@@ -752,6 +760,7 @@ def finalize_zt_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=xlsx_name,
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=xlsx_bytes,
@@ -806,14 +815,10 @@ def finalize_zt_deliverable(
 def release_zt_deliverable(
     deliverable_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliverable not found.",
-        )
+    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
     if deliv.finalized_at is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -863,10 +868,11 @@ def release_zt_deliverable(
 def latest_zt_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Zero Trust service not found.",

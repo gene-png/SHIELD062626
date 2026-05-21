@@ -44,7 +44,20 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c
 
 
@@ -121,6 +134,7 @@ def test_client_cannot_open_attack_service(app_client) -> None:
     c = app_client
     _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     r = c.post(
         "/attack/services",
         headers={"Authorization": f"Bearer {client['tokens']['access_token']}"},
@@ -225,6 +239,7 @@ def test_patch_coverage_rejects_client_role(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
     svc_id = _open_service(c, bearer_admin)
@@ -313,6 +328,7 @@ def test_heatmap_admin_only(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
     svc_id = _open_service(c, bearer_admin)
@@ -358,6 +374,7 @@ def test_latest_assessment_admin_only_until_released(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
     svc_id = _open_service(c, bearer_admin)

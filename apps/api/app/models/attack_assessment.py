@@ -46,8 +46,8 @@ class AttackAssessment(UUIDPKMixin, TimestampMixin, Base):
     service_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("services.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -81,8 +81,8 @@ class AttackCoverage(UUIDPKMixin, TimestampMixin, Base):
     assessment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("attack_assessments.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     # Technique code from app.attack.catalog (e.g. "T1003" or "T1003.001").

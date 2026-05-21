@@ -49,6 +49,8 @@ class UserResponse(BaseModel):
     email_verified_at: datetime | None
     last_login_at: datetime | None
     created_at: datetime
+    # Nullable for platform admin/reviewer; set for client-role users.
+    client_id: uuid.UUID | None = None
 
 
 class RegisterResponse(BaseModel):

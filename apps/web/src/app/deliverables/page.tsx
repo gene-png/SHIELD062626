@@ -12,7 +12,8 @@ import {
 
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
-import { apiFetch } from "@/lib/api";
+import { SelectClientPrompt } from "@/components/site/SelectClientPrompt";
+import { ApiError, apiFetch } from "@/lib/api";
 import { authOptions } from "@/lib/auth/options";
 import type { ReleasedDeliverableList } from "@/lib/deliverables/types";
 
@@ -32,13 +33,20 @@ export default async function DeliverablesPage(): Promise<JSX.Element> {
   }
   let list: ReleasedDeliverableList = { items: [] };
   let loadError: string | null = null;
+  let needsClient = false;
   try {
     list = await apiFetch<ReleasedDeliverableList>("/deliverables", {
       bearer: session.accessToken,
     });
   } catch (err) {
-    loadError =
-      err instanceof Error ? err.message : "Failed to load deliverables.";
+    // Admin/reviewer with no active client selected: backend returns 400
+    // "X-Client-Id required". Surface the client picker instead of a raw error.
+    if (err instanceof ApiError && err.status === 400) {
+      needsClient = true;
+    } else {
+      loadError =
+        err instanceof Error ? err.message : "Failed to load deliverables.";
+    }
   }
   return (
     <>
@@ -57,7 +65,9 @@ export default async function DeliverablesPage(): Promise<JSX.Element> {
             is the underlying inventory with disposition decisions.
           </p>
         </header>
-        {loadError ? (
+        {needsClient ? (
+          <SelectClientPrompt action="view deliverables" />
+        ) : loadError ? (
           <Card>
             <CardHeader>
               <CardTitle>Couldn&apos;t load deliverables</CardTitle>

@@ -23,12 +23,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies import current_user
+from app.dependencies import current_client, current_user
 from app.models.artifact import Artifact
+from app.models.client import Client
 from app.models.deliverable import Deliverable
 from app.models.service import Service
 from app.models.user import User, UserRole
 from app.schemas.tech_debt import DeliverableResponse
+from app.tenant import require_deliverable_in_tenant
 
 router = APIRouter(prefix="/deliverables", tags=["deliverables"])
 
@@ -84,9 +86,14 @@ def _is_visible_to(user: User, deliv: Deliverable) -> bool:
 )
 def list_deliverables(
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableListResponse:
-    stmt = select(Deliverable, Service).join(Service, Service.id == Deliverable.service_id)
+    stmt = (
+        select(Deliverable, Service)
+        .join(Service, Service.id == Deliverable.service_id)
+        .where(Service.client_id == client.id)
+    )
     if user.role == UserRole.CLIENT:
         stmt = stmt.where(Deliverable.released_to_client_at.is_not(None))
     # Hide superseded versions in the list; admins can still fetch them
@@ -126,10 +133,11 @@ def list_deliverables(
 def deliverable_detail(
     deliverable_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None or not _is_visible_to(user, deliv):
+    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
+    if not _is_visible_to(user, deliv):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deliverable not found.",

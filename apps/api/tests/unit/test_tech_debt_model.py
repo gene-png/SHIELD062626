@@ -11,6 +11,7 @@ from alembic.config import Config
 from app.models import (
     CapabilityItem,
     CapabilityList,
+    Client,
     Deliverable,
     Service,
     ServiceKind,
@@ -62,10 +63,15 @@ def test_service_capability_deliverable_roundtrip(migrated_sqlite: str) -> None:
         db.add(admin)
         db.flush()
 
+        client = Client(legal_name="Atlas Defense")
+        db.add(client)
+        db.flush()
+
         svc = Service(
             kind=ServiceKind.TECH_DEBT,
             status=ServiceStatus.IN_PROGRESS,
             title="Atlas Defense — Tech Debt Review",
+            client_id=client.id,
             opened_by=admin.id,
         )
         db.add(svc)
@@ -116,9 +122,13 @@ def test_capability_list_service_version_is_unique(migrated_sqlite: str) -> None
         )
         db.add(admin)
         db.flush()
+        client = Client(legal_name="x co")
+        db.add(client)
+        db.flush()
         svc = Service(
             kind=ServiceKind.TECH_DEBT,
             title="x",
+            client_id=client.id,
             opened_by=admin.id,
         )
         db.add(svc)

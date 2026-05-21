@@ -19,6 +19,11 @@ dependencies = [
     "httpx>=0.27",
     "structlog>=24.4",
     "boto3>=1.35",
+    # Deliverable rendering (app/*/exporters.py): PDF via reportlab, XLSX via
+    # openpyxl. Imported lazily inside the finalize endpoints, so a missing
+    # declaration only surfaces as a 500 when a deliverable is rendered.
+    "reportlab>=4.2",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

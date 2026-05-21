@@ -10,9 +10,10 @@ Master Spec §15 Phase 2:
     audit row, which the queue surfaces by querying it).
   - All copy in plain English (UI concern; API returns structured data).
 
-Single-tenant deployments have exactly one `client` row (Master Spec §2).
-GET /intake/me upserts that row on first call so the wizard always has a
-target to PATCH against. Subsequent PATCH/submit operate on the same row.
+Multi-tenant (post-0013): a CLIENT-role user is bound to their own
+`client_id` at registration. Intake reads/writes that specific Client
+row. Admins/reviewers (platform-wide) can run intake on a chosen client
+by passing X-Client-Id (the current_client dependency enforces this).
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user
+from app.dependencies import current_client, current_user
 from app.models._common import utcnow
 from app.models.client import Client
 from app.models.service_request import ServiceRequest, ServiceType
@@ -63,21 +64,6 @@ def _validate_targets(item: ServiceRequestInput) -> None:
 router = APIRouter(prefix="/intake", tags=["intake"])
 
 
-def _singleton_client(db: Session) -> Client:
-    """Return the deployment's singleton client row, creating it if missing.
-
-    Per Master Spec §2 (single-tenant), there is exactly one client per
-    deployment. The first call to /intake creates a placeholder so the
-    wizard's auto-save can PATCH it without a separate "create" step.
-    """
-    row = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    if row is None:
-        row = Client(legal_name="(pending intake)")
-        db.add(row)
-        db.flush()
-    return row
-
-
 def _apply_patch_to_client(client: Client, patch: IntakePatchRequest) -> None:
     if patch.client is None:
         return
@@ -110,15 +96,19 @@ def _apply_profile_fields(user: User, fields: dict[str, str | None]) -> None:
 )
 def read_intake(
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
-    client = _singleton_client(db)
     requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )
-    db.commit()
     return IntakeStateResponse(
         client=client,
         service_requests=list(requests),
@@ -134,9 +124,9 @@ def read_intake(
 def patch_intake(
     body: IntakePatchRequest,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
-    client = _singleton_client(db)
     if client.intake_completed_at is not None:
         # Allow edits but reset the completion stamp so the admin queue
         # can re-surface the row as updated. The spec doesn't forbid
@@ -158,7 +148,12 @@ def patch_intake(
     db.refresh(user)
 
     requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )
@@ -178,6 +173,7 @@ def patch_intake(
 def submit_intake(
     body: IntakeSubmitRequest,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
     if not body.client.legal_name or body.client.legal_name == "(pending intake)":
@@ -186,7 +182,6 @@ def submit_intake(
             detail="Organization legal name is required to submit intake.",
         )
 
-    client = _singleton_client(db)
     _apply_patch_to_client(
         client,
         IntakePatchRequest(client=body.client),
@@ -210,6 +205,7 @@ def submit_intake(
         _validate_targets(item)
         sr = ServiceRequest(
             service_type=item.service_type,
+            client_id=client.id,
             requested_by=user.id,
             notes=item.notes,
             deadline=item.deadline,
@@ -251,7 +247,12 @@ def submit_intake(
     db.refresh(client)
 
     all_requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import Link from "next/link";
 
 import { authOptions } from "@/lib/auth/options";
+import { ClientSwitcher } from "@/components/site/ClientSwitcher";
 import { SignOutButton } from "@/components/site/SignOutButton";
 
 export async function PublicHeader(): Promise<JSX.Element> {
@@ -41,6 +42,9 @@ export async function PublicHeader(): Promise<JSX.Element> {
                 >
                   Admin queue
                 </Link>
+              ) : null}
+              {role === "admin" || role === "reviewer" ? (
+                <ClientSwitcher />
               ) : null}
               <span className="text-xs text-ink-tertiary">
                 {session.user?.email}

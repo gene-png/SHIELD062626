@@ -4,6 +4,16 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 
 ## [Unreleased]
 
+### Multi-tenant: allow many clients per deployment — 2026-05-21
+
+- Added `client_id` to `services`, `service_requests`, `artifacts` (Alembic 0013); made `client_id` `NOT NULL` on `csf_assessments`, `csf_answers`, `zt_assessments`, `zt_answers`, `attack_assessments`, `attack_coverage` after backfill from the deployment's existing singleton client (or a placeholder `(legacy backfill)` client when business data exists but no `client` row does).
+- `User.client_id` stays nullable (platform admin/reviewer = `NULL`; client-role users get a fresh client created and bound at registration). Indexed for filtering speed.
+- New FastAPI dependency `current_client` resolves the active tenant per request: client-role users are pinned to `user.client_id`; admin/reviewer users pick a tenant via the `X-Client-Id` header.
+- `app/tenant.py` introduces `require_*_in_tenant` helpers used by every data route (CSF, ZT, ATT&CK, tech-debt, artifacts, deliverables); cross-tenant id-based access returns 404 with no existence oracle.
+- New admin endpoints: `GET/POST /admin/clients`, `GET /admin/clients/{id}`. `GET /admin/intake-queue` now optional-filters by `client_id` and shows cross-tenant rows by default.
+- Frontend: added `ClientSwitcher` to the top nav for admin/reviewer roles; the selection is persisted in a `shield_active_client_id` cookie (`httpOnly`, `SameSite=Lax`) and `lib/api.ts` forwards it as `X-Client-Id` to the FastAPI backend on every proxied call. New route handler `POST /api/active-client` sets the cookie.
+- See DECISIONS.md D-015 for the architectural rationale.
+
 ### Opening commit — 2026-05-19
 
 - Repo scaffolded per Master Spec §16 and AI Prompt §8.

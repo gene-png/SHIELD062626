@@ -5,9 +5,17 @@
  * client never talks directly to the API - calls flow through this module
  * inside Server Components / Server Actions / route handlers. That keeps
  * the API host name and the Bearer token off the wire to the browser.
+ *
+ * Multi-tenant: if the request has a `shield_active_client_id` cookie set
+ * by the client switcher, we forward it as `X-Client-Id` so the backend
+ * scopes queries to that tenant for admin/reviewer users.
  */
 
+import { cookies } from "next/headers";
+
 const BASE_URL = process.env.API_BASE_URL ?? "http://api:8000";
+
+export const ACTIVE_CLIENT_COOKIE = "shield_active_client_id";
 
 type Json = Record<string, unknown> | unknown[];
 
@@ -17,6 +25,8 @@ export interface ApiOptions {
   bearer?: string;
   headers?: Record<string, string>;
   cache?: RequestCache;
+  /** Override or suppress the cookie-derived X-Client-Id. Pass empty string to suppress. */
+  clientId?: string;
 }
 
 export class ApiError extends Error {
@@ -40,6 +50,22 @@ export async function apiFetch<T>(
   };
   if (opts.bearer) {
     headers.Authorization = `Bearer ${opts.bearer}`;
+  }
+  // Forward the active client id for tenant scoping. Explicit clientId
+  // option wins; falling back to the cookie set by the client switcher.
+  let activeClient: string | undefined;
+  if (opts.clientId !== undefined) {
+    activeClient = opts.clientId || undefined;
+  } else {
+    try {
+      activeClient = cookies().get(ACTIVE_CLIENT_COOKIE)?.value;
+    } catch {
+      // cookies() throws if called outside a request scope - safe to ignore.
+      activeClient = undefined;
+    }
+  }
+  if (activeClient) {
+    headers["X-Client-Id"] = activeClient;
   }
   let body: BodyInit | undefined;
   if (opts.body !== undefined) {

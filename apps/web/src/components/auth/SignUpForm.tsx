@@ -59,7 +59,10 @@ export function SignUpForm(): JSX.Element {
       router.replace("/sign-in?registered=1");
       return;
     }
-    router.replace("/");
+    // Invalidate the cached (logged-out) RSC tree so the header/nav reflect the
+    // new session, then drop the client straight into the engagement intake.
+    router.refresh();
+    router.replace("/intake");
   }
 
   return (
