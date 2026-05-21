@@ -21,6 +21,9 @@ export interface AdminServiceRequestRow {
   requested_by: AdminUserSummary;
   notes: string | null;
   deadline: string | null;
+  csf_target_tier: number | null;
+  csf_profile: string | null;
+  zt_target_stage: number | null;
   fulfilled_service_id: string | null;
   declined_at: string | null;
   declined_reason: string | null;

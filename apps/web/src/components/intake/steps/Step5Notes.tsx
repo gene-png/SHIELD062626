@@ -7,7 +7,11 @@ import { Dropzone, EmptyArtifactsHint } from "../Dropzone";
 import { RedactionDisclosure } from "../RedactionDisclosure";
 import { type ArtifactSummary, listArtifacts } from "@/lib/intake/artifacts";
 import {
+  CSF_PROFILES,
+  CSF_TARGET_TIERS,
   SERVICE_LABELS,
+  ZT_TARGET_STAGES,
+  type CsfProfile,
   type IntakeStateResponse,
   type ServiceRequestInput,
   type ServiceType,
@@ -149,6 +153,99 @@ export function Step5Notes({
               >
                 {SERVICE_LABELS[svc]}
               </h4>
+              {svc === "nist_csf" ||
+              svc === "zero_trust_cisa" ||
+              svc === "zero_trust_dod" ? (
+                <div className="mt-3 rounded-md border border-border-subtle bg-surface-sunken p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-brand-500">
+                    Assessment target — required
+                  </p>
+                  <p className="mt-1 text-xs text-ink-secondary">
+                    Tell us the maturity you&apos;re aiming for. Your consultant
+                    validates this rather than scoring it from scratch.
+                  </p>
+                  <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {svc === "nist_csf" ? (
+                      <>
+                        <Field
+                          id={`svc-${svc}-tier`}
+                          label="Target maturity tier *"
+                        >
+                          <select
+                            id={`svc-${svc}-tier`}
+                            value={input.csf_target_tier ?? ""}
+                            onChange={(e) =>
+                              update(svc, {
+                                csf_target_tier: e.target.value
+                                  ? Number(e.target.value)
+                                  : undefined,
+                              })
+                            }
+                            className={inputClasses}
+                          >
+                            <option value="">Select a tier…</option>
+                            {CSF_TARGET_TIERS.map((t) => (
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field
+                          id={`svc-${svc}-profile`}
+                          label="CSF profile *"
+                          hint="FIPS-199 impact band."
+                        >
+                          <select
+                            id={`svc-${svc}-profile`}
+                            value={input.csf_profile ?? ""}
+                            onChange={(e) =>
+                              update(svc, {
+                                csf_profile: e.target.value
+                                  ? (e.target.value as CsfProfile)
+                                  : undefined,
+                              })
+                            }
+                            className={inputClasses}
+                          >
+                            <option value="">Select a profile…</option>
+                            {CSF_PROFILES.map((p) => (
+                              <option key={p.value} value={p.value}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      </>
+                    ) : (
+                      <Field
+                        id={`svc-${svc}-stage`}
+                        label="Target maturity stage *"
+                      >
+                        <select
+                          id={`svc-${svc}-stage`}
+                          value={input.zt_target_stage ?? ""}
+                          onChange={(e) =>
+                            update(svc, {
+                              zt_target_stage: e.target.value
+                                ? Number(e.target.value)
+                                : undefined,
+                            })
+                          }
+                          className={inputClasses}
+                        >
+                          <option value="">Select a stage…</option>
+                          {ZT_TARGET_STAGES[svc].map((s) => (
+                            <option key={s.value} value={s.value}>
+                              {s.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field
                   id={`svc-${svc}-notes`}

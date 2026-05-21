@@ -23,9 +23,6 @@ export default function HomePage() {
             <StatusPill tone="success" withDot>
               WCAG 2.1 AA
             </StatusPill>
-            <StatusPill tone="neutral" withDot>
-              Single-tenant per engagement
-            </StatusPill>
           </div>
           <h2
             id="trust-heading"

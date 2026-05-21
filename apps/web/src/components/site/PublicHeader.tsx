@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import Link from "next/link";
 
 import { authOptions } from "@/lib/auth/options";
+import { SignOutButton } from "@/components/site/SignOutButton";
 
 export async function PublicHeader(): Promise<JSX.Element> {
   const session = await getServerSession(authOptions);
@@ -44,6 +45,7 @@ export async function PublicHeader(): Promise<JSX.Element> {
               <span className="text-xs text-ink-tertiary">
                 {session.user?.email}
               </span>
+              <SignOutButton />
             </>
           ) : (
             <>

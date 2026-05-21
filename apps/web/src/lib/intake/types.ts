@@ -31,6 +31,8 @@ export interface ClientProfileResponse {
   intake_completed_at: string | null;
 }
 
+export type CsfProfile = "LOW" | "MOD" | "HIGH";
+
 export interface ServiceRequestResponse {
   id: string;
   service_type: ServiceType;
@@ -38,6 +40,9 @@ export interface ServiceRequestResponse {
   requested_at: string;
   notes: string | null;
   deadline: string | null;
+  csf_target_tier: number | null;
+  csf_profile: string | null;
+  zt_target_stage: number | null;
   fulfilled_service_id: string | null;
   declined_at: string | null;
   declined_reason: string | null;
@@ -77,6 +82,9 @@ export interface ServiceRequestInput {
   service_type: ServiceType;
   notes?: string;
   deadline?: string;
+  csf_target_tier?: number;
+  csf_profile?: CsfProfile;
+  zt_target_stage?: number;
 }
 
 export interface IntakeSubmitRequest {
@@ -96,6 +104,55 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   attack_coverage: "MITRE ATT&CK Coverage Mapping",
   consultation: "I'm not sure — start with a consultation",
 };
+
+/**
+ * Client-set assessment targets. Labels mirror the backend source of truth
+ * (apps/api/app/csf/maturity.py, apps/api/app/zt/maturity.py). Tier/Stage 1 is
+ * the floor, so a client only ever targets 2-4.
+ */
+export const CSF_TARGET_TIERS: ReadonlyArray<{ value: number; label: string }> =
+  [
+    { value: 2, label: "Tier 2 · Risk Informed" },
+    { value: 3, label: "Tier 3 · Repeatable" },
+    { value: 4, label: "Tier 4 · Adaptive" },
+  ];
+
+export const CSF_PROFILES: ReadonlyArray<{ value: CsfProfile; label: string }> =
+  [
+    { value: "LOW", label: "Low impact" },
+    { value: "MOD", label: "Moderate impact" },
+    { value: "HIGH", label: "High impact" },
+  ];
+
+export const ZT_TARGET_STAGES: Record<
+  "zero_trust_cisa" | "zero_trust_dod",
+  ReadonlyArray<{ value: number; label: string }>
+> = {
+  zero_trust_cisa: [
+    { value: 2, label: "Stage 2 · Initial" },
+    { value: 3, label: "Stage 3 · Advanced" },
+    { value: 4, label: "Stage 4 · Optimal" },
+  ],
+  zero_trust_dod: [
+    { value: 2, label: "Stage 2 · Target" },
+    { value: 3, label: "Stage 3 · Advanced" },
+    { value: 4, label: "Stage 4 · Optimal" },
+  ],
+};
+
+/** True when `svc` needs client targets that `input` hasn't supplied yet. */
+export function hasMissingTargets(
+  svc: ServiceType,
+  input: ServiceRequestInput | undefined,
+): boolean {
+  if (svc === "nist_csf") {
+    return !input?.csf_target_tier || !input?.csf_profile;
+  }
+  if (svc === "zero_trust_cisa" || svc === "zero_trust_dod") {
+    return !input?.zt_target_stage;
+  }
+  return false;
+}
 
 export const WIZARD_STEPS = [
   { key: "services", label: "Services" },

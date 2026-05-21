@@ -9,6 +9,7 @@ import { fetchIntake, submitIntake } from "@/lib/intake/client";
 import {
   WIZARD_STEPS,
   type ClientProfilePatch,
+  type CsfProfile,
   type IntakePatchRequest,
   type IntakeStateResponse,
   type ServiceRequestInput,
@@ -58,6 +59,21 @@ export function IntakeWizard(): JSX.Element {
       .then((s) => {
         if (cancelled) return;
         setState(s);
+        // Hydrate per-service inputs from any existing requests so re-edits
+        // keep notes/deadline/targets (and so target validation passes after
+        // a reload of an in-progress intake).
+        const inputs = {} as Record<ServiceType, ServiceRequestInput>;
+        for (const sr of s.service_requests) {
+          inputs[sr.service_type] = {
+            service_type: sr.service_type,
+            notes: sr.notes ?? undefined,
+            deadline: sr.deadline ?? undefined,
+            csf_target_tier: sr.csf_target_tier ?? undefined,
+            csf_profile: (sr.csf_profile as CsfProfile | null) ?? undefined,
+            zt_target_stage: sr.zt_target_stage ?? undefined,
+          };
+        }
+        setServiceInputs(inputs);
         if (s.intake_completed_at) setStep("review");
       })
       .catch((err) => {

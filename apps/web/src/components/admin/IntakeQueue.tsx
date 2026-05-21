@@ -14,7 +14,34 @@ import {
 
 import { fetchIntakeQueue } from "@/lib/admin/client";
 import type { AdminIntakeQueueResponse } from "@/lib/admin/types";
-import { SERVICE_LABELS, type ServiceType } from "@/lib/intake/types";
+import {
+  CSF_PROFILES,
+  CSF_TARGET_TIERS,
+  SERVICE_LABELS,
+  ZT_TARGET_STAGES,
+  type ServiceType,
+} from "@/lib/intake/types";
+
+/** The maturity target the client set at intake, formatted for display. */
+function clientTarget(
+  s: AdminIntakeQueueResponse["service_requests"][number],
+): string | null {
+  if (s.service_type === "nist_csf") {
+    const tier = CSF_TARGET_TIERS.find(
+      (t) => t.value === s.csf_target_tier,
+    )?.label;
+    const profile = CSF_PROFILES.find((p) => p.value === s.csf_profile)?.label;
+    return [tier, profile].filter(Boolean).join(" · ") || null;
+  }
+  if (s.service_type === "zero_trust_cisa" || s.service_type === "zero_trust_dod") {
+    return (
+      ZT_TARGET_STAGES[s.service_type].find(
+        (x) => x.value === s.zt_target_stage,
+      )?.label ?? null
+    );
+  }
+  return null;
+}
 
 function row(label: string, value: string | null | undefined): JSX.Element {
   return (
@@ -103,9 +130,7 @@ export function IntakeQueue(): JSX.Element {
             Intake queue
           </h1>
           <p className="max-w-prose text-sm text-ink-secondary">
-            Single-tenant deployment: one client, one intake. The queue reflects
-            exactly what the client entered. Phase 3 adds the workflow surfaces
-            (attach reviewer, mark final, release deliverable).
+            The queue reflects exactly what the client entered during intake.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -207,6 +232,9 @@ export function IntakeQueue(): JSX.Element {
                   <CardBody>
                     <dl>
                       {row("Email", s.requested_by.email)}
+                      {clientTarget(s)
+                        ? row("Client target", clientTarget(s))
+                        : null}
                       {row(
                         "Target deadline",
                         s.deadline

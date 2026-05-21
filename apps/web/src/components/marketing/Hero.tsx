@@ -1,6 +1,11 @@
+import { getServerSession } from "next-auth";
 import Link from "next/link";
 
-export function Hero(): JSX.Element {
+import { authOptions } from "@/lib/auth/options";
+
+export async function Hero(): Promise<JSX.Element> {
+  const session = await getServerSession(authOptions);
+  const authed = Boolean(session);
   return (
     <section className="border-b border-border-subtle bg-surface-card">
       <div className="mx-auto max-w-6xl px-6 py-16 sm:py-24">
@@ -18,17 +23,19 @@ export function Hero(): JSX.Element {
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
-            href="/sign-up"
+            href={authed ? "/intake" : "/sign-up"}
             className="rounded-md bg-brand-500 px-5 py-3 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
           >
             Start an engagement
           </Link>
-          <Link
-            href="/sign-in"
-            className="rounded-md border border-border bg-surface-card px-5 py-3 text-sm font-semibold text-ink-primary hover:bg-surface-sunken"
-          >
-            Sign in
-          </Link>
+          {authed ? null : (
+            <Link
+              href="/sign-in"
+              className="rounded-md border border-border bg-surface-card px-5 py-3 text-sm font-semibold text-ink-primary hover:bg-surface-sunken"
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </section>

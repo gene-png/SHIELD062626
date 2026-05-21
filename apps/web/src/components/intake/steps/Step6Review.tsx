@@ -3,11 +3,39 @@
 import { StatusPill } from "@shield/design-system";
 
 import {
+  CSF_PROFILES,
+  CSF_TARGET_TIERS,
+  hasMissingTargets,
   SERVICE_LABELS,
+  ZT_TARGET_STAGES,
   type IntakeStateResponse,
   type ServiceRequestInput,
   type ServiceType,
 } from "@/lib/intake/types";
+
+/** Human-readable summary of the client-set targets for a service, if any. */
+function targetSummary(
+  svc: ServiceType,
+  input: ServiceRequestInput | undefined,
+): string | null {
+  if (svc === "nist_csf") {
+    if (!input?.csf_target_tier && !input?.csf_profile) return null;
+    const tier = CSF_TARGET_TIERS.find(
+      (t) => t.value === input?.csf_target_tier,
+    )?.label;
+    const profile = CSF_PROFILES.find(
+      (p) => p.value === input?.csf_profile,
+    )?.label;
+    return [tier, profile].filter(Boolean).join(" · ") || null;
+  }
+  if (svc === "zero_trust_cisa" || svc === "zero_trust_dod") {
+    return (
+      ZT_TARGET_STAGES[svc].find((s) => s.value === input?.zt_target_stage)
+        ?.label ?? null
+    );
+  }
+  return null;
+}
 
 export interface Step6ReviewProps {
   state: IntakeStateResponse;
@@ -47,6 +75,11 @@ export function Step6Review({
   const picks = (c?.service_interests ?? []) as ServiceType[];
   const legalName =
     c?.legal_name && c.legal_name !== "(pending intake)" ? c.legal_name : null;
+
+  const servicesMissingTargets = picks.filter((svc) =>
+    hasMissingTargets(svc, serviceInputs[svc]),
+  );
+  const targetsIncomplete = servicesMissingTargets.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -118,13 +151,17 @@ export function Step6Review({
           <ul className="mt-4 space-y-3">
             {picks.map((svc) => {
               const input = serviceInputs[svc];
-              if (!input?.notes && !input?.deadline) return null;
+              const target = targetSummary(svc, input);
+              if (!input?.notes && !input?.deadline && !target) return null;
               return (
                 <li key={svc} className="text-sm">
                   <p className="font-medium text-ink-primary">
                     {SERVICE_LABELS[svc]}
                   </p>
-                  {input.deadline ? (
+                  {target ? (
+                    <p className="text-ink-secondary">Target: {target}</p>
+                  ) : null}
+                  {input?.deadline ? (
                     <p className="text-ink-secondary">
                       Target deadline:{" "}
                       {new Date(input.deadline).toLocaleDateString()}
@@ -161,6 +198,17 @@ export function Step6Review({
         </p>
       </section>
 
+      {targetsIncomplete ? (
+        <div
+          role="alert"
+          className="rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning-fg"
+        >
+          Set an assessment target for{" "}
+          {servicesMissingTargets.map((s) => SERVICE_LABELS[s]).join(", ")} in
+          step 5 before submitting.
+        </div>
+      ) : null}
+
       {submitError ? (
         <div
           role="alert"
@@ -173,7 +221,7 @@ export function Step6Review({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={submitting || picks.length === 0 || !legalName}
+        disabled={submitting || picks.length === 0 || !legalName || targetsIncomplete}
         className="self-end rounded-md bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting
