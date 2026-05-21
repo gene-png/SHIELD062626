@@ -44,6 +44,11 @@ export interface ZtWorkspaceProps {
   serviceTitle: string;
 }
 
+/** Clamp a stored target stage to the selectable 2-4 range; default 3. */
+function normalizeTarget(value: number | null | undefined): number {
+  return value === 2 || value === 3 || value === 4 ? value : 3;
+}
+
 function describeError(err: unknown): string {
   if (err instanceof ZtProxyError) {
     const payload = err.payload as
@@ -117,7 +122,10 @@ export function ZtWorkspace({
       const a = await fetchLatestAssessment(serviceId);
       setAssessment(a);
       if (a) {
-        await refreshScoreAndGap(targetStage);
+        // Default the gap target to the client's chosen stage (set at intake).
+        const t = normalizeTarget(a.client_target_stage);
+        setTargetStage(t);
+        await refreshScoreAndGap(t);
         try {
           const d = await fetchLatestDeliverable(serviceId);
           setDeliverable(d);
@@ -128,7 +136,7 @@ export function ZtWorkspace({
     } catch (err) {
       setLoadError(describeError(err));
     }
-  }, [serviceId, framework, refreshScoreAndGap, targetStage]);
+  }, [serviceId, framework, refreshScoreAndGap]);
 
   React.useEffect(() => {
     void initialLoad();
@@ -139,7 +147,9 @@ export function ZtWorkspace({
     try {
       const next = await createAssessment(serviceId);
       setAssessment(next);
-      await refreshScoreAndGap(targetStage);
+      const t = normalizeTarget(next.client_target_stage);
+      setTargetStage(t);
+      await refreshScoreAndGap(t);
     } catch (err) {
       setLoadError(describeError(err));
     } finally {

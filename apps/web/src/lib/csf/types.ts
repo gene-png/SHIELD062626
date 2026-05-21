@@ -56,6 +56,7 @@ export interface CsfAssessment {
   approved_at: string | null;
   approved_by: string | null;
   answers: CsfAnswer[];
+  client_target_tier: number | null;
 }
 
 export interface CsfAnswerPatch {

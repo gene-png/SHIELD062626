@@ -50,6 +50,7 @@ export interface ZtAssessment {
   approved_at: string | null;
   approved_by: string | null;
   answers: ZtAnswer[];
+  client_target_stage: number | null;
 }
 
 export interface ZtAnswerPatch {

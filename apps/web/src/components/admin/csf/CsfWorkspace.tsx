@@ -42,6 +42,11 @@ export interface CsfWorkspaceProps {
   serviceTitle: string;
 }
 
+/** Clamp a stored target tier to the selectable 2-4 range; default 3. */
+function normalizeTarget(value: number | null | undefined): number {
+  return value === 2 || value === 3 || value === 4 ? value : 3;
+}
+
 function describeError(err: unknown): string {
   if (err instanceof CsfProxyError) {
     const payload = err.payload as
@@ -111,7 +116,10 @@ export function CsfWorkspace({
       const a = await fetchLatestAssessment(serviceId);
       setAssessment(a);
       if (a) {
-        await refreshScoreAndGap(targetTier);
+        // Default the gap target to the client's chosen tier (set at intake).
+        const t = normalizeTarget(a.client_target_tier);
+        setTargetTier(t);
+        await refreshScoreAndGap(t);
         try {
           const d = await fetchLatestDeliverable(serviceId);
           setDeliverable(d);
@@ -122,7 +130,7 @@ export function CsfWorkspace({
     } catch (err) {
       setLoadError(describeError(err));
     }
-  }, [serviceId, refreshScoreAndGap, targetTier]);
+  }, [serviceId, refreshScoreAndGap]);
 
   React.useEffect(() => {
     void initialLoad();
@@ -133,7 +141,9 @@ export function CsfWorkspace({
     try {
       const next = await createAssessment(serviceId);
       setAssessment(next);
-      await refreshScoreAndGap(targetTier);
+      const t = normalizeTarget(next.client_target_tier);
+      setTargetTier(t);
+      await refreshScoreAndGap(t);
     } catch (err) {
       setLoadError(describeError(err));
     } finally {
