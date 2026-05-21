@@ -25,6 +25,16 @@ class AdminServiceDetail(BaseModel):
     client_id: uuid.UUID
 
 
+class AdminAiStatus(BaseModel):
+    """AI pipeline readiness. Never includes the API key itself."""
+
+    mode: str
+    provider: str
+    model: str
+    ready: bool
+    detail: str
+
+
 class AdminUserSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -247,6 +247,30 @@ def test_get_service_resolves_owning_client(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_ai_status_reports_fixture_mode(app_client: TestClient) -> None:
+    admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
+    client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
+
+    # Tests run in fixture mode -> AI is not live-ready, and no key leaks.
+    r = app_client.get(
+        "/admin/ai-status", headers={"Authorization": f"Bearer {admin_bearer}"}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "fixture"
+    assert body["ready"] is False
+    assert "api_key" not in body and "anthropic_api_key" not in body
+
+    # Admin-only.
+    assert (
+        app_client.get(
+            "/admin/ai-status", headers={"Authorization": f"Bearer {client_bearer}"}
+        ).status_code
+        == 403
+    )
+
+
+@pytest.mark.unit
 def test_admin_queue_rejects_client_role_with_403(app_client: TestClient) -> None:
     _register(app_client, "admin@example.com")
     client_body = _register(app_client, "client@example.com")

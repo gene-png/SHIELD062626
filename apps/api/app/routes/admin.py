@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.config import get_settings
 from app.db.session import get_db
 from app.dependencies import require_role
 from app.models.artifact import Artifact
@@ -27,6 +28,7 @@ from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
 from app.schemas.admin import (
+    AdminAiStatus,
     AdminArtifactRow,
     AdminClientCreateRequest,
     AdminClientListResponse,
@@ -299,3 +301,48 @@ def get_service(
             detail="Service not found.",
         )
     return AdminServiceDetail.model_validate(svc, from_attributes=True)
+
+
+@router.get(
+    "/ai-status",
+    response_model=AdminAiStatus,
+    summary="AI pipeline readiness (admin)",
+)
+def ai_status(_admin: Annotated[User, _admin_required]) -> AdminAiStatus:
+    """Report whether AI features will actually run a live call.
+
+    `ready` is true only when a real provider call will be made. Fixture mode
+    (and live mode missing its key) report ready=false with a reason. The API
+    key itself is never returned.
+    """
+    s = get_settings()
+    mode = s.shield_llm_mode
+    provider = s.shield_llm_provider
+    model = s.shield_llm_model
+
+    if mode != "live":
+        return AdminAiStatus(
+            mode=mode,
+            provider=provider,
+            model=model,
+            ready=False,
+            detail=(
+                "Running in fixture mode — AI features are disabled. Set "
+                "SHIELD_LLM_MODE=live and ANTHROPIC_API_KEY to enable."
+            ),
+        )
+    if provider == "anthropic" and not s.anthropic_api_key:
+        return AdminAiStatus(
+            mode=mode,
+            provider=provider,
+            model=model,
+            ready=False,
+            detail="Live mode is on but ANTHROPIC_API_KEY is not set.",
+        )
+    return AdminAiStatus(
+        mode=mode,
+        provider=provider,
+        model=model,
+        ready=True,
+        detail=f"Live AI configured ({provider}/{model}).",
+    )
