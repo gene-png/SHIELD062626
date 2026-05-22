@@ -1,6 +1,10 @@
 /** Wire types mirroring apps/api/app/schemas/csf.py. */
 
-export type CsfAssessmentStatus = "draft" | "approved" | "released";
+export type CsfAssessmentStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "released";
 
 export interface CatalogSubcategory {
   code: string;

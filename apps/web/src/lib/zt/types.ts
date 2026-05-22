@@ -1,7 +1,11 @@
 /** Wire types mirroring apps/api/app/schemas/zt.py. */
 
 export type ZtFramework = "cisa_ztmm_2_0" | "dod_ztra";
-export type ZtAssessmentStatus = "draft" | "approved" | "released";
+export type ZtAssessmentStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "released";
 
 export interface CatalogCapability {
   code: string;

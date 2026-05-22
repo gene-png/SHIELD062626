@@ -159,6 +159,72 @@ def test_csf_catalog_tags_profiles_and_assessment_exposes_profile(
 
 
 @pytest.mark.unit
+def test_admin_reviews_edits_and_approves_submitted_csf(
+    app_client: TestClient,
+) -> None:
+    admin = _register(app_client, "admin@example.com")
+    admin_bearer = admin["tokens"]["access_token"]
+    client = _register(app_client, "client@example.com")
+    client_bearer = client["tokens"]["access_token"]
+    client_id = client["user"]["client_id"]
+
+    app_client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+            ],
+        },
+    )
+    state = app_client.get(
+        "/intake", headers={"Authorization": f"Bearer {client_bearer}"}
+    ).json()
+    svc_id = _service_id(state, "nist_csf")
+
+    # Client fills one answer + submits.
+    ch = {"Authorization": f"Bearer {client_bearer}"}
+    a = app_client.get(f"/csf/services/{svc_id}/self-assessment", headers=ch).json()
+    answer_id = a["answers"][0]["id"]
+    app_client.patch(
+        f"/csf/self-assessment/answers/{answer_id}", headers=ch, json={"maturity_tier": 1}
+    )
+    app_client.post(
+        f"/csf/services/{svc_id}/self-assessment/submit", headers=ch, json={}
+    )
+
+    # Admin acts within the client's tenant.
+    ah = {"Authorization": f"Bearer {admin_bearer}", "X-Client-Id": client_id}
+    latest = app_client.get(
+        f"/csf/services/{svc_id}/assessments/latest", headers=ah
+    )
+    assert latest.status_code == 200, latest.text
+    assessment = latest.json()
+    assert assessment["status"] == "submitted"
+
+    # Admin can edit a submitted assessment (review/correct client inputs).
+    r = app_client.patch(
+        f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 2}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["maturity_tier"] == 2
+
+    # Admin approves the client's submission (submitted -> approved).
+    r = app_client.post(
+        f"/csf/assessments/{assessment['id']}/approve", headers=ah
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "approved"
+
+    # Now locked for further edits.
+    r = app_client.patch(
+        f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 3}
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.unit
 def test_client_fills_and_submits_zt(app_client: TestClient) -> None:
     bearer, state = _client_submit_intake(app_client)
     h = {"Authorization": f"Bearer {bearer}"}

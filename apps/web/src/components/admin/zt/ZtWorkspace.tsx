@@ -234,15 +234,19 @@ export function ZtWorkspace({
                 assessment.status === "approved" ||
                 assessment.status === "released"
                   ? "success"
-                  : "info"
+                  : assessment.status === "submitted"
+                    ? "warning"
+                    : "info"
               }
               withDot
             >
               {assessment.status === "draft"
                 ? `Draft v${assessment.version}`
-                : assessment.status === "approved"
-                  ? `Approved v${assessment.version}`
-                  : `Released v${assessment.version}`}
+                : assessment.status === "submitted"
+                  ? `Submitted v${assessment.version}`
+                  : assessment.status === "approved"
+                    ? `Approved v${assessment.version}`
+                    : `Released v${assessment.version}`}
             </StatusPill>
           ) : (
             <StatusPill tone="neutral" withDot>
@@ -253,7 +257,11 @@ export function ZtWorkspace({
             <button
               type="button"
               onClick={() => void onApprove()}
-              disabled={busy !== null || assessment.status !== "draft"}
+              disabled={
+                busy !== null ||
+                (assessment.status !== "draft" &&
+                  assessment.status !== "submitted")
+              }
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {assessment.status === "approved"
@@ -262,7 +270,9 @@ export function ZtWorkspace({
                   ? "Released"
                   : busy === "approve"
                     ? "Approving…"
-                    : "Approve"}
+                    : assessment.status === "submitted"
+                      ? "Approve client inputs"
+                      : "Approve"}
             </button>
           ) : (
             <button
@@ -276,6 +286,17 @@ export function ZtWorkspace({
           )}
         </div>
       </header>
+
+      {assessment?.status === "submitted" ? (
+        <div className="rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning-fg">
+          <span className="font-semibold">
+            Client self-assessment submitted.
+          </span>{" "}
+          Review and edit their answers below for completeness and accuracy,
+          then <span className="font-medium">Approve client inputs</span> and
+          send for evaluation in the deliverable section.
+        </div>
+      ) : null}
 
       {loadError ? (
         <Card>

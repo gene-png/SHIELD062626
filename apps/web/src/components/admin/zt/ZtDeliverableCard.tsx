@@ -93,11 +93,12 @@ export function ZtDeliverableCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Deliverable</CardTitle>
+        <CardTitle>Evaluation &amp; report</CardTitle>
         <CardDescription>
-          Render the PDF + XLSX from the approved assessment, then release to
-          the client. Re-finalize on the same day appends <code>_v2</code> and
-          supersedes the prior version.
+          Once you&apos;ve reviewed and approved the inputs, send for evaluation
+          to run the gap analysis and produce the PDF + XLSX report, then
+          release it to the client. Re-running on the same day appends{" "}
+          <code>_v2</code> and supersedes the prior version.
         </CardDescription>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">
@@ -158,10 +159,10 @@ export function ZtDeliverableCard({
             className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {busy === "finalize"
-              ? "Finalizing…"
+              ? "Sending…"
               : deliverable
-                ? "Re-finalize"
-                : "Finalize"}
+                ? "Re-run evaluation"
+                : "Send for evaluation"}
           </button>
           <button
             type="button"
@@ -177,7 +178,7 @@ export function ZtDeliverableCard({
           </button>
           {!canFinalize && !deliverable ? (
             <span className="text-xs text-ink-tertiary">
-              Approve the assessment to enable finalize.
+              Approve the client inputs to enable evaluation.
             </span>
           ) : null}
         </div>
