@@ -13,11 +13,51 @@ import {
   submitSelfAssessment,
 } from "@/lib/csf/client";
 import type {
+  CatalogSubcategory,
   CsfAnswer,
   CsfAnswerPatch,
   CsfAssessment,
   CsfCatalog,
 } from "@/lib/csf/types";
+
+const PROFILE_RANK: Record<string, number> = { LOW: 0, MOD: 1, HIGH: 2 };
+const PROFILE_LABEL: Record<string, string> = {
+  LOW: "Low",
+  MOD: "Moderate",
+  HIGH: "High",
+};
+
+/**
+ * Narrow the catalog to the subcategories that apply at the client's impact
+ * profile (LOW ⊆ MOD ⊆ HIGH), dropping now-empty categories/functions. No
+ * profile -> the full catalog.
+ */
+function filterCatalogByProfile(
+  catalog: CsfCatalog,
+  profile: string | null,
+): CsfCatalog {
+  if (!profile) return catalog;
+  const max = PROFILE_RANK[profile] ?? 2;
+  const inScope = (s: CatalogSubcategory): boolean =>
+    (PROFILE_RANK[s.min_profile] ?? 0) <= max;
+  const functions = catalog.functions
+    .map((fn) => ({
+      ...fn,
+      categories: fn.categories
+        .map((cat) => ({
+          ...cat,
+          subcategories: cat.subcategories.filter(inScope),
+        }))
+        .filter((cat) => cat.subcategories.length > 0),
+    }))
+    .filter((fn) => fn.categories.length > 0);
+  const total = functions.reduce(
+    (n, fn) =>
+      n + fn.categories.reduce((m, c) => m + c.subcategories.length, 0),
+    0,
+  );
+  return { ...catalog, functions, total_subcategories: total };
+}
 
 export function CsfSelfAssessment({
   serviceId,
@@ -57,6 +97,14 @@ export function CsfSelfAssessment({
     for (const a of assessment?.answers ?? []) map[a.subcategory_code] = a;
     return map;
   }, [assessment]);
+
+  const filteredCatalog = React.useMemo(
+    () =>
+      catalog
+        ? filterCatalogByProfile(catalog, assessment?.client_profile ?? null)
+        : null,
+    [catalog, assessment],
+  );
 
   async function onAnswerUpdate(
     answerId: string,
@@ -115,7 +163,7 @@ export function CsfSelfAssessment({
       </Card>
     );
   }
-  if (!catalog || !assessment) {
+  if (!catalog || !assessment || !filteredCatalog) {
     return (
       <p className="text-sm text-ink-tertiary">Loading your self-assessment…</p>
     );
@@ -124,10 +172,19 @@ export function CsfSelfAssessment({
     return <SelfAssessmentSubmitted />;
   }
 
+  // Coverage is over the in-scope (profile-filtered) subcategories only.
+  const inScopeCodes = new Set(
+    filteredCatalog.functions.flatMap((fn) =>
+      fn.categories.flatMap((c) => c.subcategories.map((s) => s.code)),
+    ),
+  );
   const answeredCount = assessment.answers.filter(
-    (a) => a.maturity_tier !== null,
+    (a) => inScopeCodes.has(a.subcategory_code) && a.maturity_tier !== null,
   ).length;
-  const total = assessment.answers.length;
+  const total = inScopeCodes.size;
+  const profileLabel = assessment.client_profile
+    ? PROFILE_LABEL[assessment.client_profile] ?? null
+    : null;
   const targetTiers = catalog.tiers.filter((t) => t.tier >= 2);
 
   return (
@@ -177,13 +234,22 @@ export function CsfSelfAssessment({
           </div>
         </CardHeader>
         <CardBody>
-          <p className="mb-4 text-sm text-ink-secondary">
+          <p className="mb-2 text-sm text-ink-secondary">
             For each outcome, choose the tier that best reflects your
             organization today. Answer what you can — your consultant reviews
             everything before anything is processed.
           </p>
+          {profileLabel ? (
+            <p className="mb-4 text-xs text-ink-tertiary">
+              Showing the {total} outcomes that apply to your{" "}
+              <span className="font-medium text-ink-secondary">
+                {profileLabel} impact
+              </span>{" "}
+              profile.
+            </p>
+          ) : null}
           <CsfQuestionnaire
-            catalog={catalog}
+            catalog={filteredCatalog}
             answersByCode={answersByCode}
             onAnswerUpdate={onAnswerUpdate}
           />

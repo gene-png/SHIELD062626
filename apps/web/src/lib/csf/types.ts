@@ -8,6 +8,8 @@ export interface CatalogSubcategory {
   category: string;
   name: string;
   outcome: string;
+  /** Minimum impact profile (LOW/MOD/HIGH) at which this outcome applies. */
+  min_profile: string;
 }
 
 export interface CatalogCategory {
@@ -57,6 +59,7 @@ export interface CsfAssessment {
   approved_by: string | null;
   answers: CsfAnswer[];
   client_target_tier: number | null;
+  client_profile: string | null;
 }
 
 export interface CsfAnswerPatch {

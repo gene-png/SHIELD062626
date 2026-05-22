@@ -135,6 +135,30 @@ def test_client_fills_and_submits_csf(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_csf_catalog_tags_profiles_and_assessment_exposes_profile(
+    app_client: TestClient,
+) -> None:
+    bearer, state = _client_submit_intake(app_client)
+    h = {"Authorization": f"Bearer {bearer}"}
+    svc_id = _service_id(state, "nist_csf")
+
+    cat = app_client.get("/csf/catalog", headers=h).json()
+    profiles = {
+        s["min_profile"]
+        for fn in cat["functions"]
+        for c in fn["categories"]
+        for s in c["subcategories"]
+    }
+    # The curated mapping uses all three levels so filtering is meaningful.
+    assert profiles == {"LOW", "MOD", "HIGH"}
+
+    # The assessment surfaces the client's intake profile (MOD here) so the UI
+    # can filter the checklist to it.
+    a = app_client.get(f"/csf/services/{svc_id}/self-assessment", headers=h).json()
+    assert a["client_profile"] == "MOD"
+
+
+@pytest.mark.unit
 def test_client_fills_and_submits_zt(app_client: TestClient) -> None:
     bearer, state = _client_submit_intake(app_client)
     h = {"Authorization": f"Bearer {bearer}"}

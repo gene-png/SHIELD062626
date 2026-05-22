@@ -417,6 +417,65 @@ SUBCATEGORIES: tuple[Subcategory, ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Impact-profile scoping (FIPS-199 Low / Moderate / High)
+# ---------------------------------------------------------------------------
+# NIST CSF 2.0 does NOT itself define Low/Mod/High subcategory baselines (that's
+# an 800-53B control-baseline concept), so this is a curated first-pass mapping
+# at the category level - refine with SME review. A client at profile P answers
+# the subcategories whose min_profile rank is <= P's rank (LOW < MOD < HIGH).
+PROFILE_RANK: dict[str, int] = {"LOW": 0, "MOD": 1, "HIGH": 2}
+
+_CATEGORY_MIN_PROFILE: dict[str, str] = {
+    # GOVERN
+    "GV.OC": "LOW",
+    "GV.RM": "LOW",
+    "GV.RR": "LOW",
+    "GV.PO": "LOW",
+    "GV.OV": "MOD",
+    "GV.SC": "HIGH",
+    # IDENTIFY
+    "ID.AM": "LOW",
+    "ID.RA": "LOW",
+    "ID.IM": "MOD",
+    # PROTECT
+    "PR.AA": "LOW",
+    "PR.AT": "LOW",
+    "PR.DS": "LOW",
+    "PR.PS": "MOD",
+    "PR.IR": "HIGH",
+    # DETECT
+    "DE.CM": "LOW",
+    "DE.AE": "MOD",
+    # RESPOND
+    "RS.MA": "LOW",
+    "RS.AN": "MOD",
+    "RS.CO": "MOD",
+    "RS.MI": "MOD",
+    # RECOVER
+    "RC.RP": "LOW",
+    "RC.CO": "MOD",
+}
+
+
+def min_profile_for_category(category: str) -> str:
+    """Minimum impact profile at which a category's subcategories apply.
+
+    Defaults to LOW (in scope for everyone) for any unmapped category.
+    """
+    return _CATEGORY_MIN_PROFILE.get(category, "LOW")
+
+
+def applies_to_profile(min_profile: str, client_profile: str | None) -> bool:
+    """Whether a subcategory at `min_profile` is in scope for `client_profile`.
+
+    An unknown/absent client profile shows everything (no filtering).
+    """
+    if client_profile is None:
+        return True
+    return PROFILE_RANK.get(min_profile, 0) <= PROFILE_RANK.get(client_profile, 2)
+
+
 def function_by_code(code: str | FunctionCode) -> Function:
     value = FunctionCode(code)
     for fn in FUNCTIONS:

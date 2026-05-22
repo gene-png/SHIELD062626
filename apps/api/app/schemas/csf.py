@@ -21,6 +21,9 @@ class CatalogSubcategory(BaseModel):
     category: str
     name: str
     outcome: str
+    # Minimum impact profile (LOW/MOD/HIGH) at which this outcome applies, so a
+    # client questionnaire can filter to their profile.
+    min_profile: str = "LOW"
 
 
 class CatalogCategory(BaseModel):
@@ -101,6 +104,9 @@ class CsfAssessmentResponse(BaseModel):
     answers: list[CsfAnswerResponse]
     # Target tier the client picked at intake (2-4), or null if not set.
     client_target_tier: int | None = None
+    # Impact profile the client picked at intake (LOW/MOD/HIGH), or null. Drives
+    # which subcategories the client self-assessment shows.
+    client_profile: str | None = None
 
 
 class CsfAnswerPatch(BaseModel):

@@ -33,6 +33,7 @@ from app.csf.catalog import (
     FUNCTIONS,
     SUBCATEGORIES,
     all_codes,
+    min_profile_for_category,
 )
 from app.csf.exporters import build_context as build_csf_context
 from app.csf.exporters import render_pdf as render_csf_pdf
@@ -113,6 +114,15 @@ def _client_target_tier(db: Session, service_id: uuid.UUID) -> int | None:
     return sr.csf_target_tier if sr is not None else None
 
 
+def _client_profile(db: Session, service_id: uuid.UUID) -> str | None:
+    """The CSF impact profile the client chose at intake (LOW/MOD/HIGH)."""
+    svc = db.get(Service, service_id)
+    if svc is None or svc.source_request_id is None:
+        return None
+    sr = db.get(ServiceRequest, svc.source_request_id)
+    return sr.csf_profile if sr is not None else None
+
+
 def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentResponse:
     rows = (
         db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
@@ -128,6 +138,7 @@ def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentRespons
         approved_by=a.approved_by,
         answers=_serialize_answers(rows),
         client_target_tier=_client_target_tier(db, a.service_id),
+        client_profile=_client_profile(db, a.service_id),
     )
 
 
@@ -211,6 +222,7 @@ def get_catalog(
                     category=s.category,
                     name=s.name,
                     outcome=s.outcome,
+                    min_profile=min_profile_for_category(s.category),
                 )
                 for s in SUBCATEGORIES
                 if s.category == cat.code
