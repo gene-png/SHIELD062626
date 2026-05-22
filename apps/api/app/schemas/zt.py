@@ -102,6 +102,16 @@ class ZtAnswerPatch(BaseModel):
     evidence_artifact_id: uuid.UUID | None = None
 
 
+class ZtSelfAssessmentSubmit(BaseModel):
+    """Client submits their self-assessment for admin review.
+
+    `target_stage` lets the client confirm/adjust the maturity goal the gap
+    engine measures against; persisted on the source request.
+    """
+
+    target_stage: int | None = Field(default=None, ge=1, le=4)
+
+
 # ---------------------------------------------------------------------------
 # Scoring + gap
 # ---------------------------------------------------------------------------

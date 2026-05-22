@@ -129,13 +129,15 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
     admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
     client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
 
+    # tech_debt is NOT auto-provisioned at intake (only CSF/ZT are), so it still
+    # goes through the manual admin publish flow.
     app_client.post(
         "/intake/submit",
         headers={"Authorization": f"Bearer {client_bearer}"},
         json={
             "client": {"legal_name": "Atlas Defense Solutions"},
             "service_requests": [
-                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+                {"service_type": "tech_debt"},
                 {"service_type": "consultation"},
             ],
         },
@@ -145,23 +147,23 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
         "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
     ).json()
     by_type = {s["service_type"]: s for s in queue["service_requests"]}
-    csf_id = by_type["nist_csf"]["id"]
+    td_id = by_type["tech_debt"]["id"]
     con_id = by_type["consultation"]["id"]
 
-    # Publishing the CSF request opens a live workspace.
+    # Publishing the tech-debt request opens a live workspace.
     r = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {admin_bearer}"},
     )
     assert r.status_code == 200, r.text
     pub = r.json()
     assert pub["already_fulfilled"] is False
-    assert pub["service_type"] == "nist_csf"
+    assert pub["service_type"] == "tech_debt"
     service_id = pub["service_id"]
 
     # Idempotent: re-publishing returns the same workspace.
     r2 = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {admin_bearer}"},
     )
     assert r2.status_code == 200
@@ -179,12 +181,12 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
     queue2 = app_client.get(
         "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
     ).json()
-    csf_row = next(s for s in queue2["service_requests"] if s["service_type"] == "nist_csf")
-    assert csf_row["fulfilled_service_id"] == service_id
+    td_row = next(s for s in queue2["service_requests"] if s["service_type"] == "tech_debt")
+    assert td_row["fulfilled_service_id"] == service_id
 
     # Non-admins cannot publish.
     r4 = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {client_bearer}"},
     )
     assert r4.status_code == 403

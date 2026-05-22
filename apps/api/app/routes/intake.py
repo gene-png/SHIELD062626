@@ -29,9 +29,14 @@ from app.db.session import get_db
 from app.dependencies import current_client, current_user
 from app.models._common import utcnow
 from app.models.client import Client
+from app.models.service import Service, ServiceKind
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
 from app.notifications import notify_role
+from app.provisioning import (
+    SELF_ASSESSMENT_TYPES,
+    provision_self_assessment_service,
+)
 from app.schemas.intake import (
     IntakePatchRequest,
     IntakeStateResponse,
@@ -54,12 +59,11 @@ def _validate_targets(item: ServiceRequestInput) -> None:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="NIST CSF requires a target tier and profile before submitting.",
             )
-    elif item.service_type in _ZT_SERVICE_TYPES:
-        if item.zt_target_stage is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Zero Trust requires a target stage before submitting.",
-            )
+    elif item.service_type in _ZT_SERVICE_TYPES and item.zt_target_stage is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Zero Trust requires a target stage before submitting.",
+        )
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 
@@ -215,6 +219,27 @@ def submit_intake(
         )
         db.add(sr)
         created_requests.append(sr)
+
+    # Auto-provision an engagement workspace + seeded draft assessment for each
+    # questionnaire-driven service (CSF / Zero Trust) so the client can start
+    # their self-assessment straight from the "received" screen. Skip kinds
+    # already provisioned (e.g. on a re-submit) to avoid duplicate workspaces.
+    db.flush()  # assign ids to the freshly-created requests
+    existing_kinds = set(
+        db.execute(select(Service.kind).where(Service.client_id == client.id))
+        .scalars()
+        .all()
+    )
+    for sr in created_requests:
+        if sr.service_type not in SELF_ASSESSMENT_TYPES:
+            continue
+        kind = ServiceKind(sr.service_type.value)
+        if kind in existing_kinds:
+            continue
+        provision_self_assessment_service(
+            db, sr, org_name=client.legal_name, actor_user_id=user.id
+        )
+        existing_kinds.add(kind)
 
     client.intake_completed_at = utcnow()
 

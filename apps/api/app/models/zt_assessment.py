@@ -36,6 +36,9 @@ from app.models._common import TimestampMixin, UUIDPKMixin
 
 class ZtAssessmentStatus(enum.StrEnum):
     DRAFT = "draft"
+    # Client finished their self-assessment; awaiting admin review. Admins can
+    # still edit in this state; clients cannot.
+    SUBMITTED = "submitted"
     APPROVED = "approved"
     RELEASED = "released"
 

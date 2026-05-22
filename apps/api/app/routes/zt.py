@@ -45,11 +45,6 @@ from app.models.zt_assessment import (
 )
 from app.routes.artifacts import _storage_dep
 from app.schemas.tech_debt import DeliverableResponse
-from app.tenant import (
-    require_deliverable_in_tenant,
-    require_service_in_tenant,
-    require_zt_assessment_in_tenant,
-)
 from app.schemas.zt import (
     CatalogCapability,
     CatalogPillar,
@@ -62,6 +57,7 @@ from app.schemas.zt import (
     ZtAnswerResponse,
     ZtAssessmentResponse,
     ZtScoreSummary,
+    ZtSelfAssessmentSubmit,
     ZtServiceCreateRequest,
     ZtServiceResponse,
 )
@@ -70,6 +66,11 @@ from app.tech_debt.filename import (
     SERVICE_SLUG_ZT_CISA,
     SERVICE_SLUG_ZT_DOD,
     deliverable_filename,
+)
+from app.tenant import (
+    require_deliverable_in_tenant,
+    require_service_in_tenant,
+    require_zt_assessment_in_tenant,
 )
 from app.zt.catalog import (
     all_codes,
@@ -419,6 +420,138 @@ def patch_answer(
     db.commit()
     db.refresh(row)
     return ZtAnswerResponse.model_validate(row, from_attributes=True)
+
+
+# ---------------------------------------------------------------------------
+# Client self-assessment (client fills their own draft, then submits for review)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/services/{service_id}/self-assessment",
+    response_model=ZtAssessmentResponse,
+    summary="The client's own assessment for this service (any status)",
+)
+def get_self_assessment(
+    service_id: uuid.UUID,
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ZtAssessmentResponse:
+    """Read the client's own assessment so they can fill the questionnaire.
+
+    Tenant-scoped, so a client only ever reaches their own. The score/gap/
+    deliverable stay admin-only until the report is released.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Zero Trust service not found.",
+        )
+    assessment = _latest_assessment(db, svc.id)
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    return _serialize_assessment(db, assessment)
+
+
+@router.patch(
+    "/self-assessment/answers/{answer_id}",
+    response_model=ZtAnswerResponse,
+    summary="Client updates one answer on their own draft self-assessment",
+)
+def patch_self_assessment_answer(
+    answer_id: uuid.UUID,
+    body: ZtAnswerPatch,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ZtAnswerResponse:
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field is required.",
+        )
+    row = db.get(ZtAnswer, answer_id)
+    if row is None or row.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Answer not found.",
+        )
+    a = db.get(ZtAssessment, row.assessment_id)
+    if a is None or a.status != ZtAssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your self-assessment is no longer editable.",
+        )
+    if "maturity_stage" in data and data["maturity_stage"] is not None:
+        s = int(data["maturity_stage"])
+        if not 1 <= s <= 4:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="maturity_stage must be 1-4.",
+            )
+        row.maturity_stage = s
+    elif "maturity_stage" in data:
+        row.maturity_stage = None
+    if "notes" in data:
+        row.notes = data["notes"]
+    row.answered_by = user.id
+    row.answered_at = utcnow()
+    db.commit()
+    db.refresh(row)
+    return ZtAnswerResponse.model_validate(row, from_attributes=True)
+
+
+@router.post(
+    "/services/{service_id}/self-assessment/submit",
+    response_model=ZtAssessmentResponse,
+    summary="Client submits their self-assessment for admin review",
+)
+def submit_self_assessment(
+    service_id: uuid.UUID,
+    body: ZtSelfAssessmentSubmit,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ZtAssessmentResponse:
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Zero Trust service not found.",
+        )
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    if a.status != ZtAssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This self-assessment has already been submitted.",
+        )
+    if body.target_stage is not None and svc.source_request_id is not None:
+        sr = db.get(ServiceRequest, svc.source_request_id)
+        if sr is not None:
+            sr.zt_target_stage = body.target_stage
+    a.status = ZtAssessmentStatus.SUBMITTED
+    audit(
+        db,
+        action="zt.self_assessment.submitted",
+        target_type="zt_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"service_id": str(svc.id), "version": a.version},
+    )
+    db.commit()
+    db.refresh(a)
+    return _serialize_assessment(db, a)
 
 
 @router.post(

@@ -115,6 +115,16 @@ class CsfAnswerPatch(BaseModel):
     evidence_artifact_id: uuid.UUID | None = None
 
 
+class CsfSelfAssessmentSubmit(BaseModel):
+    """Client submits their self-assessment for admin review.
+
+    `target_tier` lets the client confirm/adjust the maturity goal the gap
+    engine measures against; persisted on the source request.
+    """
+
+    target_tier: int | None = Field(default=None, ge=1, le=4)
+
+
 # ---------------------------------------------------------------------------
 # Scoring summary
 # ---------------------------------------------------------------------------
