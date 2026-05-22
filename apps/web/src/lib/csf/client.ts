@@ -91,6 +91,43 @@ export async function patchAnswer(
   });
 }
 
+// --- Client self-assessment (the client fills + submits their own draft) ---
+
+export async function fetchSelfAssessment(
+  serviceId: string,
+): Promise<CsfAssessment | null> {
+  try {
+    return await jsonRequest<CsfAssessment>(
+      `/api/proxy/csf/services/${serviceId}/self-assessment`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function patchSelfAssessmentAnswer(
+  answerId: string,
+  patch: CsfAnswerPatch,
+): Promise<CsfAnswer> {
+  return jsonRequest<CsfAnswer>(
+    `/api/proxy/csf/self-assessment/answers/${answerId}`,
+    { method: "PATCH", body: patch },
+  );
+}
+
+export async function submitSelfAssessment(
+  serviceId: string,
+  body: { target_tier?: number },
+): Promise<CsfAssessment> {
+  return jsonRequest<CsfAssessment>(
+    `/api/proxy/csf/services/${serviceId}/self-assessment/submit`,
+    { method: "POST", body },
+  );
+}
+
 export async function approveAssessment(
   assessmentId: string,
 ): Promise<CsfAssessment> {

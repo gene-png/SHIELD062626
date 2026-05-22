@@ -92,6 +92,43 @@ export async function patchAnswer(
   });
 }
 
+// --- Client self-assessment (the client fills + submits their own draft) ---
+
+export async function fetchSelfAssessment(
+  serviceId: string,
+): Promise<ZtAssessment | null> {
+  try {
+    return await jsonRequest<ZtAssessment>(
+      `/api/proxy/zt/services/${serviceId}/self-assessment`,
+    );
+  } catch (err) {
+    if (err instanceof ZtProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function patchSelfAssessmentAnswer(
+  answerId: string,
+  patch: ZtAnswerPatch,
+): Promise<ZtAnswer> {
+  return jsonRequest<ZtAnswer>(
+    `/api/proxy/zt/self-assessment/answers/${answerId}`,
+    { method: "PATCH", body: patch },
+  );
+}
+
+export async function submitSelfAssessment(
+  serviceId: string,
+  body: { target_stage?: number },
+): Promise<ZtAssessment> {
+  return jsonRequest<ZtAssessment>(
+    `/api/proxy/zt/services/${serviceId}/self-assessment/submit`,
+    { method: "POST", body },
+  );
+}
+
 export async function approveAssessment(
   assessmentId: string,
 ): Promise<ZtAssessment> {

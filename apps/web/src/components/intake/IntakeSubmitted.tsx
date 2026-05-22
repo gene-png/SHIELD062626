@@ -10,6 +10,12 @@ import {
   type ServiceType,
 } from "@/lib/intake/types";
 
+const SELF_ASSESSMENT_TYPES: ServiceType[] = [
+  "nist_csf",
+  "zero_trust_cisa",
+  "zero_trust_dod",
+];
+
 export interface IntakeSubmittedProps {
   state: IntakeStateResponse;
 }
@@ -28,6 +34,20 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
   const services = Array.from(
     new Set(state.service_requests.map((r) => r.service_type)),
   ) as ServiceType[];
+
+  // Questionnaire-driven services get an auto-provisioned workspace at submit;
+  // surface them so the client can start their self-assessment now.
+  const selfAssessments = Array.from(
+    new Map(
+      state.service_requests
+        .filter(
+          (r) =>
+            SELF_ASSESSMENT_TYPES.includes(r.service_type) &&
+            r.fulfilled_service_id,
+        )
+        .map((r) => [r.service_type, r]),
+    ).values(),
+  );
 
   const submittedAt = state.intake_completed_at
     ? new Date(state.intake_completed_at).toLocaleString()
@@ -54,6 +74,30 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
             {submittedAt ? ` on ${submittedAt}` : ""}. A consultant will review
             your submission and reach out with next steps.
           </p>
+
+          {selfAssessments.length > 0 ? (
+            <div className="rounded-md border border-border-subtle bg-brand-50 p-4">
+              <p className="text-sm font-semibold text-ink-primary">
+                Please start your organizational self-assessment
+              </p>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Answering these now gives your consultant what they need to
+                produce accurate recommendations toward your maturity target.
+                You can stop and resume any time before submitting.
+              </p>
+              <div className="mt-3 flex flex-col items-start gap-2">
+                {selfAssessments.map((r) => (
+                  <Link
+                    key={r.id}
+                    href={`/self-assessment/${r.fulfilled_service_id}?type=${r.service_type}`}
+                    className="inline-flex rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
+                  >
+                    Start: {SERVICE_LABELS[r.service_type]} →
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {services.length > 0 ? (
             <div className="flex flex-col gap-2">
