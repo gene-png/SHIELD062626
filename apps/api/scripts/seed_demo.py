@@ -208,6 +208,7 @@ def _write_artifact(
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
         title=filename,
+        client_id=user.client_id,
         file_storage_key=key,
         mime_type=mime_type,
         size_bytes=len(data),
@@ -305,6 +306,7 @@ def _seed_tech_debt(
         kind=ServiceKind.TECH_DEBT,
         status=ServiceStatus.RELEASED,
         title="Atlas Defense — Tech Debt Review",
+        client_id=org.id,
         opened_by=admin.id,
         released_at=utcnow(),
     )
@@ -391,6 +393,7 @@ def _seed_csf(
         kind=ServiceKind.NIST_CSF,
         status=ServiceStatus.RELEASED,
         title="Atlas Defense — NIST CSF 2.0 Assessment",
+        client_id=org.id,
         opened_by=admin.id,
         released_at=utcnow(),
     )
@@ -486,6 +489,7 @@ def _seed_zt(
         kind=kind,
         status=ServiceStatus.RELEASED,
         title=title,
+        client_id=org.id,
         opened_by=admin.id,
         released_at=utcnow(),
     )
@@ -582,6 +586,7 @@ def _seed_attack(
         kind=ServiceKind.ATTACK_COVERAGE,
         status=ServiceStatus.RELEASED,
         title="Atlas Defense — MITRE ATT&CK Coverage",
+        client_id=org.id,
         opened_by=admin.id,
         released_at=utcnow(),
     )

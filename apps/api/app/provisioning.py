@@ -57,18 +57,22 @@ def provision_self_assessment_service(
     *,
     org_name: str,
     actor_user_id: uuid.UUID,
+    title: str | None = None,
 ) -> Service:
     """Open a Service for `sr` and seed its v1 DRAFT assessment.
 
     Caller is responsible for the surrounding transaction (this flushes but
-    does not commit) and for idempotency (don't call twice for the same
-    client/kind). Sets `sr.fulfilled_service_id` to the new service.
+    does not commit). For the one-time intake flow the caller also guards
+    idempotency (don't double-provision the same client/kind); the
+    multi-engagement flow intentionally allows multiple of the same kind, so
+    `title` can name each engagement distinctly. Sets
+    `sr.fulfilled_service_id` to the new service.
     """
     kind = ServiceKind(sr.service_type.value)
     svc = Service(
         kind=kind,
         status=ServiceStatus.IN_PROGRESS,
-        title=f"{org_name} — {_SERVICE_TITLES[sr.service_type]}",
+        title=title.strip() if title and title.strip() else f"{org_name} — {_SERVICE_TITLES[sr.service_type]}",
         client_id=sr.client_id,
         source_request_id=sr.id,
         opened_by=actor_user_id,

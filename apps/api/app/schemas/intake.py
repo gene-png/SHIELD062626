@@ -122,3 +122,32 @@ class IntakeStateResponse(BaseModel):
     client: ClientProfileResponse | None
     service_requests: list[ServiceRequestResponse]
     intake_completed_at: datetime | None
+
+
+class EngagementCreateRequest(BaseModel):
+    """Start a new standalone engagement (a self-assessment project).
+
+    Unlike the one-time intake, this can be called repeatedly — a client may
+    run multiple independent engagements, including more than one of the same
+    service type.
+    """
+
+    service_type: ServiceType
+    name: str | None = Field(default=None, max_length=255)
+    csf_target_tier: int | None = Field(default=None, ge=2, le=4)
+    csf_profile: CsfProfile | None = None
+    zt_target_stage: int | None = Field(default=None, ge=2, le=4)
+
+
+class EngagementResponse(BaseModel):
+    """One engagement = one Service (workspace) the client owns."""
+
+    service_id: uuid.UUID
+    service_type: ServiceType
+    title: str
+    # Service lifecycle (in_progress / released / ...).
+    status: str
+    # Self-assessment lifecycle for CSF/ZT engagements (draft / submitted /
+    # approved / released); None for non-questionnaire services.
+    assessment_status: str | None
+    created_at: datetime

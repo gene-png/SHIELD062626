@@ -30,6 +30,12 @@ export async function PublicHeader(): Promise<JSX.Element> {
                 Intake
               </Link>
               <Link
+                href="/engagements"
+                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+              >
+                Engagements
+              </Link>
+              <Link
                 href="/deliverables"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >

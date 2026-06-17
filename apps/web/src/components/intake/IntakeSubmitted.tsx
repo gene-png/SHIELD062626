@@ -127,8 +127,14 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/deliverables"
+              href="/engagements"
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
+            >
+              My engagements
+            </Link>
+            <Link
+              href="/deliverables"
+              className="rounded-md border border-border bg-surface-card px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken"
             >
               Go to deliverables
             </Link>

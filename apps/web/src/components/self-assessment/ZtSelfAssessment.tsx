@@ -5,7 +5,7 @@ import * as React from "react";
 import { Card, CardBody, CardHeader, CardTitle, cn } from "@shield/design-system";
 
 import { SelfAssessmentSubmitted } from "@/components/self-assessment/SelfAssessmentSubmitted";
-import { ZtQuestionnaire } from "@/components/admin/zt/ZtQuestionnaire";
+import { ZtStagePicker } from "@/components/admin/zt/ZtStagePicker";
 import {
   fetchCatalog,
   fetchSelfAssessment,
@@ -13,6 +13,7 @@ import {
   submitSelfAssessment,
 } from "@/lib/zt/client";
 import type {
+  CatalogPillar,
   ZtAnswer,
   ZtAnswerPatch,
   ZtAssessment,
@@ -34,6 +35,7 @@ export function ZtSelfAssessment({
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [submitted, setSubmitted] = React.useState(false);
+  const [pillarIdx, setPillarIdx] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -60,6 +62,25 @@ export function ZtSelfAssessment({
     for (const a of assessment?.answers ?? []) map[a.capability_code] = a;
     return map;
   }, [assessment]);
+
+  // Per-pillar answered/total, in catalog order. Drives the progress bar,
+  // the per-pillar badges, and the submit gate.
+  const pillarStats = React.useMemo(() => {
+    const pillars = catalog?.pillars ?? [];
+    return pillars.map((p) => {
+      const total = p.capabilities.length;
+      const answered = p.capabilities.filter(
+        (c) => answersByCode[c.code]?.maturity_stage != null,
+      ).length;
+      return { code: p.code, name: p.name, answered, total };
+    });
+  }, [catalog, answersByCode]);
+
+  const everyPillarStarted =
+    pillarStats.length > 0 && pillarStats.every((s) => s.answered > 0);
+  const pillarsComplete = pillarStats.filter(
+    (s) => s.total > 0 && s.answered === s.total,
+  ).length;
 
   async function onAnswerUpdate(
     answerId: string,
@@ -129,11 +150,13 @@ export function ZtSelfAssessment({
     return <SelfAssessmentSubmitted />;
   }
 
-  const answeredCount = assessment.answers.filter(
-    (a) => a.maturity_stage !== null,
-  ).length;
-  const total = assessment.answers.length;
   const targetStages = catalog.stages.filter((s) => s.stage >= 2);
+  const pillars = catalog.pillars;
+  const idx = Math.min(pillarIdx, pillars.length - 1);
+  const pillar: CatalogPillar | undefined = pillars[idx];
+  const stat = pillarStats[idx];
+  const isLast = idx >= pillars.length - 1;
+  const incomplete = pillarStats.filter((s) => s.answered === 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -177,22 +200,204 @@ export function ZtSelfAssessment({
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle>2. Self-assessment</CardTitle>
-            <span className="text-sm text-ink-tertiary">
-              {answeredCount} of {total} answered
+            <span className="text-sm font-medium text-ink-tertiary">
+              Pillar {idx + 1} of {pillars.length}
             </span>
           </div>
         </CardHeader>
-        <CardBody>
-          <p className="mb-4 text-sm text-ink-secondary">
-            For each capability, choose the stage that best reflects your
-            organization today. Answer what you can — your consultant reviews
-            everything before anything is processed.
+        <CardBody className="flex flex-col gap-4">
+          <p className="text-sm text-ink-secondary">
+            This assessment covers{" "}
+            <span className="font-medium text-ink-primary">
+              {pillars.length} pillars
+            </span>
+            . Step through each one and rate every capability for where your
+            organization stands today — you must address all pillars before you
+            can submit. Use Previous / Next to move between them.
           </p>
-          <ZtQuestionnaire
-            catalog={catalog}
-            answersByCode={answersByCode}
-            onAnswerUpdate={onAnswerUpdate}
-          />
+
+          {/* Overall pillar progress */}
+          <div>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-sunken"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={pillars.length}
+              aria-valuenow={pillarsComplete}
+              aria-label={`${pillarsComplete} of ${pillars.length} pillars fully answered`}
+            >
+              <div
+                className="h-full rounded-pill bg-brand-500 transition-all"
+                style={{
+                  width: `${pillars.length ? (pillarsComplete / pillars.length) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-ink-tertiary">
+              {pillarsComplete} of {pillars.length} pillars fully answered
+            </p>
+          </div>
+
+          {/* Pillar stepper: shows every pillar + its completion at a glance */}
+          <ol className="flex flex-wrap gap-1.5" aria-label="Pillars">
+            {pillarStats.map((s, i) => {
+              const done = s.total > 0 && s.answered === s.total;
+              const started = s.answered > 0;
+              const isCurrent = i === idx;
+              return (
+                <li key={s.code}>
+                  <button
+                    type="button"
+                    onClick={() => setPillarIdx(i)}
+                    aria-current={isCurrent ? "step" : undefined}
+                    className={cn(
+                      "flex items-center gap-1 rounded-pill border px-2.5 py-1 text-xs font-medium transition-colors",
+                      isCurrent
+                        ? "border-brand-500 bg-brand-50 text-ink-primary"
+                        : "border-border bg-surface-card text-ink-secondary hover:border-border-strong",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold",
+                        done
+                          ? "bg-status-success-bg text-status-success-fg"
+                          : started
+                            ? "bg-status-info-bg text-status-info-fg"
+                            : "bg-surface-sunken text-ink-tertiary",
+                      )}
+                    >
+                      {done ? "✓" : i + 1}
+                    </span>
+                    {s.code}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* Current pillar */}
+          {pillar && stat ? (
+            <section
+              aria-label={`${pillar.code} ${pillar.name}`}
+              className="flex flex-col gap-4 rounded-md border border-border-subtle bg-surface-card p-4"
+            >
+              <header className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-ink-primary">
+                    {pillar.code} · {pillar.name}
+                  </h3>
+                  <p className="mt-0.5 text-sm text-ink-secondary">
+                    {pillar.purpose}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold",
+                    stat.answered === stat.total
+                      ? "bg-status-success-bg text-status-success-fg"
+                      : stat.answered > 0
+                        ? "bg-status-info-bg text-status-info-fg"
+                        : "bg-surface-sunken text-ink-tertiary",
+                  )}
+                >
+                  {stat.answered} of {stat.total} answered
+                </span>
+              </header>
+
+              <ul className="flex flex-col gap-3">
+                {pillar.capabilities.map((cap) => {
+                  const ans = answersByCode[cap.code];
+                  if (!ans) return null;
+                  return (
+                    <li
+                      key={cap.code}
+                      className="rounded-md border border-border-subtle bg-surface-sunken p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-mono text-ink-tertiary">
+                            {cap.code}
+                          </p>
+                          <p className="text-sm font-medium text-ink-primary">
+                            {cap.name}
+                          </p>
+                          <p className="mt-1 text-sm text-ink-secondary">
+                            {cap.outcome}
+                          </p>
+                        </div>
+                        <ZtStagePicker
+                          value={ans.maturity_stage}
+                          stages={catalog.stages}
+                          ariaLabel={`Maturity stage for ${cap.code}`}
+                          onChange={(next) => {
+                            void onAnswerUpdate(ans.id, { maturity_stage: next });
+                          }}
+                        />
+                      </div>
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs font-medium text-ink-tertiary hover:text-ink-secondary">
+                          Notes {ans.notes ? "·" : ""}{" "}
+                          {ans.notes ? (
+                            <span className="font-normal text-ink-secondary">
+                              {ans.notes.length > 60
+                                ? `${ans.notes.slice(0, 60)}…`
+                                : ans.notes}
+                            </span>
+                          ) : null}
+                        </summary>
+                        <textarea
+                          aria-label={`Notes for ${cap.code}`}
+                          defaultValue={ans.notes ?? ""}
+                          rows={3}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value.trim();
+                            if (v === (ans.notes ?? "")) return;
+                            void onAnswerUpdate(ans.id, { notes: v });
+                          }}
+                          className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-none"
+                          placeholder="Evidence, references, exceptions…"
+                        />
+                      </details>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* Within-pillar navigation */}
+              <div className="flex items-center justify-between gap-2 border-t border-border-subtle pt-3">
+                <button
+                  type="button"
+                  onClick={() => setPillarIdx((i) => Math.max(0, i - 1))}
+                  disabled={idx === 0}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-sm font-medium transition",
+                    idx === 0
+                      ? "cursor-not-allowed border-border-subtle text-ink-tertiary opacity-50"
+                      : "border-border text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary",
+                  )}
+                >
+                  ← Previous
+                </button>
+                {isLast ? (
+                  <span className="text-xs text-ink-tertiary">
+                    Last pillar — review the others, then submit below.
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPillarIdx((i) => Math.min(pillars.length - 1, i + 1))
+                    }
+                    className="rounded-md border border-brand-500 bg-brand-500 px-4 py-1.5 text-sm font-semibold text-ink-on-accent transition hover:bg-brand-600"
+                  >
+                    Next: {pillars[idx + 1]?.code} →
+                  </button>
+                )}
+              </div>
+            </section>
+          ) : null}
         </CardBody>
       </Card>
 
@@ -205,15 +410,30 @@ export function ZtSelfAssessment({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-tertiary">
-          You can submit now and your consultant will follow up if anything
-          needs more detail.
+          {everyPillarStarted ? (
+            "All pillars have answers — you can submit for review."
+          ) : (
+            <>
+              Add at least one answer to every pillar before submitting. Still
+              needs attention:{" "}
+              <span className="font-medium text-ink-secondary">
+                {incomplete.map((s) => s.code).join(", ")}
+              </span>
+              .
+            </>
+          )}
         </p>
         <button
           type="button"
           onClick={() => void onSubmit()}
-          disabled={submitting}
+          disabled={submitting || !everyPillarStarted}
+          title={
+            everyPillarStarted
+              ? undefined
+              : "Answer at least one capability in every pillar first."
+          }
           className="rounded-md bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? "Submitting…" : "Submit for review"}

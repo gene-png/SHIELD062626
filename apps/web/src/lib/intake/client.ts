@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  EngagementCreateRequest,
+  EngagementResponse,
   IntakePatchRequest,
   IntakeStateResponse,
   IntakeSubmitRequest,
@@ -56,6 +58,30 @@ export async function submitIntake(
     throw new ProxyError(res.status, await safeJson(res));
   }
   return (await res.json()) as IntakeStateResponse;
+}
+
+export async function fetchEngagements(): Promise<EngagementResponse[]> {
+  const res = await fetch("/api/proxy/intake/engagements", {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new ProxyError(res.status, await safeJson(res));
+  }
+  return (await res.json()) as EngagementResponse[];
+}
+
+export async function createEngagement(
+  body: EngagementCreateRequest,
+): Promise<EngagementResponse> {
+  const res = await fetch("/api/proxy/intake/engagements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ProxyError(res.status, await safeJson(res));
+  }
+  return (await res.json()) as EngagementResponse;
 }
 
 async function safeJson(res: Response): Promise<unknown> {

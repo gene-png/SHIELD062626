@@ -29,15 +29,19 @@ from app.db.session import get_db
 from app.dependencies import current_client, current_user
 from app.models._common import utcnow
 from app.models.client import Client
+from app.models.csf_assessment import CsfAssessment
 from app.models.service import Service, ServiceKind
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
+from app.models.zt_assessment import ZtAssessment
 from app.notifications import notify_role
 from app.provisioning import (
     SELF_ASSESSMENT_TYPES,
     provision_self_assessment_service,
 )
 from app.schemas.intake import (
+    EngagementCreateRequest,
+    EngagementResponse,
     IntakePatchRequest,
     IntakeStateResponse,
     IntakeSubmitRequest,
@@ -286,3 +290,140 @@ def submit_intake(
         service_requests=list(all_requests),
         intake_completed_at=client.intake_completed_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Engagements (multiple independent self-assessment projects per client)
+# ---------------------------------------------------------------------------
+
+_ZT_KINDS = (ServiceKind.ZERO_TRUST_CISA, ServiceKind.ZERO_TRUST_DOD)
+
+
+def _latest_assessment_status(db: Session, svc: Service) -> str | None:
+    """Self-assessment lifecycle status for a CSF/ZT engagement, else None."""
+    if svc.kind == ServiceKind.NIST_CSF:
+        row = db.execute(
+            select(CsfAssessment.status)
+            .where(CsfAssessment.service_id == svc.id)
+            .order_by(CsfAssessment.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    elif svc.kind in _ZT_KINDS:
+        row = db.execute(
+            select(ZtAssessment.status)
+            .where(ZtAssessment.service_id == svc.id)
+            .order_by(ZtAssessment.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    else:
+        return None
+    return getattr(row, "value", row) if row is not None else None
+
+
+def _engagement_response(db: Session, svc: Service) -> EngagementResponse:
+    return EngagementResponse(
+        service_id=svc.id,
+        service_type=ServiceType(svc.kind.value),
+        title=svc.title,
+        status=getattr(svc.status, "value", svc.status),
+        assessment_status=_latest_assessment_status(db, svc),
+        created_at=svc.created_at,
+    )
+
+
+@router.get(
+    "/engagements",
+    response_model=list[EngagementResponse],
+    summary="List the client's engagements (one per Service/workspace)",
+)
+def list_engagements(
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[EngagementResponse]:
+    svcs = (
+        db.execute(
+            select(Service)
+            .where(Service.client_id == client.id)
+            .order_by(Service.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [_engagement_response(db, s) for s in svcs]
+
+
+@router.post(
+    "/engagements",
+    response_model=EngagementResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start a new self-assessment engagement (repeatable; allows multiples)",
+)
+def create_engagement(
+    body: EngagementCreateRequest,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EngagementResponse:
+    if body.service_type not in SELF_ASSESSMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only NIST CSF and Zero Trust can be started as a self-service engagement.",
+        )
+    if not client.legal_name or client.legal_name == "(pending intake)":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Complete your organization profile in intake before starting an engagement.",
+        )
+
+    # Reuse the submit-time target validation (CSF needs tier+profile, ZT a stage).
+    _validate_targets(
+        ServiceRequestInput(
+            service_type=body.service_type,
+            csf_target_tier=body.csf_target_tier,
+            csf_profile=body.csf_profile,
+            zt_target_stage=body.zt_target_stage,
+        )
+    )
+
+    sr = ServiceRequest(
+        service_type=body.service_type,
+        client_id=client.id,
+        requested_by=user.id,
+        csf_target_tier=body.csf_target_tier,
+        csf_profile=body.csf_profile.value if body.csf_profile else None,
+        zt_target_stage=body.zt_target_stage,
+    )
+    db.add(sr)
+    db.flush()
+
+    # Intentionally NOT guarded by "kind already exists" — multiple engagements
+    # of the same type are allowed; each is its own project/workspace.
+    svc = provision_self_assessment_service(
+        db,
+        sr,
+        org_name=client.legal_name,
+        actor_user_id=user.id,
+        title=body.name,
+    )
+
+    audit(
+        db,
+        action="engagement.created",
+        target_type="service",
+        target_id=svc.id,
+        actor_user_id=user.id,
+        details={"service_type": body.service_type.value, "title": svc.title},
+    )
+    notify_role(
+        db,
+        role=UserRole.ADMIN,
+        event_type="engagement.created",
+        title="New engagement started",
+        body=f"{client.legal_name} started: {svc.title}. Review in the admin queue.",
+        link="/admin/queue",
+    )
+
+    db.commit()
+    db.refresh(svc)
+    return _engagement_response(db, svc)
