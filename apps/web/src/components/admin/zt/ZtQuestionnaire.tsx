@@ -9,6 +9,8 @@ import type {
   ZtCatalog,
 } from "@/lib/zt/types";
 
+import { ZtMaturityReference } from "@/components/zt/ZtMaturityReference";
+
 import { ZtStagePicker } from "./ZtStagePicker";
 
 export interface ZtQuestionnaireProps {
@@ -86,21 +88,7 @@ export function ZtQuestionnaire({
       >
         Zero Trust questionnaire
       </h2>
-      {catalog.framework === "cisa_ztmm_2_0" ? (
-        <p className="text-sm text-ink-secondary">
-          The{" "}
-          <a
-            href="https://www.cisa.gov/sites/default/files/2023-04/zero_trust_maturity_model_v2_508.pdf#page=9"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-brand-600 underline hover:text-brand-700"
-          >
-            CISA Zero Trust Maturity Model v2 (PDF, opens at page 9)
-          </a>{" "}
-          defines each pillar and what each maturity stage looks like. Keep it
-          open in another tab while you answer.
-        </p>
-      ) : null}
+      <ZtMaturityReference framework={catalog.framework} />
       <PillarTabBar
         pillars={catalog.pillars}
         active={active}

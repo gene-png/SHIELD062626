@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle, cn } from "@shield/design-system
 
 import { SelfAssessmentSubmitted } from "@/components/self-assessment/SelfAssessmentSubmitted";
 import { ZtStagePicker } from "@/components/admin/zt/ZtStagePicker";
+import { ZtMaturityReference } from "@/components/zt/ZtMaturityReference";
 import {
   fetchCatalog,
   fetchSelfAssessment,
@@ -170,6 +171,7 @@ export function ZtSelfAssessment({
             between your answers below and this goal to recommend what to
             prioritize.
           </p>
+          <ZtMaturityReference framework={framework} />
           <div className="flex flex-wrap gap-2">
             {targetStages.map((s) => (
               <button
