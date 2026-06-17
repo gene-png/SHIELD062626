@@ -27,6 +27,7 @@ from app.models.csf_assessment import (
 from app.models.deliverable import Deliverable
 from app.models.llm_call import LLMCall, LLMCallMode, LLMCallStatus
 from app.models.notification import Notification
+from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
@@ -56,6 +57,7 @@ __all__ = [
     "LLMCallMode",
     "LLMCallStatus",
     "Notification",
+    "Question",
     "Service",
     "ServiceKind",
     "ServiceRequest",

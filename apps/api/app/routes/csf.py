@@ -52,6 +52,7 @@ from app.models.csf_assessment import (
     CsfAssessmentStatus,
 )
 from app.models.deliverable import Deliverable
+from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
@@ -67,11 +68,13 @@ from app.schemas.csf import (
     CsfAssessmentResponse,
     CsfScoreSummary,
     CsfSelfAssessmentSubmit,
+    CsfQuestionnaireResponse,
     CsfServiceCreateRequest,
     CsfServiceResponse,
     FunctionScore,
     GapAnalysisResponse,
     GapItem,
+    InterviewQuestion,
 )
 from app.schemas.tech_debt import DeliverableResponse
 from app.storage import StorageBackend
@@ -149,6 +152,65 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> CsfAssessment | No
         .order_by(CsfAssessment.version.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+# Impact profile (set at intake) -> the interview-questionnaire framework_key
+# loaded into the `questions` table. HIGH is the most complete questionnaire,
+# so it's the fallback when no profile has been chosen yet.
+_PROFILE_TO_TIER_KEY = {
+    "LOW": "csf-tier-low",
+    "MOD": "csf-tier-moderate",
+    "HIGH": "csf-tier-high",
+}
+_DEFAULT_TIER_KEY = "csf-tier-high"
+
+
+@router.get(
+    "/services/{service_id}/questionnaire",
+    response_model=CsfQuestionnaireResponse,
+    summary="Interview prompts for the service's impact tier",
+)
+def get_interview_questionnaire(
+    service_id: uuid.UUID,
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfQuestionnaireResponse:
+    """Tier-resolved interview prompts (read-only).
+
+    Each prompt carries the CSF subcategories it informs so the workspace can
+    surface it inline on those subcategory cards. Any signed-in role scoped to
+    the tenant may read it.
+    """
+    require_service_in_tenant(db, service_id, client.id)
+    profile = _client_profile(db, service_id)
+    framework_key = _PROFILE_TO_TIER_KEY.get(
+        (profile or "").upper(), _DEFAULT_TIER_KEY
+    )
+    rows = (
+        db.execute(
+            select(Question)
+            .where(Question.framework_key == framework_key)
+            .order_by(Question.order_index)
+        )
+        .scalars()
+        .all()
+    )
+    return CsfQuestionnaireResponse(
+        framework_key=framework_key,
+        profile=profile,
+        questions=[
+            InterviewQuestion(
+                external_id=q.external_id,
+                section_name=q.pillar,
+                order_index=q.order_index,
+                stem=q.stem,
+                cues=list(q.cues or []),
+                csf_subcategories=list(q.framework_activities or []),
+            )
+            for q in rows
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------

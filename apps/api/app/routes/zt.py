@@ -80,7 +80,7 @@ from app.zt.catalog import (
 from app.zt.exporters import build_context as build_zt_context
 from app.zt.exporters import render_pdf as render_zt_pdf
 from app.zt.exporters import render_xlsx as render_zt_xlsx
-from app.zt.maturity import STAGE_DEFINITIONS, ZtFrameworkCode
+from app.zt.maturity import ZtFrameworkCode, stage_definitions
 from app.zt.scoring import analyze_gaps
 from app.zt.scoring import compute as compute_score
 
@@ -253,7 +253,7 @@ def get_catalog(
             label=(d.cisa_label if cat_fw == ZtFrameworkCode.CISA_ZTMM_2_0 else d.dod_label),
             description=d.description,
         )
-        for d in STAGE_DEFINITIONS
+        for d in stage_definitions(cat_fw)
     ]
     total = sum(len(p.capabilities) for p in pillar_rows)
     return CatalogResponse(
@@ -392,10 +392,12 @@ def patch_answer(
         )
     if "maturity_stage" in data and data["maturity_stage"] is not None:
         s = int(data["maturity_stage"])
-        if not 1 <= s <= 4:
+        # DoD allows stage 0 ("Pre Zero Trust"); CISA starts at 1.
+        min_stage = 0 if a.framework == ZtFramework.DOD_ZTRA else 1
+        if not min_stage <= s <= 4:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="maturity_stage must be 1-4.",
+                detail=f"maturity_stage must be {min_stage}-4.",
             )
         row.maturity_stage = s
     elif "maturity_stage" in data:
@@ -490,10 +492,12 @@ def patch_self_assessment_answer(
         )
     if "maturity_stage" in data and data["maturity_stage"] is not None:
         s = int(data["maturity_stage"])
-        if not 1 <= s <= 4:
+        # DoD allows stage 0 ("Pre Zero Trust"); CISA starts at 1.
+        min_stage = 0 if a.framework == ZtFramework.DOD_ZTRA else 1
+        if not min_stage <= s <= 4:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="maturity_stage must be 1-4.",
+                detail=f"maturity_stage must be {min_stage}-4.",
             )
         row.maturity_stage = s
     elif "maturity_stage" in data:

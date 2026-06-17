@@ -17,6 +17,7 @@ import {
   CsfProxyError,
   fetchCatalog,
   fetchGapAnalysis,
+  fetchInterviewQuestionnaire,
   fetchLatestAssessment,
   fetchLatestDeliverable,
   fetchScore,
@@ -28,6 +29,7 @@ import type {
   CsfAssessment,
   CsfCatalog,
   CsfDeliverable,
+  CsfInterviewQuestion,
   CsfScoreSummary,
   GapAnalysis,
 } from "@/lib/csf/types";
@@ -77,6 +79,9 @@ export function CsfWorkspace({
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
   const [targetTier, setTargetTier] = React.useState(3);
+  const [interviewByCode, setInterviewByCode] = React.useState<
+    Record<string, CsfInterviewQuestion[]>
+  >({});
 
   const answersByCode = React.useMemo(() => {
     const out: Record<string, CsfAnswer> = {};
@@ -111,6 +116,20 @@ export function CsfWorkspace({
     } catch (err) {
       setLoadError(describeError(err));
       return;
+    }
+    try {
+      const q = await fetchInterviewQuestionnaire(serviceId);
+      if (q) {
+        const map: Record<string, CsfInterviewQuestion[]> = {};
+        for (const question of q.questions) {
+          for (const code of question.csf_subcategories) {
+            (map[code] ??= []).push(question);
+          }
+        }
+        setInterviewByCode(map);
+      }
+    } catch {
+      // Non-blocking: interview prompts are supplemental context.
     }
     try {
       const a = await fetchLatestAssessment(serviceId);
@@ -334,6 +353,7 @@ export function CsfWorkspace({
           <CsfQuestionnaire
             catalog={catalog}
             answersByCode={answersByCode}
+            questionsByCode={interviewByCode}
             readOnly={readOnly}
             onAnswerUpdate={onAnswerUpdate}
           />

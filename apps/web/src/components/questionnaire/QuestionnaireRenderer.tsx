@@ -4,8 +4,8 @@ import * as React from "react";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
+import { PillarNavigation } from "./PillarNavigation";
 import { QuestionField } from "./QuestionField";
-import { SectionTabs } from "./SectionTabs";
 import type {
   Question,
   QuestionnaireDefinition,
@@ -84,7 +84,7 @@ export function QuestionnaireRenderer({
         {trailing ? <div>{trailing}</div> : null}
       </header>
 
-      <SectionTabs
+      <PillarNavigation
         sections={definition.sections}
         activeId={active}
         onChange={setActive}
@@ -93,9 +93,9 @@ export function QuestionnaireRenderer({
 
       {activeSection ? (
         <div
-          role="tabpanel"
+          role="region"
           id={`section-${activeSection.id}`}
-          aria-labelledby={`tab-${activeSection.id}`}
+          aria-label={activeSection.title}
           className="flex flex-col gap-4"
         >
           {activeSection.description ? (

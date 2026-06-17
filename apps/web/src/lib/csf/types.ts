@@ -72,6 +72,22 @@ export interface CsfAnswerPatch {
   evidence_artifact_id?: string | null;
 }
 
+export interface CsfInterviewQuestion {
+  external_id: string;
+  section_name: string;
+  order_index: number;
+  stem: string;
+  cues: string[];
+  /** CSF 2.0 subcategory codes this prompt informs. */
+  csf_subcategories: string[];
+}
+
+export interface CsfInterviewQuestionnaire {
+  framework_key: string;
+  profile: string | null;
+  questions: CsfInterviewQuestion[];
+}
+
 export interface FunctionScore {
   function: string;
   function_name: string;

@@ -6,6 +6,7 @@ import type {
   CsfAssessment,
   CsfCatalog,
   CsfDeliverable,
+  CsfInterviewQuestionnaire,
   CsfScoreSummary,
   GapAnalysis,
 } from "./types";
@@ -89,6 +90,21 @@ export async function patchAnswer(
     method: "PATCH",
     body: patch,
   });
+}
+
+export async function fetchInterviewQuestionnaire(
+  serviceId: string,
+): Promise<CsfInterviewQuestionnaire | null> {
+  try {
+    return await jsonRequest<CsfInterviewQuestionnaire>(
+      `/api/proxy/csf/services/${serviceId}/questionnaire`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
 }
 
 // --- Client self-assessment (the client fills + submits their own draft) ---

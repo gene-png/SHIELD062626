@@ -116,7 +116,8 @@ def _round_average(values: list[int]) -> float | None:
 def _validated(stage: int | None) -> int | None:
     if stage is None:
         return None
-    if 1 <= int(stage) <= 4:
+    # Stage 0 ("Pre Zero Trust") is a valid DoD floor; CISA never emits it.
+    if 0 <= int(stage) <= 4:
         return int(stage)
     return None
 
@@ -124,6 +125,8 @@ def _validated(stage: int | None) -> int | None:
 def _label_from_average(avg: float | None, framework: ZtFrameworkCode) -> str:
     if avg is None:
         return "Unscored"
+    if avg < 0.5:
+        return stage_label(MaturityStage.STAGE_0, framework)
     if avg < 1.5:
         return stage_label(MaturityStage.STAGE_1, framework)
     if avg < 2.5:

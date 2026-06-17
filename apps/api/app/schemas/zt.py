@@ -97,7 +97,9 @@ class ZtAssessmentResponse(BaseModel):
 
 
 class ZtAnswerPatch(BaseModel):
-    maturity_stage: int | None = Field(default=None, ge=1, le=4)
+    # Lower bound is 0 to admit the DoD "Pre Zero Trust" baseline; the route
+    # gates stage 0 to DoD assessments (CISA stays 1-4).
+    maturity_stage: int | None = Field(default=None, ge=0, le=4)
     notes: str | None = Field(default=None, max_length=8000)
     evidence_artifact_id: uuid.UUID | None = None
 

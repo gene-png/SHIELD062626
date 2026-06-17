@@ -56,6 +56,36 @@ class CatalogResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Interview questionnaire (rich prompts loaded into the `questions` table)
+# ---------------------------------------------------------------------------
+
+
+class InterviewQuestion(BaseModel):
+    """One interview prompt extracted from the Kentro Step 1.x .docx files."""
+
+    external_id: str
+    section_name: str
+    order_index: int
+    stem: str
+    cues: list[str]
+    # CSF 2.0 subcategory ids the prompt informs, so the workspace can show it
+    # inline on those subcategory cards.
+    csf_subcategories: list[str]
+
+
+class CsfQuestionnaireResponse(BaseModel):
+    """Tier-specific interview prompts for a CSF service.
+
+    Resolved from the service's impact profile (LOW/MOD/HIGH -> tier),
+    defaulting to the HIGH questionnaire when no profile is set. Read-only.
+    """
+
+    framework_key: str
+    profile: str | None = None
+    questions: list[InterviewQuestion]
+
+
+# ---------------------------------------------------------------------------
 # Assessment + answers
 # ---------------------------------------------------------------------------
 
