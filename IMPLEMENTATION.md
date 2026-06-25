@@ -126,7 +126,7 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - Migration `0018`: map existing CSF/ZT/ATT&CK statuses onto it; apply uniformly.
 - **Acceptance:** all services share one status set; transitions enforced; no `released`/`approved` left.
 
-### C1 — One AI engine with job types `[ ]`
+### C1 — One AI engine with job types `[x]`
 - BE: add `ai/engine.py` with `run_job(job_name, *, client, service, inputs)` → look up job def (prompt + parser) → `LLMClient.invoke` → parse. Jobs: `tech_debt_extract` (move existing behind registry), `csf_score`, `zt_score`, `mitre_map`, `risk_synthesize`. Score/map/synthesize return draft suggestions only. Record prompt version on `llm_calls`.
 - **Acceptance:** each job runs fixture + live; redaction counts + tokens logged; new job = prompt + parser only.
 
@@ -235,4 +235,5 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-25 | A2 done | Renamed engagement→assessment across web (routes `app/assessments`, `AssessmentsView`, `lib/intake` symbols, proxy `intake/assessments`, all copy + hrefs). Backend `/intake/engagements` path unchanged (UI-only rename). Web typecheck green. |
 | 2026-06-25 | A4 done | ZT scale framework-aware: CISA 4 levels, DoD 3 (Not Started/Target/Advanced); `level_count` helper; roll-ups + labels normalized per framework; added `maturity_pct` (% of max) to score outputs; PATCH validates 1..level_count; catalog-driven FE picker auto-shows 3 vs 4. ZT + full backend suites green; web typecheck green. Part A committed. |
 | 2026-06-25 | B1 done | `client_domain` table (migration 0016); generic-provider denylist (`security/email_domains.py`); register now joins a client by approved domain — first user still bootstraps the admin, generic/unknown domains rejected, no placeholder clients. Reworked ~12 test fixtures onto the new onboarding model (admin creates org+domain, then client registers); added B1/B2 tests. Full backend suite green. |
-| 2026-06-25 | B2 backend | Admin domain add/list/remove + service archive endpoints (`routes/admin.py`) with audit + isolation tests. Management UI deferred to C6. |
+| 2026-06-25 | B2 backend | Admin domain add/list/remove + service archive endpoints (`routes/admin.py`) with audit + isolation tests. Management UI deferred to C6. Part B committed. |
+| 2026-06-25 | C1 done | `ai/engine.py` job registry (`run_job` over `LLMClient.invoke`); `ai/jobs.py` registers `tech_debt_extract` (moved behind the registry, keeps `extract.capabilities` purpose) + `csf_score`/`zt_score`/`mitre_map`/`risk_synthesize` (draft-suggestion prompts + JSON parser). New `test_ai_engine.py`; full backend suite green. Service phases refine each job's suggestion schema. |

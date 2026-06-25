@@ -179,19 +179,21 @@ def extract_capabilities(
         },
     }
 
-    response, call_row = llm.invoke(
+    # Runs through the AI job registry (Work Order C1); the "tech_debt_extract"
+    # job keeps the historical "extract.capabilities" llm purpose.
+    from app.ai.engine import run_job
+
+    result = run_job(
         db,
-        purpose="extract.capabilities",
-        prompt=PROMPT,
-        payload=payload,
+        llm,
+        "tech_debt_extract",
+        inputs=payload,
         requested_by=requested_by.id,
         service_id=service_id,
-        prompt_version=PROMPT_VERSION,
         client_org_name=client_org_name,
         name_hints=tuple(name_hints),
     )
-    items = _parse_response(response.content)
-    return ExtractionResult(items=items, llm_call=call_row)
+    return ExtractionResult(items=result.data, llm_call=result.llm_call)
 
 
 def name_hints_for_tenant(db: Session, client_id) -> list[str]:
