@@ -1,5 +1,7 @@
 /**
- * Server-side proxy for /intake/engagements on the FastAPI backend.
+ * Server-side proxy for the client's assessments list. The UI path is
+ * /api/proxy/intake/assessments; the upstream FastAPI route is still
+ * /intake/engagements (A2 renamed the UI only, not the backend).
  *
  * Mirrors the sibling /intake proxy: reads the access token from the
  * NextAuth session and attaches it as a Bearer header on every upstream
@@ -66,7 +68,7 @@ function mapError(err: unknown): NextResponse {
     });
   }
   return NextResponse.json(
-    { error: { message: "Upstream engagements call failed." } },
+    { error: { message: "Upstream assessments call failed." } },
     { status: 502 },
   );
 }

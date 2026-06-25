@@ -58,7 +58,7 @@ export function Step1Services({
   return (
     <div className="flex flex-col gap-5">
       <p className="text-sm text-ink-secondary">
-        Pick the services you want this engagement to cover. You can change this
+        Pick the services you want this assessment to cover. You can change this
         anytime before submitting.
       </p>
       <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">

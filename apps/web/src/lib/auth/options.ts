@@ -61,7 +61,7 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 interface MeResponse {
   id: string;
   email: string;
-  role: "admin" | "reviewer" | "client";
+  role: "admin" | "client";
   display_name: string | null;
 }
 

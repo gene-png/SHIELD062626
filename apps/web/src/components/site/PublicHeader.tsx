@@ -30,10 +30,10 @@ export async function PublicHeader(): Promise<JSX.Element> {
                 Intake
               </Link>
               <Link
-                href="/engagements"
+                href="/assessments"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >
-                Engagements
+                Assessments
               </Link>
               {role === "admin" ? (
                 <Link

@@ -17,7 +17,7 @@ export function Step4Systems({
       <p className="text-sm text-ink-secondary">
         Give us a one-paragraph picture of the systems in scope. Categorization,
         ATO status, hosting, and POAM volume can wait — we&apos;ll capture those
-        in the engagement workspace. For now, a free-text orientation is enough
+        in the assessment workspace. For now, a free-text orientation is enough
         to plan the assessment.
       </p>
       <Field

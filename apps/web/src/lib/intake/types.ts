@@ -54,8 +54,8 @@ export interface IntakeStateResponse {
   intake_completed_at: string | null;
 }
 
-/** One engagement = one Service (workspace) the client owns. */
-export interface EngagementResponse {
+/** One assessment = one Service (workspace) the client owns. */
+export interface AssessmentResponse {
   service_id: string;
   service_type: ServiceType;
   title: string;
@@ -64,7 +64,7 @@ export interface EngagementResponse {
   created_at: string;
 }
 
-export interface EngagementCreateRequest {
+export interface AssessmentCreateRequest {
   service_type: ServiceType;
   name?: string;
   csf_target_tier?: number;
@@ -72,8 +72,8 @@ export interface EngagementCreateRequest {
   zt_target_stage?: number;
 }
 
-/** Service types a client can self-start as a standalone engagement. */
-export const ENGAGEMENT_SERVICE_TYPES: ReadonlyArray<ServiceType> = [
+/** Service types a client can self-start as a standalone assessment. */
+export const ASSESSMENT_SERVICE_TYPES: ReadonlyArray<ServiceType> = [
   "nist_csf",
   "zero_trust_cisa",
   "zero_trust_dod",

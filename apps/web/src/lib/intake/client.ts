@@ -1,8 +1,8 @@
 "use client";
 
 import type {
-  EngagementCreateRequest,
-  EngagementResponse,
+  AssessmentCreateRequest,
+  AssessmentResponse,
   IntakePatchRequest,
   IntakeStateResponse,
   IntakeSubmitRequest,
@@ -60,20 +60,20 @@ export async function submitIntake(
   return (await res.json()) as IntakeStateResponse;
 }
 
-export async function fetchEngagements(): Promise<EngagementResponse[]> {
-  const res = await fetch("/api/proxy/intake/engagements", {
+export async function fetchAssessments(): Promise<AssessmentResponse[]> {
+  const res = await fetch("/api/proxy/intake/assessments", {
     cache: "no-store",
   });
   if (!res.ok) {
     throw new ProxyError(res.status, await safeJson(res));
   }
-  return (await res.json()) as EngagementResponse[];
+  return (await res.json()) as AssessmentResponse[];
 }
 
-export async function createEngagement(
-  body: EngagementCreateRequest,
-): Promise<EngagementResponse> {
-  const res = await fetch("/api/proxy/intake/engagements", {
+export async function createAssessment(
+  body: AssessmentCreateRequest,
+): Promise<AssessmentResponse> {
+  const res = await fetch("/api/proxy/intake/assessments", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -81,7 +81,7 @@ export async function createEngagement(
   if (!res.ok) {
     throw new ProxyError(res.status, await safeJson(res));
   }
-  return (await res.json()) as EngagementResponse;
+  return (await res.json()) as AssessmentResponse;
 }
 
 async function safeJson(res: Response): Promise<unknown> {

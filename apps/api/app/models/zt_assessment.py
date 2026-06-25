@@ -106,7 +106,8 @@ class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
     # Validated against the in-memory catalog at the route boundary.
     capability_code: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    # 1..4 (MaturityStage). NULL = unscored.
+    # 1..level_count(framework): CISA 1-4, DoD 1-3 (Work Order A4).
+    # NULL = unscored. Validated per framework at the route boundary.
     maturity_stage: Mapped[int | None] = mapped_column(SmallInteger)
     notes: Mapped[str | None] = mapped_column(Text)
     evidence_artifact_id: Mapped[uuid.UUID | None] = mapped_column(

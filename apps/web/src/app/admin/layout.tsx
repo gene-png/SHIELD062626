@@ -26,7 +26,7 @@ export default async function AdminLayout({
           </h1>
           <p className="mt-2 text-ink-secondary">
             Admin views are restricted to Kentro consultants. If you believe you
-            should have access, contact your engagement&apos;s Primary POC.
+            should have access, contact your assessment&apos;s Primary POC.
           </p>
         </main>
         <PublicFooter />

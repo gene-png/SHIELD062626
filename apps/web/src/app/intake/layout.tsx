@@ -20,7 +20,7 @@ export default async function IntakeLayout({
       <main className="mx-auto w-full max-w-4xl px-6 py-10">
         <header className="mb-8 space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
-            New engagement
+            New assessment
           </p>
           <h1 className="text-3xl font-semibold text-ink-primary">Intake</h1>
           <p className="max-w-prose text-ink-secondary">

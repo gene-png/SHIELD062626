@@ -125,6 +125,7 @@ class PillarScore(BaseModel):
     capability_count: int
     answered_count: int
     average_stage: float | None
+    maturity_pct: float | None = None
     coverage_pct: float
     weakest_capability_codes: list[str]
 
@@ -137,6 +138,7 @@ class ZtScoreSummary(BaseModel):
     answered_capabilities: int
     coverage_pct: float
     average_stage: float | None
+    maturity_pct: float | None = None
     overall_stage_label: str
     by_pillar: list[PillarScore]
 

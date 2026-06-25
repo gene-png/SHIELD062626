@@ -127,9 +127,10 @@ def test_catalog_returns_dod_when_requested(app_client) -> None:
     assert body["framework"] == "dod_ztra"
     assert body["total_capabilities"] == 50
     assert len(body["pillars"]) == 7
-    # DoD label vocabulary.
+    # DoD label vocabulary: 3 levels (Work Order A4).
     labels = {s["label"] for s in body["stages"]}
-    assert {"Baseline", "Target", "Advanced", "Optimal"} <= labels
+    assert labels == {"Not Started", "Target", "Advanced"}
+    assert len(body["stages"]) == 3
 
 
 @pytest.mark.unit
@@ -364,7 +365,7 @@ def test_score_endpoint_rolls_up_dod(app_client) -> None:
         c.patch(
             f"/zt/answers/{ans['id']}",
             headers={"Authorization": f"Bearer {bearer}"},
-            json={"maturity_stage": 4},
+            json={"maturity_stage": 3},
         )
     r = c.get(
         f"/zt/services/{svc_id}/score",
@@ -372,8 +373,10 @@ def test_score_endpoint_rolls_up_dod(app_client) -> None:
     )
     body = r.json()
     assert body["total_capabilities"] == 50
-    assert body["average_stage"] == 4.0
-    assert body["overall_stage_label"] == "Optimal"
+    assert body["average_stage"] == 3.0
+    # DoD stage 3 ("Advanced") is the top of the 3-level scale -> 100%.
+    assert body["overall_stage_label"] == "Advanced"
+    assert body["maturity_pct"] == 100.0
     assert len(body["by_pillar"]) == 7
 
 

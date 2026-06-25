@@ -105,7 +105,7 @@ function ReadinessItem({
 
 /**
  * One service request, with the admin's review checklist + publish action.
- * "Publish for processing" opens the engagement workspace; the readiness
+ * "Publish for processing" opens the assessment workspace; the readiness
  * items flag intake gaps that would skew the AI assessment.
  */
 function ServiceRequestCard({
@@ -203,7 +203,7 @@ function ServiceRequestCard({
               </li>
               <li>Open each uploaded document and remove any raw PII.</li>
               <li>
-                Publish to open the engagement workspace and make this intake
+                Publish to open the assessment workspace and make this intake
                 available for AI processing.
               </li>
             </ol>

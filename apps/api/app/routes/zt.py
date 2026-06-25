@@ -80,7 +80,7 @@ from app.zt.catalog import (
 from app.zt.exporters import build_context as build_zt_context
 from app.zt.exporters import render_pdf as render_zt_pdf
 from app.zt.exporters import render_xlsx as render_zt_xlsx
-from app.zt.maturity import ZtFrameworkCode, stage_definitions
+from app.zt.maturity import ZtFrameworkCode, level_count, stage_definitions
 from app.zt.scoring import analyze_gaps
 from app.zt.scoring import compute as compute_score
 
@@ -250,7 +250,7 @@ def get_catalog(
     stages = [
         CatalogStage(
             stage=int(d.stage),
-            label=(d.cisa_label if cat_fw == ZtFrameworkCode.CISA_ZTMM_2_0 else d.dod_label),
+            label=d.label,
             description=d.description,
         )
         for d in stage_definitions(cat_fw)
@@ -392,12 +392,12 @@ def patch_answer(
         )
     if "maturity_stage" in data and data["maturity_stage"] is not None:
         s = int(data["maturity_stage"])
-        # DoD allows stage 0 ("Pre Zero Trust"); CISA starts at 1.
-        min_stage = 0 if a.framework == ZtFramework.DOD_ZTRA else 1
-        if not min_stage <= s <= 4:
+        # Stages are 1..level_count for the framework (CISA 1-4, DoD 1-3).
+        max_stage = level_count(_to_catalog_framework(a.framework))
+        if not 1 <= s <= max_stage:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"maturity_stage must be {min_stage}-4.",
+                detail=f"maturity_stage must be 1-{max_stage}.",
             )
         row.maturity_stage = s
     elif "maturity_stage" in data:
@@ -492,12 +492,12 @@ def patch_self_assessment_answer(
         )
     if "maturity_stage" in data and data["maturity_stage"] is not None:
         s = int(data["maturity_stage"])
-        # DoD allows stage 0 ("Pre Zero Trust"); CISA starts at 1.
-        min_stage = 0 if a.framework == ZtFramework.DOD_ZTRA else 1
-        if not min_stage <= s <= 4:
+        # Stages are 1..level_count for the framework (CISA 1-4, DoD 1-3).
+        max_stage = level_count(_to_catalog_framework(a.framework))
+        if not 1 <= s <= max_stage:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"maturity_stage must be {min_stage}-4.",
+                detail=f"maturity_stage must be 1-{max_stage}.",
             )
         row.maturity_stage = s
     elif "maturity_stage" in data:
@@ -642,6 +642,7 @@ def score_latest(
         answered_capabilities=score.answered_capabilities,
         coverage_pct=score.coverage_pct,
         average_stage=score.average_stage,
+        maturity_pct=score.maturity_pct,
         overall_stage_label=score.overall_stage_label,
         by_pillar=[
             PillarScore(
@@ -650,6 +651,7 @@ def score_latest(
                 capability_count=ps.capability_count,
                 answered_count=ps.answered_count,
                 average_stage=ps.average_stage,
+                maturity_pct=ps.maturity_pct,
                 coverage_pct=ps.coverage_pct,
                 weakest_capability_codes=list(ps.weakest_capability_codes),
             )

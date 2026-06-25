@@ -73,7 +73,7 @@ export function IntakeDocumentsPanel({
       <CardHeader>
         <CardTitle>Client documents</CardTitle>
         <CardDescription>
-          Files uploaded for this engagement. Download to review, or extract a
+          Files uploaded for this assessment. Download to review, or extract a
           capability list directly from a CSV/XLSX inventory — no re-upload
           needed.
         </CardDescription>

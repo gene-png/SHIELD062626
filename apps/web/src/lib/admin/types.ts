@@ -18,7 +18,7 @@ export interface AdminUserSummary {
   email: string;
   display_name: string | null;
   title: string | null;
-  role: "admin" | "reviewer" | "client";
+  role: "admin" | "client";
   last_login_at: string | null;
   created_at: string;
 }

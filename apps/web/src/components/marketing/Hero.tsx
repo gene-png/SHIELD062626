@@ -26,7 +26,7 @@ export async function Hero(): Promise<JSX.Element> {
             href={authed ? "/intake" : "/sign-up"}
             className="rounded-md bg-brand-500 px-5 py-3 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
           >
-            Start an engagement
+            Start an assessment
           </Link>
           {authed ? null : (
             <Link

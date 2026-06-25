@@ -23,6 +23,7 @@ from app.zt.catalog import (
 from app.zt.maturity import (
     MaturityStage,
     ZtFrameworkCode,
+    level_count,
     stage_label,
 )
 
@@ -61,6 +62,9 @@ class PillarScoreResult:
     capability_count: int
     answered_count: int
     average_stage: float | None
+    # average_stage normalized to a percentage of the framework's max level
+    # (so a DoD pillar at "3" and a CISA pillar at "4" both read 100%).
+    maturity_pct: float | None
     coverage_pct: float
     weakest_capability_codes: tuple[str, ...]
 
@@ -72,6 +76,7 @@ class ScoreResult:
     answered_capabilities: int
     coverage_pct: float
     average_stage: float | None
+    maturity_pct: float | None
     overall_stage_label: str
     by_pillar: tuple[PillarScoreResult, ...]
 
@@ -113,27 +118,33 @@ def _round_average(values: list[int]) -> float | None:
     return round(sum(values) / len(values), 2)
 
 
-def _validated(stage: int | None) -> int | None:
+def _validated(stage: int | None, framework: ZtFrameworkCode) -> int | None:
+    """Coerce a stored stage to a valid level for the framework, else None.
+
+    Valid stages are 1..level_count(framework) (CISA 1-4, DoD 1-3). Anything
+    out of range (including the retired DoD stage 0) is treated as unscored.
+    """
     if stage is None:
         return None
-    # Stage 0 ("Pre Zero Trust") is a valid DoD floor; CISA never emits it.
-    if 0 <= int(stage) <= 4:
-        return int(stage)
+    value = int(stage)
+    if 1 <= value <= level_count(framework):
+        return value
     return None
+
+
+def _maturity_pct(avg: float | None, framework: ZtFrameworkCode) -> float | None:
+    """Average stage as a percentage of the framework's top level."""
+    if avg is None:
+        return None
+    return round(avg / level_count(framework) * 100, 1)
 
 
 def _label_from_average(avg: float | None, framework: ZtFrameworkCode) -> str:
     if avg is None:
         return "Unscored"
-    if avg < 0.5:
-        return stage_label(MaturityStage.STAGE_0, framework)
-    if avg < 1.5:
-        return stage_label(MaturityStage.STAGE_1, framework)
-    if avg < 2.5:
-        return stage_label(MaturityStage.STAGE_2, framework)
-    if avg < 3.5:
-        return stage_label(MaturityStage.STAGE_3, framework)
-    return stage_label(MaturityStage.STAGE_4, framework)
+    # Round to the nearest stage, clamped into the framework's range.
+    stage = max(1, min(level_count(framework), round(avg)))
+    return stage_label(stage, framework)
 
 
 def _pillar_name_lookup(framework: ZtFrameworkCode) -> dict[str, str]:
@@ -156,7 +167,7 @@ def compute(
 
         scored_pairs: list[tuple[str, int]] = []
         for code in codes:
-            s = _validated(answers.get(code))
+            s = _validated(answers.get(code), framework)
             if s is not None:
                 scored_pairs.append((code, s))
 
@@ -166,13 +177,15 @@ def compute(
         scored_pairs.sort(key=lambda p: (p[1], p[0]))
         weakest = tuple(code for code, _ in scored_pairs[:WEAKEST_PER_PILLAR])
 
+        pillar_avg = _round_average([s for _, s in scored_pairs])
         pillar_results.append(
             PillarScoreResult(
                 pillar_code=p.code,
                 pillar_name=names.get(p.code, p.code),
                 capability_count=pillar_total,
                 answered_count=len(scored_pairs),
-                average_stage=_round_average([s for _, s in scored_pairs]),
+                average_stage=pillar_avg,
+                maturity_pct=_maturity_pct(pillar_avg, framework),
                 coverage_pct=_coverage_pct(len(scored_pairs), pillar_total),
                 weakest_capability_codes=weakest,
             )
@@ -185,6 +198,7 @@ def compute(
         answered_capabilities=answered,
         coverage_pct=_coverage_pct(answered, total),
         average_stage=avg_overall,
+        maturity_pct=_maturity_pct(avg_overall, framework),
         overall_stage_label=_label_from_average(avg_overall, framework),
         by_pillar=tuple(pillar_results),
     )
@@ -222,15 +236,16 @@ def analyze_gaps(
     target_stage: int = DEFAULT_TARGET_STAGE,
     top_n: int = DEFAULT_TOP_N,
 ) -> GapAnalysis:
-    if not (1 <= target_stage <= 4):
-        target_stage = DEFAULT_TARGET_STAGE
+    max_stage = level_count(framework)
+    if not (1 <= target_stage <= max_stage):
+        target_stage = min(DEFAULT_TARGET_STAGE, max_stage)
     notes = notes or {}
     names = _pillar_name_lookup(framework)
 
     rows: list[Gap] = []
     unscored: list[str] = []
     for cap in capabilities(framework):
-        s = _validated(answers.get(cap.code))
+        s = _validated(answers.get(cap.code), framework)
         if s is None:
             unscored.append(cap.code)
             continue

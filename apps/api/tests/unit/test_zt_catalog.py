@@ -22,9 +22,10 @@ from app.zt.catalog import (
     pillars,
 )
 from app.zt.maturity import (
-    STAGE_DEFINITIONS,
-    MaturityStage,
+    CISA_STAGES,
+    DOD_STAGES,
     ZtFrameworkCode,
+    level_count,
     stage_label,
 )
 from sqlalchemy import create_engine, inspect
@@ -153,14 +154,12 @@ def test_capability_by_code_finds_across_frameworks() -> None:
 
 
 @pytest.mark.unit
-def test_four_stage_definitions() -> None:
-    assert len(STAGE_DEFINITIONS) == 4
-    assert [d.stage for d in STAGE_DEFINITIONS] == [
-        MaturityStage.STAGE_1,
-        MaturityStage.STAGE_2,
-        MaturityStage.STAGE_3,
-        MaturityStage.STAGE_4,
-    ]
+def test_framework_level_counts() -> None:
+    # CISA has 4 levels (Traditional..Optimal); DoD has 3 (Not Started..Advanced).
+    assert level_count(ZtFrameworkCode.CISA_ZTMM_2_0) == 4
+    assert level_count(ZtFrameworkCode.DOD_ZTRA) == 3
+    assert [d.stage for d in CISA_STAGES] == [1, 2, 3, 4]
+    assert [d.stage for d in DOD_STAGES] == [1, 2, 3]
 
 
 @pytest.mark.unit
@@ -168,12 +167,14 @@ def test_four_stage_definitions() -> None:
     "stage,fw,expected",
     [
         (1, ZtFrameworkCode.CISA_ZTMM_2_0, "Traditional"),
-        (1, ZtFrameworkCode.DOD_ZTRA, "Baseline"),
+        (1, ZtFrameworkCode.DOD_ZTRA, "Not Started"),
         (2, ZtFrameworkCode.CISA_ZTMM_2_0, "Initial"),
         (2, ZtFrameworkCode.DOD_ZTRA, "Target"),
         (3, ZtFrameworkCode.CISA_ZTMM_2_0, "Advanced"),
+        (3, ZtFrameworkCode.DOD_ZTRA, "Advanced"),
         (4, ZtFrameworkCode.CISA_ZTMM_2_0, "Optimal"),
-        (4, ZtFrameworkCode.DOD_ZTRA, "Optimal"),
+        # DoD has no stage 4 — it falls outside the ladder.
+        (4, ZtFrameworkCode.DOD_ZTRA, "Unknown"),
         (None, ZtFrameworkCode.CISA_ZTMM_2_0, "Unscored"),
         (99, ZtFrameworkCode.CISA_ZTMM_2_0, "Unknown"),
     ],

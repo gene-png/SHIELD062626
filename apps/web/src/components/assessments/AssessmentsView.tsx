@@ -14,15 +14,15 @@ import {
   cn,
 } from "@shield/design-system";
 
-import { createEngagement, fetchEngagements } from "@/lib/intake/client";
+import { createAssessment, fetchAssessments } from "@/lib/intake/client";
 import {
   CSF_PROFILES,
   CSF_TARGET_TIERS,
-  ENGAGEMENT_SERVICE_TYPES,
+  ASSESSMENT_SERVICE_TYPES,
   SERVICE_LABELS,
   ZT_TARGET_STAGES,
   type CsfProfile,
-  type EngagementResponse,
+  type AssessmentResponse,
   type ServiceType,
 } from "@/lib/intake/types";
 
@@ -44,7 +44,7 @@ function statusTone(
   return "neutral";
 }
 
-function statusLabel(e: EngagementResponse): string {
+function statusLabel(e: AssessmentResponse): string {
   switch (e.assessment_status) {
     case "draft":
       return "In progress — not submitted";
@@ -59,10 +59,10 @@ function statusLabel(e: EngagementResponse): string {
   }
 }
 
-export function EngagementsView(): JSX.Element {
+export function AssessmentsView(): JSX.Element {
   const router = useRouter();
-  const [engagements, setEngagements] = React.useState<
-    EngagementResponse[] | null
+  const [assessments, setAssessments] = React.useState<
+    AssessmentResponse[] | null
   >(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
@@ -78,10 +78,10 @@ export function EngagementsView(): JSX.Element {
 
   const load = React.useCallback(async () => {
     try {
-      setEngagements(await fetchEngagements());
+      setAssessments(await fetchAssessments());
     } catch (err) {
       setLoadError(
-        err instanceof Error ? err.message : "Failed to load engagements.",
+        err instanceof Error ? err.message : "Failed to load assessments.",
       );
     }
   }, []);
@@ -102,20 +102,20 @@ export function EngagementsView(): JSX.Element {
     setSubmitting(true);
     setCreateError(null);
     try {
-      const created = await createEngagement({
+      const created = await createAssessment({
         service_type: svcType,
         name: name.trim() || undefined,
         csf_target_tier: isCsf ? (csfTier ?? undefined) : undefined,
         csf_profile: isCsf ? (csfProfile ?? undefined) : undefined,
         zt_target_stage: isZt ? (ztStage ?? undefined) : undefined,
       });
-      // Drop the client straight into the new engagement's self-assessment.
+      // Drop the client straight into the new assessment's self-assessment.
       router.push(
         `/self-assessment/${created.service_id}?type=${created.service_type}`,
       );
     } catch (err) {
       setCreateError(
-        err instanceof Error ? err.message : "Couldn't start the engagement.",
+        err instanceof Error ? err.message : "Couldn't start the assessment.",
       );
       setSubmitting(false);
     }
@@ -126,10 +126,10 @@ export function EngagementsView(): JSX.Element {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold text-ink-primary">
-            My engagements
+            My assessments
           </h1>
           <p className="max-w-prose text-sm text-ink-secondary">
-            Each engagement is its own project and workspace. You can run as
+            Each assessment is its own project and workspace. You can run as
             many as you need in parallel — even more than one of the same
             assessment type.
           </p>
@@ -139,14 +139,14 @@ export function EngagementsView(): JSX.Element {
           onClick={() => setCreating((v) => !v)}
           className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
         >
-          {creating ? "Close" : "+ Start a new engagement"}
+          {creating ? "Close" : "+ Start a new assessment"}
         </button>
       </header>
 
       {creating ? (
         <Card>
           <CardHeader>
-            <CardTitle>Start a new engagement</CardTitle>
+            <CardTitle>Start a new assessment</CardTitle>
           </CardHeader>
           <CardBody className="flex flex-col gap-4">
             <label className="flex flex-col gap-1 text-sm">
@@ -163,7 +163,7 @@ export function EngagementsView(): JSX.Element {
                 }}
                 className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
               >
-                {ENGAGEMENT_SERVICE_TYPES.map((t) => (
+                {ASSESSMENT_SERVICE_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {SERVICE_LABELS[t]}
                   </option>
@@ -173,7 +173,7 @@ export function EngagementsView(): JSX.Element {
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-ink-primary">
-                Engagement name{" "}
+                Assessment name{" "}
                 <span className="font-normal text-ink-tertiary">
                   (optional)
                 </span>
@@ -267,7 +267,7 @@ export function EngagementsView(): JSX.Element {
                 disabled={submitting || !targetsReady}
                 className="rounded-md bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {submitting ? "Starting…" : "Start engagement"}
+                {submitting ? "Starting…" : "Start assessment"}
               </button>
               {!targetsReady ? (
                 <span className="text-xs text-ink-tertiary">
@@ -282,7 +282,7 @@ export function EngagementsView(): JSX.Element {
       {loadError ? (
         <Card>
           <CardHeader>
-            <CardTitle>Couldn&apos;t load your engagements</CardTitle>
+            <CardTitle>Couldn&apos;t load your assessments</CardTitle>
           </CardHeader>
           <CardBody>
             <p className="text-sm text-status-danger-fg" role="alert">
@@ -290,18 +290,18 @@ export function EngagementsView(): JSX.Element {
             </p>
           </CardBody>
         </Card>
-      ) : engagements === null ? (
+      ) : assessments === null ? (
         <p className="text-sm text-ink-tertiary" aria-live="polite">
-          Loading your engagements…
+          Loading your assessments…
         </p>
-      ) : engagements.length === 0 ? (
+      ) : assessments.length === 0 ? (
         <EmptyState
-          title="No engagements yet"
-          description="Start your first engagement to begin a self-assessment."
+          title="No assessments yet"
+          description="Start your first assessment to begin a self-assessment."
         />
       ) : (
         <ul className="flex flex-col gap-3">
-          {engagements.map((e) => {
+          {assessments.map((e) => {
             const isSelfAssessment = SELF_ASSESSMENT_TYPES.includes(
               e.service_type,
             );

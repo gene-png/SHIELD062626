@@ -69,7 +69,7 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
       <CardBody>
         <div className="flex flex-col gap-6">
           <p className="text-sm text-ink-secondary">
-            Thanks — we&apos;ve received the engagement intake for{" "}
+            Thanks — we&apos;ve received the assessment intake for{" "}
             <span className="font-medium text-ink-primary">{legalName}</span>
             {submittedAt ? ` on ${submittedAt}` : ""}. A consultant will review
             your submission and reach out with next steps.
@@ -130,10 +130,10 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/engagements"
+              href="/assessments"
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
             >
-              My engagements
+              My assessments
             </Link>
             <Link
               href="/"

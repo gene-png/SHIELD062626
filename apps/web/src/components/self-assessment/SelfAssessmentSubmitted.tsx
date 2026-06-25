@@ -25,7 +25,7 @@ export function SelfAssessmentSubmitted(): JSX.Element {
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/engagements"
+            href="/assessments"
             className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
           >
             My assessments

@@ -87,17 +87,17 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - FE: delete `app/deliverables/page.tsx` + `app/api/proxy/deliverables/*`; remove Deliverables link from `components/site/PublicHeader.tsx`; strip deliverable links from `IntakeSubmitted`, `SelfAssessmentSubmitted`, `EngagementsView`.
 - **Acceptance:** no client route/link/API returns a deliverable file; admin finalize + download intact.
 
-### A2 — Rename "engagement" → "assessment" (UI only) `[ ]`
+### A2 — Rename "engagement" → "assessment" (UI only) `[x]`
 - FE: `app/engagements/`→`app/assessments/`; `EngagementsView`→`AssessmentsView`; `lib/intake` `createEngagement→createAssessment`, `fetchEngagements→fetchAssessments`, `EngagementResponse→AssessmentResponse`; proxy `api/proxy/intake/engagements/`→`.../assessments/`; replace user-facing copy.
 - **Acceptance:** zero `engagement` in `apps/web/src` outside comments; flow still works.
 
-### A3 — Remove the reviewer role `[~]`
-> Backend complete: `REVIEWER` removed from `UserRole`; no reviewer ever issued; `artifacts.py` staff check is admin-only; `PublicHeader`/`ClientSwitcher` gated to admin. Remaining: prune dead `reviewer` branches from ~10 web role-union/conditional files (harmless — backend never issues the role; typecheck green).
+### A3 — Remove the reviewer role `[x]`
+> Backend + FE complete: `REVIEWER` removed from `UserRole`; role unions in `next-auth.d.ts`, `lib/admin/types.ts`, `lib/auth/options.ts` narrowed to `admin | client`; header/switcher admin-only.
 - BE: remove `REVIEWER` from `UserRole` (`user.py:25`); purge refs in `dependencies.py`, `routes/admin.py`, `routes/artifacts.py`, `security/jwt.py`, seeds. Admin-or-reviewer → admin only.
 - FE: remove reviewer handling from `PublicHeader.tsx`; `ClientSwitcher.tsx` admin-only.
 - **Acceptance:** zero `reviewer`/`REVIEWER`; auth + switching + gating work with admin+client only.
 
-### A4 — Zero Trust DoD scale → 3 levels `[ ]`
+### A4 — Zero Trust DoD scale → 3 levels `[x]`
 - BE (`zt/maturity.py`): framework-aware scale. DoD = {1 Not Started, 2 Target, 3 Advanced}; CISA stays 1-4. Add `level_count(framework)`; update `stage_label`; drop DoD stage-0. Update `zt/scoring.py` roll-ups to normalize by `level_count` (% of max).
 - Migration `0015`: remap any existing DoD rows (test data; safe to coerce).
 - FE: stage picker shows 3 for DoD, 4 for CISA (self-assessment + admin workspace).
@@ -231,3 +231,6 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-24 | Setup | Copied `SHIELD061626v1` → `SHIELD062426v1`; reinstalled frontend (pnpm) + backend (venv) deps; wrote this plan (v1). Baseline green. |
 | 2026-06-24 | A1 done | Deleted client deliverables route/page/proxies + 4 release endpoints + 4 release proxies; dropped `released_to_client_at` (migration 0015, round-trips); `latest` deliverable endpoints admin-only; artifact download admin-only; 4 admin DeliverableCards finalize+download only; client confirmation links no longer point at deliverables. Full API unit suite green; web typecheck green. |
 | 2026-06-24 | A3 backend | Removed `REVIEWER` from `UserRole` + all functional usages; header/switcher admin-only. FE reviewer-union dead-branch cleanup pending. |
+| 2026-06-25 | A3 FE | Narrowed web role unions to `admin \| client`. A3 complete. |
+| 2026-06-25 | A2 done | Renamed engagement→assessment across web (routes `app/assessments`, `AssessmentsView`, `lib/intake` symbols, proxy `intake/assessments`, all copy + hrefs). Backend `/intake/engagements` path unchanged (UI-only rename). Web typecheck green. |
+| 2026-06-25 | A4 done | ZT scale framework-aware: CISA 4 levels, DoD 3 (Not Started/Target/Advanced); `level_count` helper; roll-ups + labels normalized per framework; added `maturity_pct` (% of max) to score outputs; PATCH validates 1..level_count; catalog-driven FE picker auto-shows 3 vs 4. ZT + full backend suites green; web typecheck green. |

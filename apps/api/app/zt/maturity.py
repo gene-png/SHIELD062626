@@ -1,15 +1,15 @@
 """Zero Trust maturity scales.
 
-CISA ZTMM 2.0 uses a four-stage model; the DoD ZT Reference Architecture
-adds a "Pre Zero Trust" baseline below its first stage:
+The two frameworks use different-length ladders (Work Order A4):
 
-CISA:                 Traditional (1) -> Initial (2) -> Advanced (3) -> Optimal (4)
-DoD: Pre Zero Trust (0) -> Baseline (1) -> Target  (2) -> Advanced (3) -> Optimal (4)
+CISA ZTMM 2.0 — 4 levels:  Traditional (1) -> Initial (2) -> Advanced (3) -> Optimal (4)
+DoD ZTRA      — 3 levels:  Not Started (1) -> Target (2) -> Advanced (3)
 
-For storage + scoring we use a single integer scale and label the stage by
-framework at render time. Stage 0 ("Pre Zero Trust") is DoD-only — CISA's
-scale starts at 1. `stage_definitions()` returns the framework-appropriate
-ladder so the catalog only ever offers stages that exist for that framework.
+A capability's stored `maturity_stage` is an integer in 1..level_count(framework).
+`level_count` lets the scoring engine normalize per framework so a DoD "3" and a
+CISA "4" are both the top of their scale. Labels are picked by framework at
+render time via `stage_label`; `stage_definitions` returns the framework's ladder
+so the catalog only ever offers stages that exist for that framework.
 """
 
 from __future__ import annotations
@@ -24,8 +24,6 @@ class ZtFrameworkCode(enum.StrEnum):
 
 
 class MaturityStage(enum.IntEnum):
-    # DoD-only baseline below "Baseline" — no formal ZT adopted yet.
-    STAGE_0 = 0
     STAGE_1 = 1
     STAGE_2 = 2
     STAGE_3 = 3
@@ -34,74 +32,69 @@ class MaturityStage(enum.IntEnum):
 
 @dataclass(frozen=True)
 class StageDefinition:
-    stage: MaturityStage
-    cisa_label: str
-    dod_label: str
+    stage: int
+    label: str
     description: str
 
 
-# DoD "Pre Zero Trust" baseline (stage 0). CISA has no equivalent, so this
-# definition is only ever surfaced for the DoD framework; `cisa_label` exists
-# only to satisfy the dataclass shape and is never read for CISA.
-DOD_PRE_ZERO_TRUST = StageDefinition(
-    stage=MaturityStage.STAGE_0,
-    cisa_label="Pre Zero Trust",
-    dod_label="Pre Zero Trust",
-    description=(
-        "Foundational hygiene only — perimeter-based access and no formal "
-        "Zero Trust strategy adopted yet."
+CISA_STAGES: tuple[StageDefinition, ...] = (
+    StageDefinition(
+        1,
+        "Traditional",
+        "Manual, perimeter-centric controls. Limited automation; static trust decisions.",
+    ),
+    StageDefinition(
+        2,
+        "Initial",
+        "Starting Zero Trust adoption. Inventory and identity verified but trust is "
+        "still mostly implicit after auth.",
+    ),
+    StageDefinition(
+        3,
+        "Advanced",
+        "Cross-pillar coordination; risk-adaptive access decisions; automated response "
+        "to a defined set of conditions.",
+    ),
+    StageDefinition(
+        4,
+        "Optimal",
+        "Fully automated, continuously evaluated trust. Just-in-time access. Self-healing "
+        "controls informed by analytics.",
     ),
 )
 
 
-STAGE_DEFINITIONS: tuple[StageDefinition, ...] = (
+DOD_STAGES: tuple[StageDefinition, ...] = (
     StageDefinition(
-        stage=MaturityStage.STAGE_1,
-        cisa_label="Traditional",
-        dod_label="Baseline",
-        description=(
-            "Manual, perimeter-centric controls. Limited automation; static "
-            "trust decisions."
-        ),
+        1,
+        "Not Started",
+        "Foundational hygiene only — no formal Zero Trust activity adopted yet for this "
+        "capability.",
     ),
     StageDefinition(
-        stage=MaturityStage.STAGE_2,
-        cisa_label="Initial",
-        dod_label="Target",
-        description=(
-            "Starting Zero Trust adoption. Inventory and identity verified "
-            "but trust is still mostly implicit after auth."
-        ),
+        2,
+        "Target",
+        "Target-phase (FY27) capability in place: the foundational Zero Trust activities "
+        "are implemented.",
     ),
     StageDefinition(
-        stage=MaturityStage.STAGE_3,
-        cisa_label="Advanced",
-        dod_label="Advanced",
-        description=(
-            "Cross-pillar coordination; risk-adaptive access decisions; "
-            "automated response to a defined set of conditions."
-        ),
-    ),
-    StageDefinition(
-        stage=MaturityStage.STAGE_4,
-        cisa_label="Optimal",
-        dod_label="Optimal",
-        description=(
-            "Fully automated, continuously evaluated trust. Just-in-time "
-            "access. Self-healing controls informed by analytics."
-        ),
+        3,
+        "Advanced",
+        "Advanced-phase capability: mature, integrated, and continuously adaptive.",
     ),
 )
 
 
 def stage_definitions(framework: ZtFrameworkCode) -> tuple[StageDefinition, ...]:
-    """Framework-appropriate maturity ladder.
-
-    DoD prepends the "Pre Zero Trust" baseline (stage 0); CISA starts at 1.
-    """
+    """Framework-appropriate maturity ladder (CISA: 4 stages, DoD: 3 stages)."""
     if framework == ZtFrameworkCode.DOD_ZTRA:
-        return (DOD_PRE_ZERO_TRUST, *STAGE_DEFINITIONS)
-    return STAGE_DEFINITIONS
+        return DOD_STAGES
+    return CISA_STAGES
+
+
+def level_count(framework: ZtFrameworkCode) -> int:
+    """Number of maturity levels for the framework (CISA 4, DoD 3)."""
+    return len(stage_definitions(framework))
 
 
 def stage_label(stage: MaturityStage | int | None, framework: ZtFrameworkCode) -> str:
@@ -109,6 +102,6 @@ def stage_label(stage: MaturityStage | int | None, framework: ZtFrameworkCode) -
         return "Unscored"
     value = int(stage)
     for d in stage_definitions(framework):
-        if int(d.stage) == value:
-            return d.cisa_label if framework == ZtFrameworkCode.CISA_ZTMM_2_0 else d.dod_label
+        if d.stage == value:
+            return d.label
     return "Unknown"
