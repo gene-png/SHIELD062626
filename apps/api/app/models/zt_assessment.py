@@ -109,6 +109,9 @@ class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
     # 1..level_count(framework): CISA 1-4, DoD 1-3 (Work Order A4).
     # NULL = unscored. Validated per framework at the route boundary.
     maturity_stage: Mapped[int | None] = mapped_column(SmallInteger)
+    # Work Order D3: per-capability target stage (gap = current < target).
+    # NULL falls back to the assessment/engagement default target.
+    target_stage: Mapped[int | None] = mapped_column(SmallInteger)
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Work Order C2: a locked row is never changed by a Run-AI rerun.

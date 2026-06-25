@@ -34,6 +34,9 @@ from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
 from app.models.deliverable import Deliverable
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
@@ -54,11 +57,14 @@ from app.schemas.zt import (
     GapAnalysisResponse,
     GapItem,
     PillarScore,
+    RoadmapEntry,
     ZtAnswerPatch,
     ZtAnswerResponse,
     ZtAssessmentResponse,
+    ZtCapabilityChange,
     ZtInterviewQuestion,
     ZtQuestionnaireResponse,
+    ZtRunAiResponse,
     ZtScoreSummary,
     ZtSelfAssessmentSubmit,
     ZtServiceCreateRequest,
@@ -85,7 +91,7 @@ from app.zt.exporters import render_docx as render_zt_docx
 from app.zt.exporters import render_pdf as render_zt_pdf
 from app.zt.exporters import render_xlsx as render_zt_xlsx
 from app.zt.maturity import ZtFrameworkCode, level_count, stage_definitions
-from app.zt.scoring import analyze_gaps
+from app.zt.scoring import analyze_gaps, build_roadmap
 from app.zt.scoring import compute as compute_score
 
 router = APIRouter(prefix="/zt", tags=["zt"])
@@ -324,6 +330,141 @@ def get_interview_questionnaire(
     )
 
 
+def _llm_dep() -> LLMClient:
+    return LLMClient.from_settings()
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=ZtRunAiResponse,
+    summary="Run the zt_score AI job: suggest current + target per capability (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+) -> ZtRunAiResponse:
+    """The ZT 'Run AI'. Suggests a current and target maturity level per
+    capability (on the framework's own scale) plus per-pillar narratives. AI
+    suggests; locked rows are untouched; code does the pillar roll-up + roadmap.
+    Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Zero Trust service not found."
+        )
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (ZtAssessmentStatus.APPROVED, ZtAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+
+    cat_fw = _to_catalog_framework(a.framework)
+    max_stage = level_count(cat_fw)
+    valid = all_codes(cat_fw)
+    rows = {
+        r.capability_code: r
+        for r in db.execute(
+            select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+        if r.capability_code in valid
+    }
+    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+
+    def _snap() -> dict[str, dict]:
+        return {
+            code: {"maturity_stage": r.maturity_stage, "target_stage": r.target_stage}
+            for code, r in rows.items()
+        }
+
+    before = _snap()
+
+    def _coerce(v: object) -> int | None:
+        try:
+            iv = int(v)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        return iv if 1 <= iv <= max_stage else None
+
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    result = run_job(
+        db,
+        llm,
+        "zt_score",
+        inputs={
+            "framework": a.framework.value,
+            "capabilities": sorted(rows),
+            "answers": {
+                code: {"notes": r.notes, "current": r.maturity_stage}
+                for code, r in rows.items()
+            },
+        },
+        requested_by=user.id,
+        service_id=svc.id,
+        client_org_name=client_org,
+    )
+    data = result.data if isinstance(result.data, dict) else {}
+
+    for sugg in data.get("capabilities", []):
+        if not isinstance(sugg, dict):
+            continue
+        row = rows.get(sugg.get("code"))
+        if row is None or row.locked:
+            continue
+        cur = _coerce(sugg.get("current"))
+        if cur is not None:
+            row.maturity_stage = cur
+        tgt = _coerce(sugg.get("target"))
+        if tgt is not None:
+            row.target_stage = tgt
+        row.answered_by = user.id
+        row.answered_at = utcnow()
+
+    db.flush()
+    after = _snap()
+    diffs = diff_keyed_rows(
+        before, after, ["maturity_stage", "target_stage"], locked_keys=locked_keys
+    )
+    changes = [
+        ZtCapabilityChange(capability_code=d.key, field=ch.field, old=ch.old, new=ch.new)
+        for d in diffs
+        for ch in d.changes
+    ]
+    narratives = data.get("pillar_narratives")
+    narratives = narratives if isinstance(narratives, dict) else {}
+
+    audit(
+        db,
+        action="zt.run_ai",
+        target_type="zt_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"changed_rows": len(diffs)},
+    )
+    db.commit()
+
+    answers_out = [
+        ZtAnswerResponse.model_validate(r, from_attributes=True)
+        for r in sorted(rows.values(), key=lambda r: r.capability_code)
+    ]
+    return ZtRunAiResponse(
+        changed=changes,
+        answers=answers_out,
+        pillar_narratives={str(k): str(v) for k, v in narratives.items()},
+        executive_summary=(data.get("executive_summary") or None),
+        roadmap_summary=(data.get("roadmap_summary") or None),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Assessments
 # ---------------------------------------------------------------------------
@@ -462,6 +603,17 @@ def patch_answer(
         row.maturity_stage = s
     elif "maturity_stage" in data:
         row.maturity_stage = None
+    if "target_stage" in data and data["target_stage"] is not None:
+        ts = int(data["target_stage"])
+        max_stage = level_count(_to_catalog_framework(a.framework))
+        if not 1 <= ts <= max_stage:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"target_stage must be 1-{max_stage}.",
+            )
+        row.target_stage = ts
+    elif "target_stage" in data:
+        row.target_stage = None
     if "notes" in data:
         row.notes = data["notes"]
     if "evidence_artifact_id" in data:
@@ -762,9 +914,18 @@ def gap_analysis(
     notes: dict[str, str | None] = {
         r.capability_code: r.notes for r in rows if r.capability_code in valid
     }
+    targets: dict[str, int | None] = {
+        r.capability_code: r.target_stage for r in rows if r.capability_code in valid
+    }
     analysis = analyze_gaps(
-        cat_fw, answers, notes=notes, target_stage=target_stage, top_n=top_n
+        cat_fw,
+        answers,
+        notes=notes,
+        target_stage=target_stage,
+        targets=targets,
+        top_n=top_n,
     )
+    roadmap = build_roadmap(analysis.gaps)
     return GapAnalysisResponse(
         assessment_id=a.id,
         version=a.version,
@@ -788,6 +949,19 @@ def gap_analysis(
                 notes=g.notes,
             )
             for g in analysis.gaps
+        ],
+        roadmap=[
+            RoadmapEntry(
+                month=it.month,
+                code=it.code,
+                pillar_code=it.pillar_code,
+                pillar_name=it.pillar_name,
+                name=it.name,
+                current_stage=it.current_stage,
+                target_stage=it.target_stage,
+                priority_score=it.priority_score,
+            )
+            for it in roadmap
         ],
     )
 

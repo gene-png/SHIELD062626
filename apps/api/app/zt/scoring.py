@@ -12,7 +12,8 @@ Baseline/Target/... for DoD) are picked from the maturity module.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from app.zt.catalog import (
@@ -234,13 +235,24 @@ def analyze_gaps(
     *,
     notes: Mapping[str, str | None] | None = None,
     target_stage: int = DEFAULT_TARGET_STAGE,
+    targets: Mapping[str, int | None] | None = None,
     top_n: int = DEFAULT_TOP_N,
 ) -> GapAnalysis:
+    """Gaps where current < target. `targets` supplies per-capability targets
+    (Work Order D3); a capability with no per-capability target falls back to
+    the engagement-level `target_stage`."""
     max_stage = level_count(framework)
     if not (1 <= target_stage <= max_stage):
         target_stage = min(DEFAULT_TARGET_STAGE, max_stage)
     notes = notes or {}
+    targets = targets or {}
     names = _pillar_name_lookup(framework)
+
+    def _target_for(code: str) -> int:
+        t = targets.get(code)
+        if isinstance(t, int) and 1 <= t <= max_stage:
+            return t
+        return target_stage
 
     rows: list[Gap] = []
     unscored: list[str] = []
@@ -249,11 +261,12 @@ def analyze_gaps(
         if s is None:
             unscored.append(cap.code)
             continue
-        if s >= target_stage:
+        cap_target = _target_for(cap.code)
+        if s >= cap_target:
             continue
         pillar_name = names.get(cap.pillar_code, cap.pillar_code)
         rows.append(
-            _row_for(cap, s, target_stage, notes.get(cap.code), pillar_name)
+            _row_for(cap, s, cap_target, notes.get(cap.code), pillar_name)
         )
 
     rows.sort(key=lambda g: (-g.priority_score, g.code))
@@ -273,14 +286,57 @@ def analyze_gaps(
     )
 
 
+@dataclass(frozen=True)
+class RoadmapItem:
+    month: int  # 1..horizon_months
+    code: str
+    pillar_code: str
+    pillar_name: str
+    name: str
+    current_stage: int
+    target_stage: int
+    priority_score: float
+
+
+def build_roadmap(
+    gaps: Sequence[Gap], *, horizon_months: int = 12
+) -> tuple[RoadmapItem, ...]:
+    """Sequence prioritized gaps across a fixed horizon (Work Order D3).
+
+    `gaps` are assumed already ordered by descending priority (as analyze_gaps
+    returns them). Identity/User and Data pillars already carry higher weight in
+    the priority score, so they naturally land in earlier months. The list is
+    spread evenly so each month gets roughly the same number of items.
+    """
+    n = len(gaps)
+    if n == 0 or horizon_months <= 0:
+        return ()
+    per_month = max(1, math.ceil(n / horizon_months))
+    return tuple(
+        RoadmapItem(
+            month=min(horizon_months, i // per_month + 1),
+            code=g.code,
+            pillar_code=g.pillar_code,
+            pillar_name=g.pillar_name,
+            name=g.name,
+            current_stage=g.current_stage,
+            target_stage=g.target_stage,
+            priority_score=g.priority_score,
+        )
+        for i, g in enumerate(gaps)
+    )
+
+
 __all__ = [
     "DEFAULT_TARGET_STAGE",
     "DEFAULT_TOP_N",
     "Gap",
     "GapAnalysis",
     "PillarScoreResult",
+    "RoadmapItem",
     "ScoreResult",
     "WEAKEST_PER_PILLAR",
     "analyze_gaps",
+    "build_roadmap",
     "compute",
 ]
