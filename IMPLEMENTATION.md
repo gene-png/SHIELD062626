@@ -112,10 +112,10 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - BE: rewrite `routes/auth.py::register` — domain lookup → attach as `client`; generic-provider denylist → reject with "contact your administrator"; unknown → reject (no placeholder client). First admin via seed/bootstrap.
 - **Acceptance:** approved domain auto-joins; generic/unknown rejected; no placeholder clients.
 
-### B2 — Admin client & domain management `[~]`
-- BE: admin-only routes in `routes/admin.py` — create/list client (existed), add/list/remove domain, archive service. All audited. **Done.**
-- FE: Management area in admin shell — **deferred to C6** (nav shells), per the work order.
-- **Acceptance (backend):** admin domain CRUD + service archive work + audited; client users 403 everywhere (tested in `test_admin_client_domains.py`).
+### B2 — Admin client & domain management `[x]`
+- BE: admin-only routes in `routes/admin.py` — create/list client, add/list/remove domain, archive service. All audited + tested.
+- FE: **Management page** in the admin shell (`/admin/management`) — create client, list clients, add/remove approved domains per client. Proxies + `lib/admin` helpers added.
+- **Acceptance:** admin domain CRUD + service archive work + audited; client users 403 everywhere (`test_admin_client_domains.py`); Management UI typechecks + lints clean.
 
 ---
 
@@ -149,7 +149,9 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - FE: shared dashboard shell with Technical/Executive toggle. Executive = KPI cards + charts (Recharts) modeled on Atlas uploads (Software Portfolio→Tech Debt, CISA→ZT, MITRE→ATT&CK; CSF from spec §6), read-only. Technical = existing grids.
 - **Acceptance:** each workspace shows both; executive renders cards/charts; editing only in technical.
 
-### C6 — Navigation shells + no dead ends (build early) `[ ]`
+### C6 — Navigation shells + no dead ends (build early) `[~]`
+> **Done:** admin left-sidebar shell (`AdminShell`: persistent nav, identity header, skip-to-content, `#main-content`), all `admin/*` routed through it; `SkipToContent` + `Breadcrumbs` components; not-authorized page rebuilt with role-aware onward links + Sign out; admin destination pages (Management = B2 UI, Active Work, Messages with onward links). FE typecheck + lint clean.
+> **Remaining:** client top-nav shell rework (Home / My Assessments / Messages / Account + client Home + skip link on client pages), service-workspace breadcrumb + tabbed sub-nav (Technical/Executive/Documents/AI history), intake-wizard Save-and-exit, edge-state sweep, the Navigation_Spec §9 crawl/keyboard/role acceptance pass.
 - FE: admin left-sidebar shell (`app/admin/layout.tsx`: Dashboard, Clients, Intake Queue, Active Work, Messages, Management) for all `admin/*`; client top-nav shell (Home, My Assessments, Messages, Account) with real client Home; no Deliverables. Breadcrumbs on nested pages. Workspace tabbed sub-nav (Technical/Executive/Documents/AI history). Intake wizard "Save and exit" → client Home. Not-authorized page → role-aware onward links + Sign out. Skip-to-content first focusable in both shells. Replace bare Loading/error with shell + Retry + onward link.
 - **Acceptance:** Navigation_Spec §9 checks pass (crawl, keyboard, role).
 
@@ -241,4 +243,5 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-25 | B2 backend | Admin domain add/list/remove + service archive endpoints (`routes/admin.py`) with audit + isolation tests. Management UI deferred to C6. Part B committed. |
 | 2026-06-25 | C1 done | `ai/engine.py` job registry (`run_job` over `LLMClient.invoke`); `ai/jobs.py` registers `tech_debt_extract` (moved behind the registry, keeps `extract.capabilities` purpose) + `csf_score`/`zt_score`/`mitre_map`/`risk_synthesize` (draft-suggestion prompts + JSON parser). New `test_ai_engine.py`; full backend suite green. Service phases refine each job's suggestion schema. C1 committed. |
 | 2026-06-25 | C0 rescoped | Decided against a big-bang status-value rename (high churn, `released` already dead post-A1). Canonical vocabulary documented; `returned_for_info` added additively in C7. |
-| 2026-06-25 | C7 messaging | `messages` table (migration 0017) + tenant-scoped thread routes + read-marking + isolation tests (`test_messages.py`). Full backend suite green. returned_for_info transition + FE pending (with C6). |
+| 2026-06-25 | C7 messaging | `messages` table (migration 0017) + tenant-scoped thread routes + read-marking + isolation tests (`test_messages.py`). Full backend suite green. returned_for_info transition + FE pending (with C6). C7 messaging committed. |
+| 2026-06-25 | C6 partial + B2 UI | Admin left-sidebar shell (`AdminShell`) with skip-to-content + breadcrumbs + not-authorized exits; admin pages routed through it. **B2 Management UI** (`/admin/management`: create client, list, add/remove domains) + proxies + `lib/admin` helpers — B2 now complete. Web typecheck + lint clean. Client-shell rework + workspace breadcrumbs/tabs remain in C6. |
