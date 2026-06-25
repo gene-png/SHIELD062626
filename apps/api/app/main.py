@@ -24,6 +24,7 @@ from app.routes import (
     csf,
     health,
     intake,
+    messages,
     notifications,
     tech_debt,
     zt,
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(csf.router)
     app.include_router(zt.router)
     app.include_router(attack.router)
+    app.include_router(messages.router)
 
     return app
 

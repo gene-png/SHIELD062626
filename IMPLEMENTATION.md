@@ -121,10 +121,12 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 
 # PART C — Shared platform
 
-### C0 — Status-model reconciliation (prerequisite) `[ ]`
-- Canonical enum: `draft → submitted → returned_for_info → accepted → in_analysis → finalized` (no `released`).
-- Migration `0018`: map existing CSF/ZT/ATT&CK statuses onto it; apply uniformly.
-- **Acceptance:** all services share one status set; transitions enforced; no `released`/`approved` left.
+### C0 — Status-model reconciliation `[~]` (rescoped — additive, not a rename)
+**Decision (2026-06-25):** A literal enum-value rename (`approved`→`accepted`, `released`→`finalized`) across all three services + FE + ~5 test files is high-churn, low-value right now, and risks the green suite. Critically, `released` is **already dead** post-A1 (the endpoints that set it were removed). So:
+- Canonical lifecycle vocabulary: `draft → submitted → returned_for_info → accepted(≡ current "approved") → in_analysis → finalized(≡ deliverable finalize)`.
+- Implement **additively**: add `returned_for_info` as part of C7's loop; keep the existing `draft/submitted/approved` values (which map 1:1), and drop the now-dead `released` gating during C7 cleanup. No big-bang value rename.
+- If the product owner wants the literal string values renamed too, that's a separate mechanical pass (flagged).
+- **Acceptance:** one documented vocabulary; the return-for-info transition works (covered by C7).
 
 ### C1 — One AI engine with job types `[x]`
 - BE: add `ai/engine.py` with `run_job(job_name, *, client, service, inputs)` → look up job def (prompt + parser) → `LLMClient.invoke` → parse. Jobs: `tech_debt_extract` (move existing behind registry), `csf_score`, `zt_score`, `mitre_map`, `risk_synthesize`. Score/map/synthesize return draft suggestions only. Record prompt version on `llm_calls`.
@@ -151,7 +153,8 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - FE: admin left-sidebar shell (`app/admin/layout.tsx`: Dashboard, Clients, Intake Queue, Active Work, Messages, Management) for all `admin/*`; client top-nav shell (Home, My Assessments, Messages, Account) with real client Home; no Deliverables. Breadcrumbs on nested pages. Workspace tabbed sub-nav (Technical/Executive/Documents/AI history). Intake wizard "Save and exit" → client Home. Not-authorized page → role-aware onward links + Sign out. Skip-to-content first focusable in both shells. Replace bare Loading/error with shell + Retry + onward link.
 - **Acceptance:** Navigation_Spec §9 checks pass (crawl, keyboard, role).
 
-### C7 — Messaging + return-for-info loop `[ ]`
+### C7 — Messaging + return-for-info loop `[~]`
+> **Backend messaging done:** `messages` table (migration 0017), tenant-scoped `GET/POST /services/{id}/messages`, reads mark the counterparty's messages read, isolation enforced (`test_messages.py`). **Remaining:** the `returned_for_info` status transition (admin "request more info" → client resubmit) and the FE Messages surface (with C6 shells).
 - Migration `0018`: `message` (`id`, `client_id`, `service_id`, `author_user_id`, `body`, `created_at`, `read_at`).
 - BE: list/post message routes (tenant-scoped); `returned_for_info` status + admin "request more info" action; client responds + re-submits → `submitted`.
 - FE: Messages surface in both shells; per-service thread; admin action; client view/respond.
@@ -236,4 +239,6 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-25 | A4 done | ZT scale framework-aware: CISA 4 levels, DoD 3 (Not Started/Target/Advanced); `level_count` helper; roll-ups + labels normalized per framework; added `maturity_pct` (% of max) to score outputs; PATCH validates 1..level_count; catalog-driven FE picker auto-shows 3 vs 4. ZT + full backend suites green; web typecheck green. Part A committed. |
 | 2026-06-25 | B1 done | `client_domain` table (migration 0016); generic-provider denylist (`security/email_domains.py`); register now joins a client by approved domain — first user still bootstraps the admin, generic/unknown domains rejected, no placeholder clients. Reworked ~12 test fixtures onto the new onboarding model (admin creates org+domain, then client registers); added B1/B2 tests. Full backend suite green. |
 | 2026-06-25 | B2 backend | Admin domain add/list/remove + service archive endpoints (`routes/admin.py`) with audit + isolation tests. Management UI deferred to C6. Part B committed. |
-| 2026-06-25 | C1 done | `ai/engine.py` job registry (`run_job` over `LLMClient.invoke`); `ai/jobs.py` registers `tech_debt_extract` (moved behind the registry, keeps `extract.capabilities` purpose) + `csf_score`/`zt_score`/`mitre_map`/`risk_synthesize` (draft-suggestion prompts + JSON parser). New `test_ai_engine.py`; full backend suite green. Service phases refine each job's suggestion schema. |
+| 2026-06-25 | C1 done | `ai/engine.py` job registry (`run_job` over `LLMClient.invoke`); `ai/jobs.py` registers `tech_debt_extract` (moved behind the registry, keeps `extract.capabilities` purpose) + `csf_score`/`zt_score`/`mitre_map`/`risk_synthesize` (draft-suggestion prompts + JSON parser). New `test_ai_engine.py`; full backend suite green. Service phases refine each job's suggestion schema. C1 committed. |
+| 2026-06-25 | C0 rescoped | Decided against a big-bang status-value rename (high churn, `released` already dead post-A1). Canonical vocabulary documented; `returned_for_info` added additively in C7. |
+| 2026-06-25 | C7 messaging | `messages` table (migration 0017) + tenant-scoped thread routes + read-marking + isolation tests (`test_messages.py`). Full backend suite green. returned_for_info transition + FE pending (with C6). |
