@@ -61,15 +61,21 @@ from app.schemas.attack import (
     AttackCoveragePatch,
     AttackCoverageResponse,
     AttackHeatmap,
+    AttackRunAiResponse,
     AttackServiceCreateRequest,
     AttackServiceResponse,
     CatalogCoverageDefinition,
     CatalogResponse,
     CatalogTactic,
     CatalogTechnique,
+    CoverageChange,
     TacticHeatmapEntry,
 )
 from app.schemas.tech_debt import DeliverableResponse
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
+from app.models.capability import CapabilityItem, CapabilityList
 from app.storage import StorageBackend
 from app.tech_debt.filename import SERVICE_SLUG_ATTACK, deliverable_filename
 
@@ -99,6 +105,10 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
                 notes=r.notes,
                 evidence_artifact_id=r.evidence_artifact_id,
                 locked=r.locked,
+                detection_tools=r.detection_tools,
+                prevention_tools=r.prevention_tools,
+                response_tools=r.response_tools,
+                rationale=r.rationale,
                 answered_by=r.answered_by,
                 answered_at=r.answered_at,
             )
@@ -356,6 +366,9 @@ def patch_coverage(
         row.evidence_artifact_id = data["evidence_artifact_id"]
     if data.get("locked") is not None:
         row.locked = bool(data["locked"])
+    for f in ("detection_tools", "prevention_tools", "response_tools", "rationale"):
+        if f in data:
+            setattr(row, f, data[f])
     row.answered_by = user.id
     row.answered_at = utcnow()
     audit(
@@ -380,8 +393,169 @@ def patch_coverage(
         notes=row.notes,
         evidence_artifact_id=row.evidence_artifact_id,
         locked=row.locked,
+        detection_tools=row.detection_tools,
+        prevention_tools=row.prevention_tools,
+        response_tools=row.response_tools,
+        rationale=row.rationale,
         answered_by=row.answered_by,
         answered_at=row.answered_at,
+    )
+
+
+def _llm_dep() -> LLMClient:
+    return LLMClient.from_settings()
+
+
+def _client_tool_names(db: Session, client_id: uuid.UUID) -> list[str]:
+    """Tool names from the client's Tech Debt capability list(s), if any.
+
+    ATT&CK maps the client's security tooling to techniques; the canonical
+    source is the Tech Debt approved capability list (Work Order D2).
+    """
+    names = (
+        db.execute(
+            select(CapabilityItem.name)
+            .join(CapabilityList, CapabilityItem.capability_list_id == CapabilityList.id)
+            .join(Service, CapabilityList.service_id == Service.id)
+            .where(
+                Service.client_id == client_id,
+                Service.kind == ServiceKind.TECH_DEBT,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return sorted({n.strip() for n in names if n and n.strip()})
+
+
+_VALID_STATUSES = {s.value for s in CoverageStatus}
+_DIFF_FIELDS = (
+    "status",
+    "detection_tools",
+    "prevention_tools",
+    "response_tools",
+    "rationale",
+)
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=AttackRunAiResponse,
+    summary="Run the mitre_map AI job: suggest coverage + D/P/R per technique (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+) -> AttackRunAiResponse:
+    """The ATT&CK 'Run AI'. Suggests coverage status + which listed tools provide
+    Detection / Prevention / Response per technique, validating every cited tool
+    against the client's capability list. AI suggests; locked rows are left
+    untouched; code computes coverage % elsewhere. Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(
+        db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE
+    )
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (AttackAssessmentStatus.APPROVED, AttackAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+
+    tools = _client_tool_names(db, client.id)
+    valid_tools = {t.lower() for t in tools}
+
+    rows = {
+        r.technique_code: r
+        for r in db.execute(
+            select(AttackCoverage).where(AttackCoverage.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+    }
+    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+
+    def _snap() -> dict[str, dict]:
+        return {
+            code: {
+                "status": r.status,
+                "detection_tools": list(r.detection_tools or []),
+                "prevention_tools": list(r.prevention_tools or []),
+                "response_tools": list(r.response_tools or []),
+                "rationale": r.rationale,
+            }
+            for code, r in rows.items()
+        }
+
+    before = _snap()
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    result = run_job(
+        db,
+        llm,
+        "mitre_map",
+        inputs={"capability_list": tools, "technique_codes": sorted(rows)},
+        requested_by=user.id,
+        service_id=svc.id,
+        client_org_name=client_org,
+    )
+
+    def _validate_tools(names: object) -> list[str]:
+        if not isinstance(names, list):
+            return []
+        # Only tools that actually appear in the client's capability list.
+        return [t for t in names if isinstance(t, str) and t.lower() in valid_tools]
+
+    for sugg in (result.data or {}).get("techniques", []):
+        if not isinstance(sugg, dict):
+            continue
+        row = rows.get(sugg.get("technique_code"))
+        if row is None or row.locked:
+            continue
+        st = sugg.get("status")
+        if isinstance(st, str) and st in _VALID_STATUSES:
+            row.status = st
+        if "detection_tools" in sugg:
+            row.detection_tools = _validate_tools(sugg["detection_tools"])
+        if "prevention_tools" in sugg:
+            row.prevention_tools = _validate_tools(sugg["prevention_tools"])
+        if "response_tools" in sugg:
+            row.response_tools = _validate_tools(sugg["response_tools"])
+        if isinstance(sugg.get("rationale"), str):
+            row.rationale = sugg["rationale"]
+        row.answered_by = user.id
+        row.answered_at = utcnow()
+
+    db.flush()
+    after = _snap()
+    diffs = diff_keyed_rows(before, after, _DIFF_FIELDS, locked_keys=locked_keys)
+    changes = [
+        CoverageChange(technique_code=d.key, field=ch.field, old=ch.old, new=ch.new)
+        for d in diffs
+        for ch in d.changes
+    ]
+
+    audit(
+        db,
+        action="attack.run_ai",
+        target_type="attack_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"tools_available": len(tools), "changed_rows": len(diffs)},
+    )
+    db.commit()
+
+    coverage = [
+        AttackCoverageResponse.model_validate(r, from_attributes=True)
+        for r in sorted(rows.values(), key=lambda r: r.technique_code)
+    ]
+    return AttackRunAiResponse(
+        tools_available=len(tools), changed=changes, coverage=coverage
     )
 
 

@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -23,10 +24,14 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models._common import TimestampMixin, UUIDPKMixin
+
+# Portable JSON list (native JSONB on Postgres, generic JSON on SQLite tests).
+_JSON_LIST = JSON().with_variant(JSONB, "postgresql")
 
 
 class AttackAssessmentStatus(enum.StrEnum):
@@ -97,6 +102,14 @@ class AttackCoverage(UUIDPKMixin, TimestampMixin, Base):
 
     # Work Order C2: a locked row is never changed by a Run-AI rerun.
     locked: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+    # Work Order D2: which listed tools provide detection / prevention /
+    # response for this technique. Tool names drawn from the client's
+    # capability list; AI suggests, admin curates. NULL = not yet mapped.
+    detection_tools: Mapped[list | None] = mapped_column(_JSON_LIST)
+    prevention_tools: Mapped[list | None] = mapped_column(_JSON_LIST)
+    response_tools: Mapped[list | None] = mapped_column(_JSON_LIST)
+    rationale: Mapped[str | None] = mapped_column(Text)
 
     answered_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -79,6 +80,11 @@ class AttackCoverageResponse(BaseModel):
     notes: str | None
     evidence_artifact_id: uuid.UUID | None
     locked: bool = False
+    # Work Order D2: tools providing detection / prevention / response.
+    detection_tools: list[str] | None = None
+    prevention_tools: list[str] | None = None
+    response_tools: list[str] | None = None
+    rationale: str | None = None
     answered_by: uuid.UUID | None
     answered_at: datetime | None
 
@@ -95,12 +101,34 @@ class AttackAssessmentResponse(BaseModel):
     coverage: list[AttackCoverageResponse]
 
 
+class CoverageChange(BaseModel):
+    """One field the mitre_map AI run changed on a technique (Work Order D2/C2)."""
+
+    technique_code: str
+    field: str
+    old: Any = None
+    new: Any = None
+
+
+class AttackRunAiResponse(BaseModel):
+    """Result of a mitre_map Run-AI: what changed + the refreshed coverage."""
+
+    tools_available: int
+    changed: list[CoverageChange]
+    coverage: list[AttackCoverageResponse]
+
+
 class AttackCoveragePatch(BaseModel):
     status: CoverageStatus | None = None
     notes: str | None = Field(default=None, max_length=8000)
     evidence_artifact_id: uuid.UUID | None = None
     # Work Order C2: lock/unlock this row against AI reruns.
     locked: bool | None = None
+    # Work Order D2: D/P/R tool mappings + rationale.
+    detection_tools: list[str] | None = None
+    prevention_tools: list[str] | None = None
+    response_tools: list[str] | None = None
+    rationale: str | None = Field(default=None, max_length=8000)
 
 
 # ---------------------------------------------------------------------------
