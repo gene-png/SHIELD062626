@@ -141,7 +141,7 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - BE: after a successful AI run, generate PDF+Word+XLSX → store as new `Deliverable` version (artifacts scoped by `client_id`); keep history; mark newest current; filenames `{Company}_{Service}{MMDDYY}[_vN].{ext}` (generalize `tech_debt/filename.py`).
 - **Acceptance:** two runs → two versions; newest current; older still admin-downloadable.
 
-### C4 — Word (.docx) export `[ ]`
+### C4 — Word (.docx) export `[x]`
 - BE: add `.docx` renderer in each `{tech_debt,csf,zt,attack}/exporters.py` matching the PDF content per flow spec.
 - **Acceptance:** every service document set includes a Word file with content parity.
 
@@ -244,4 +244,5 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-25 | C1 done | `ai/engine.py` job registry (`run_job` over `LLMClient.invoke`); `ai/jobs.py` registers `tech_debt_extract` (moved behind the registry, keeps `extract.capabilities` purpose) + `csf_score`/`zt_score`/`mitre_map`/`risk_synthesize` (draft-suggestion prompts + JSON parser). New `test_ai_engine.py`; full backend suite green. Service phases refine each job's suggestion schema. C1 committed. |
 | 2026-06-25 | C0 rescoped | Decided against a big-bang status-value rename (high churn, `released` already dead post-A1). Canonical vocabulary documented; `returned_for_info` added additively in C7. |
 | 2026-06-25 | C7 messaging | `messages` table (migration 0017) + tenant-scoped thread routes + read-marking + isolation tests (`test_messages.py`). Full backend suite green. returned_for_info transition + FE pending (with C6). C7 messaging committed. |
-| 2026-06-25 | C6 partial + B2 UI | Admin left-sidebar shell (`AdminShell`) with skip-to-content + breadcrumbs + not-authorized exits; admin pages routed through it. **B2 Management UI** (`/admin/management`: create client, list, add/remove domains) + proxies + `lib/admin` helpers — B2 now complete. Web typecheck + lint clean. Client-shell rework + workspace breadcrumbs/tabs remain in C6. |
+| 2026-06-25 | C6 partial + B2 UI | Admin left-sidebar shell (`AdminShell`) with skip-to-content + breadcrumbs + not-authorized exits; admin pages routed through it. **B2 Management UI** (`/admin/management`: create client, list, add/remove domains) + proxies + `lib/admin` helpers — B2 now complete. Web typecheck + lint clean. Client-shell rework + workspace breadcrumbs/tabs remain in C6. Committed. |
+| 2026-06-25 | C4 done | Word `.docx` export for all 4 services: shared `app/docx_export.py` helpers; `render_docx` in each exporter mirroring the PDF; `deliverables.docx_artifact_id` (migration 0018) + schema fields; finalize endpoints render + store the Word doc. CSF finalize test downloads it (zip "PK"). Full backend suite green. |

@@ -137,8 +137,10 @@ class DeliverableResponse(BaseModel):
     version: int
     pdf_artifact_id: uuid.UUID | None
     xlsx_artifact_id: uuid.UUID | None
+    docx_artifact_id: uuid.UUID | None = None
     pdf_filename: str | None
     xlsx_filename: str | None
+    docx_filename: str | None = None
     finalized_at: datetime | None
     finalized_by: uuid.UUID | None
     superseded_by: uuid.UUID | None

@@ -198,6 +198,78 @@ def render_xlsx(ctx: ZtDeliverableContext) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def render_docx(ctx: ZtDeliverableContext) -> bytes:
+    """Word deliverable mirroring the PDF (Work Order C4)."""
+    from app.docx_export import (
+        add_heading,
+        add_paragraphs,
+        add_table,
+        add_title,
+        new_document,
+        to_bytes,
+    )
+
+    doc = new_document(f"{ctx.service_title} — {ctx.client_legal_name}")
+    add_title(
+        doc,
+        ctx.service_title,
+        f"{ctx.client_legal_name} · {_framework_label(ctx.framework)}",
+    )
+
+    add_heading(doc, "Maturity summary")
+    add_paragraphs(
+        doc,
+        [
+            f"Overall stage: {ctx.score.overall_stage_label}",
+            f"Average stage: {_fmt(ctx.score.average_stage)}",
+            f"Coverage: {ctx.score.answered_capabilities}/"
+            f"{ctx.score.total_capabilities} ({ctx.score.coverage_pct}%)",
+        ],
+    )
+
+    add_heading(doc, "Per-pillar rollup")
+    add_table(
+        doc,
+        ["Pillar", "Name", "Average stage", "Coverage"],
+        [
+            [
+                ps.pillar_code,
+                ps.pillar_name,
+                _fmt(ps.average_stage),
+                f"{ps.answered_count}/{ps.capability_count} ({ps.coverage_pct}%)",
+            ]
+            for ps in ctx.score.by_pillar
+        ],
+    )
+
+    add_heading(doc, f"Top remediation gaps (target S{ctx.gap.target_stage})")
+    if not ctx.gap.gaps:
+        add_paragraphs(
+            doc,
+            [
+                f"No gaps at target stage {ctx.gap.target_stage} "
+                f"({ctx.gap.target_label})."
+            ],
+        )
+    else:
+        add_table(
+            doc,
+            ["Code", "Pillar", "Capability", "Current → Target", "Priority"],
+            [
+                [
+                    g.code,
+                    g.pillar_code,
+                    g.name,
+                    f"S{g.current_stage} → S{g.target_stage}",
+                    f"{g.priority_score:.2f}",
+                ]
+                for g in ctx.gap.gaps
+            ],
+        )
+
+    return to_bytes(doc)
+
+
 def render_pdf(ctx: ZtDeliverableContext) -> bytes:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet

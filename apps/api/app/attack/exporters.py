@@ -205,6 +205,69 @@ def render_xlsx(ctx: AttackDeliverableContext) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def render_docx(ctx: AttackDeliverableContext) -> bytes:
+    """Word deliverable mirroring the PDF (Work Order C4)."""
+    from app.docx_export import (
+        add_heading,
+        add_paragraphs,
+        add_table,
+        add_title,
+        new_document,
+        to_bytes,
+    )
+
+    doc = new_document(f"{ctx.service_title} — {ctx.client_legal_name}")
+    add_title(doc, ctx.service_title, ctx.client_legal_name)
+
+    add_heading(doc, "Coverage summary")
+    add_paragraphs(
+        doc,
+        [
+            f"Overall coverage: {ctx.rollup.coverage_pct}%",
+            f"Scored: {ctx.rollup.scored_count}/"
+            f"{ctx.rollup.scored_count + ctx.rollup.unscored_count}",
+            f"Covered {ctx.rollup.covered}, Partial {ctx.rollup.partial}, "
+            f"Gap {ctx.rollup.gap}, N/A {ctx.rollup.not_applicable}",
+        ],
+    )
+
+    add_heading(doc, "Per-tactic rollup")
+    add_table(
+        doc,
+        ["Tactic", "Name", "Covered", "Partial", "Gap", "N/A", "Coverage %"],
+        [
+            [
+                tc.tactic_id,
+                tc.tactic_name,
+                tc.covered,
+                tc.partial,
+                tc.gap,
+                tc.not_applicable,
+                f"{tc.coverage_pct}%",
+            ]
+            for tc in ctx.rollup.by_tactic
+        ],
+    )
+
+    gap_rows = [c for c in ctx.coverage if c.status == CoverageStatus.GAP.value]
+    gap_rows.sort(key=lambda c: c.technique_code)
+    gap_rows = gap_rows[:50]
+    add_heading(doc, f"Top remediation gaps ({len(gap_rows)} of {ctx.rollup.gap} shown)")
+    if not gap_rows:
+        add_paragraphs(doc, ["No techniques flagged as Gap."])
+    else:
+        rows = []
+        for cov in gap_rows:
+            try:
+                name = technique_by_id(cov.technique_code).name
+            except KeyError:
+                name = ""
+            rows.append([cov.technique_code, name])
+        add_table(doc, ["Code", "Technique"], rows)
+
+    return to_bytes(doc)
+
+
 def render_pdf(ctx: AttackDeliverableContext) -> bytes:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet

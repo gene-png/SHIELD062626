@@ -127,6 +127,15 @@ def test_finalize_renders_pdf_and_xlsx(app_client) -> None:
     assert "NIST_CSF_2_0_Assessment" in body["pdf_filename"]
     assert body["xlsx_filename"].endswith(".xlsx")
     assert "Overall maturity" in body["summary"]
+    # Word deliverable (Work Order C4): present + a real .docx (zip starts "PK").
+    assert body["docx_artifact_id"] is not None
+    assert body["docx_filename"].endswith(".docx")
+    docx = c.get(
+        f"/artifacts/{body['docx_artifact_id']}/download",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert docx.status_code == 200
+    assert docx.content[:2] == b"PK"
 
 
 @pytest.mark.unit

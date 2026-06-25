@@ -251,3 +251,61 @@ def render_pdf(ctx: DeliverableContext) -> bytes:
 
     doc.build(story)
     return out.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# DOCX (Work Order C4) - mirrors the PDF content.
+# ---------------------------------------------------------------------------
+
+
+def render_docx(ctx: DeliverableContext) -> bytes:
+    from app.docx_export import (
+        add_heading,
+        add_paragraphs,
+        add_table,
+        add_title,
+        new_document,
+        to_bytes,
+    )
+
+    doc = new_document(f"{ctx.service_title} — {ctx.client_legal_name}")
+    add_title(doc, ctx.service_title, ctx.client_legal_name)
+
+    savings = (
+        f"${ctx.estimated_savings:,.0f}"
+        if ctx.savings_cost_known
+        else f"≥ ${ctx.estimated_savings:,.0f}"
+    )
+    add_heading(doc, "Summary")
+    lines = [
+        f"Capabilities reviewed: {len(ctx.items)}",
+        f"Total annual cost: ${ctx.total_cost:,.0f}",
+        f"Estimated annual savings: {savings}",
+    ]
+    if not ctx.savings_cost_known:
+        lines.append(
+            "Note: at least one row marked Cut is missing an annual cost. "
+            "The savings figure is a lower bound."
+        )
+    add_paragraphs(doc, lines)
+
+    add_heading(doc, "Capability list")
+    rows = []
+    for item in ctx.items:
+        cost = (
+            f"${float(item.annual_cost_usd):,.0f}"
+            if item.annual_cost_usd is not None
+            else "—"
+        )
+        rows.append(
+            [
+                item.name,
+                item.vendor or "",
+                item.category or "",
+                cost,
+                _disposition_label(item.disposition),
+            ]
+        )
+    add_table(doc, ["Name", "Vendor", "Category", "Annual cost", "Disposition"], rows)
+
+    return to_bytes(doc)

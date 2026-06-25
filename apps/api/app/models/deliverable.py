@@ -40,6 +40,10 @@ class Deliverable(UUIDPKMixin, TimestampMixin, Base):
     xlsx_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )
+    # Word (.docx) deliverable (Work Order C4), alongside PDF + XLSX.
+    docx_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
 
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finalized_by: Mapped[uuid.UUID | None] = mapped_column(

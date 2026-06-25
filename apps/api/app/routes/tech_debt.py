@@ -51,7 +51,7 @@ from app.schemas.tech_debt import (
     TopCostItemResponse,
 )
 from app.storage import StorageBackend
-from app.tech_debt.exporters import build_context, render_pdf, render_xlsx
+from app.tech_debt.exporters import build_context, render_docx, render_pdf, render_xlsx
 from app.tech_debt.extract import (
     client_org_name_for_tenant,
     extract_capabilities,
@@ -489,12 +489,16 @@ def consolidation_plan_summary(
 def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableResponse:
     pdf_title = None
     xlsx_title = None
+    docx_title = None
     if deliv.pdf_artifact_id:
         a = db.get(Artifact, deliv.pdf_artifact_id)
         pdf_title = a.title if a else None
     if deliv.xlsx_artifact_id:
         a = db.get(Artifact, deliv.xlsx_artifact_id)
         xlsx_title = a.title if a else None
+    if deliv.docx_artifact_id:
+        a = db.get(Artifact, deliv.docx_artifact_id)
+        docx_title = a.title if a else None
     return DeliverableResponse(
         id=deliv.id,
         service_id=deliv.service_id,
@@ -503,8 +507,10 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         version=deliv.version,
         pdf_artifact_id=deliv.pdf_artifact_id,
         xlsx_artifact_id=deliv.xlsx_artifact_id,
+        docx_artifact_id=deliv.docx_artifact_id,
         pdf_filename=pdf_title,
         xlsx_filename=xlsx_title,
+        docx_filename=docx_title,
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
         superseded_by=deliv.superseded_by,
@@ -596,6 +602,13 @@ def finalize_deliverable(
         day=today,
         version=next_version,
     )
+    docx_name = deliverable_filename(
+        company=client_name,
+        service_slug=service_slug,
+        extension="docx",
+        day=today,
+        version=next_version,
+    )
 
     ctx = build_context(
         client_legal_name=client_name,
@@ -605,6 +618,7 @@ def finalize_deliverable(
     )
     pdf_bytes = render_pdf(ctx)
     xlsx_bytes = render_xlsx(ctx)
+    docx_bytes = render_docx(ctx)
 
     pdf_artifact = _write_artifact(
         db,
@@ -624,6 +638,17 @@ def finalize_deliverable(
         mime_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         data=xlsx_bytes,
     )
+    from app.docx_export import DOCX_MIME
+
+    docx_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        client_id=client.id,
+        filename=docx_name,
+        mime_type=DOCX_MIME,
+        data=docx_bytes,
+    )
 
     summary_line = (
         f"{len(items)} capabilities reviewed; "
@@ -638,6 +663,7 @@ def finalize_deliverable(
         version=next_version,
         pdf_artifact_id=pdf_artifact.id,
         xlsx_artifact_id=xlsx_artifact.id,
+        docx_artifact_id=docx_artifact.id,
         finalized_at=utcnow(),
         finalized_by=user.id,
     )
