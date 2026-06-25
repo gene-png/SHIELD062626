@@ -146,6 +146,27 @@ class ZtScoreSummary(BaseModel):
     by_pillar: list[PillarScore]
 
 
+class ZtInterviewQuestion(BaseModel):
+    """One verbatim ZT interview prompt (Work Order C8)."""
+
+    external_id: str
+    section_name: str
+    order_index: int
+    stem: str
+    cues: list[str]
+    # ZT capability/activity hints the prompt informs (catalog-code mapping is
+    # imported with the ZT cross-references in the service phase).
+    capabilities: list[str]
+
+
+class ZtQuestionnaireResponse(BaseModel):
+    """Framework-specific interview prompts for a ZT service (read-only)."""
+
+    framework_key: str
+    framework: ZtFramework
+    questions: list[ZtInterviewQuestion]
+
+
 class GapItem(BaseModel):
     code: str
     pillar_code: str

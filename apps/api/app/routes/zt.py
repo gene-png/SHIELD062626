@@ -34,6 +34,7 @@ from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
 from app.models.deliverable import Deliverable
+from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
@@ -56,6 +57,8 @@ from app.schemas.zt import (
     ZtAnswerPatch,
     ZtAnswerResponse,
     ZtAssessmentResponse,
+    ZtInterviewQuestion,
+    ZtQuestionnaireResponse,
     ZtScoreSummary,
     ZtSelfAssessmentSubmit,
     ZtServiceCreateRequest,
@@ -262,6 +265,62 @@ def get_catalog(
         pillars=pillar_rows,
         stages=stages,
         total_capabilities=total,
+    )
+
+
+_FRAMEWORK_TO_QUESTION_KEY: dict[ZtFramework, str] = {
+    ZtFramework.CISA_ZTMM_2_0: "zt-cisa",
+    ZtFramework.DOD_ZTRA: "zt-dod",
+}
+
+
+@router.get(
+    "/services/{service_id}/questionnaire",
+    response_model=ZtQuestionnaireResponse,
+    summary="Verbatim ZT interview prompts for the service's framework",
+)
+def get_interview_questionnaire(
+    service_id: uuid.UUID,
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ZtQuestionnaireResponse:
+    """Framework-resolved verbatim interview prompts (read-only, Work Order C8).
+
+    Each prompt carries the ZT capability hints it informs so the workspace can
+    surface it alongside the per-capability scoring grid.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id)
+    if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Zero Trust service not found.",
+        )
+    framework = _framework_for_kind(svc.kind)
+    framework_key = _FRAMEWORK_TO_QUESTION_KEY[framework]
+    rows = (
+        db.execute(
+            select(Question)
+            .where(Question.framework_key == framework_key)
+            .order_by(Question.order_index)
+        )
+        .scalars()
+        .all()
+    )
+    return ZtQuestionnaireResponse(
+        framework_key=framework_key,
+        framework=framework,
+        questions=[
+            ZtInterviewQuestion(
+                external_id=q.external_id,
+                section_name=q.pillar,
+                order_index=q.order_index,
+                stem=q.stem,
+                cues=list(q.cues or []),
+                capabilities=list(q.framework_activities or []),
+            )
+            for q in rows
+        ],
     )
 
 

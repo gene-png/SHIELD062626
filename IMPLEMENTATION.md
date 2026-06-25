@@ -163,7 +163,10 @@ Numbers may shift slightly as items merge; the table is updated as migrations ar
 - FE: Messages surface in both shells; per-service thread; admin action; client view/respond.
 - **Acceptance:** full loop works; thread persists; isolation test on `message`.
 
-### C8 — Wire verbatim interview questions into self-assessment `[ ]`
+### C8 — Wire verbatim interview questions into self-assessment `[~]`
+> **CSF:** already wired (pre-existing) — `GET /csf/services/{id}/questionnaire` serves the seeded Step 1.x interview prompts by tier with subcategory tags; FE renders them.
+> **ZT (this work):** seeded the 24 verbatim CISA + DoD questions (`packages/zt-data/source/zt_{cisa,dod}.json`) + `scripts/load_zt_questionnaires.py` loader + `GET /zt/services/{id}/questionnaire` serving them by framework (`test_zt_questionnaire.py`).
+> **Remaining:** ZT self-assessment FE render (proxy + lib + `ZtSelfAssessment`, mirroring CSF) and the exact ZT capability-code mapping (rides with D3's cross-reference import).
 - BE: questions seeded (migration `0014`, `models/questionnaire.py`). Add per-service response table keyed to seeded questions; serve stem + cues + hidden subcategory/IG/dimension tags; map answers → subcategories to seed the admin grid. Content per `CSF_Interview_Questions_Verbatim.md` + `ZT_Interview_Questions_Verbatim.md`.
 - FE: render questions + cues via `components/questionnaire/` in the real CSF + ZT flows.
 - **Acceptance:** client answers verbatim per tier/framework; admin sees them mapped to subcategories.
@@ -247,4 +250,5 @@ A (cleanup) → B (onboarding) → C0/C1/C6 first (unblock the most), then C2/C3
 | 2026-06-25 | C7 messaging | `messages` table (migration 0017) + tenant-scoped thread routes + read-marking + isolation tests (`test_messages.py`). Full backend suite green. returned_for_info transition + FE pending (with C6). C7 messaging committed. |
 | 2026-06-25 | C6 partial + B2 UI | Admin left-sidebar shell (`AdminShell`) with skip-to-content + breadcrumbs + not-authorized exits; admin pages routed through it. **B2 Management UI** (`/admin/management`: create client, list, add/remove domains) + proxies + `lib/admin` helpers — B2 now complete. Web typecheck + lint clean. Client-shell rework + workspace breadcrumbs/tabs remain in C6. Committed. |
 | 2026-06-25 | C4 done | Word `.docx` export for all 4 services: shared `app/docx_export.py` helpers; `render_docx` in each exporter mirroring the PDF; `deliverables.docx_artifact_id` (migration 0018) + schema fields; finalize endpoints render + store the Word doc. CSF finalize test downloads it (zip "PK"). Full backend suite green. Committed. |
-| 2026-06-25 | C2 infra | Per-row `locked` flag on all 4 grid tables (migration 0019) + lock/unlock via admin PATCH + `locked` in responses; pure `ai/diff.py` (`changed_fields`/`diff_keyed_rows`) unit-tested (`test_c2_safeguards.py`). Rerun integration lands with the D-phase AI score jobs. Full backend suite green. |
+| 2026-06-25 | C2 infra | Per-row `locked` flag on all 4 grid tables (migration 0019) + lock/unlock via admin PATCH + `locked` in responses; pure `ai/diff.py` (`changed_fields`/`diff_keyed_rows`) unit-tested (`test_c2_safeguards.py`). Rerun integration lands with the D-phase AI score jobs. Full backend suite green. Committed. |
+| 2026-06-25 | C8 (ZT backend) | CSF interview questionnaire was already wired. Added the ZT half: 24 verbatim CISA+DoD questions seeded (`packages/zt-data/source/`), `load_zt_questionnaires.py` loader (loads 24), `GET /zt/services/{id}/questionnaire` endpoint + schemas, `test_zt_questionnaire.py`. Full backend suite green. ZT FE render remains. |
