@@ -29,7 +29,9 @@ from app.db.session import get_db
 from app.dependencies import current_user
 from app.models._common import utcnow
 from app.models.client import Client
+from app.models.client_domain import ClientDomain
 from app.models.user import User, UserRole
+from app.security.email_domains import domain_of, is_generic_provider
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
@@ -161,17 +163,47 @@ def register(
         ) from exc
 
     is_first_user = _user_count(db) == 0
-    role = UserRole.ADMIN if is_first_user else UserRole.CLIENT
 
-    # Multi-tenant onboarding: each client-role registrant gets a fresh
-    # placeholder Client row to anchor their intake flow. The intake wizard
-    # fills in the real organization details and flips intake_completed_at.
-    # Platform admins (first user; future invited admins) stay client_id=NULL.
+    # Onboarding (Work Order B1):
+    #   - The first registrant on a fresh deployment bootstraps the platform
+    #     admin (D-004). After that, self-registration only joins an existing
+    #     client by approved email domain; further admins are created
+    #     out-of-band (seed/bootstrap), never by self-registration.
+    #   - A known approved domain attaches the user to that client as `client`.
+    #   - A generic mailbox provider (gmail, outlook, ...) or an unknown domain
+    #     is rejected: we never create a placeholder client.
     client_for_user: Client | None = None
-    if role == UserRole.CLIENT:
-        client_for_user = Client(legal_name="(pending intake)")
-        db.add(client_for_user)
-        db.flush()
+    if is_first_user:
+        role = UserRole.ADMIN
+    else:
+        role = UserRole.CLIENT
+        domain = domain_of(email)
+        if not domain or is_generic_provider(domain):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Registration requires a work email at your organization's "
+                    "approved domain. Personal email providers can't be used; "
+                    "contact your administrator."
+                ),
+            )
+        approved = db.execute(
+            select(ClientDomain).where(ClientDomain.domain == domain)
+        ).scalar_one_or_none()
+        if approved is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "No organization is registered for that email domain. Ask "
+                    "your administrator to add your company and domain first."
+                ),
+            )
+        client_for_user = db.get(Client, approved.client_id)
+        if client_for_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The organization for that domain is no longer available.",
+            )
 
     user = User(
         email=email,
@@ -187,9 +219,6 @@ def register(
     db.add(user)
     db.flush()
 
-    if client_for_user is not None:
-        client_for_user.primary_poc_user_id = user.id
-
     audit(
         db,
         action="user.created",
@@ -199,6 +228,7 @@ def register(
         details={
             "role": role.value,
             "is_first_user": is_first_user,
+            "client_id": str(client_for_user.id) if client_for_user else None,
         },
     )
 

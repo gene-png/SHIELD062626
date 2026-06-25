@@ -53,6 +53,9 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     _seed = TestSession()
     _tenant = _Client(legal_name="Test Tenant")
     _seed.add(_tenant)
+    _seed.flush()
+    from app.models.client_domain import ClientDomain as _ClientDomain
+    _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
     _seed.commit()
     _cid = str(_tenant.id)
     _seed.close()

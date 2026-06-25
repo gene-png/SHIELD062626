@@ -74,11 +74,59 @@ def test_first_registrant_becomes_admin_primary_poc(app_client: TestClient) -> N
 
 
 @pytest.mark.unit
-def test_second_registrant_is_client(app_client: TestClient) -> None:
-    _register(app_client, email="first@example.com")
-    body = _register(app_client, email="second@example.com")
+def test_second_registrant_joins_by_approved_domain(app_client: TestClient) -> None:
+    # First user is the bootstrap admin; they create the org + approve a domain.
+    admin = _register(app_client, email="first@acme.com")
+    admin_bearer = admin["tokens"]["access_token"]
+    created = app_client.post(
+        "/admin/clients",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"legal_name": "Acme Corp"},
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    dom = app_client.post(
+        f"/admin/clients/{cid}/domains",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"domain": "acme.com"},
+    )
+    assert dom.status_code == 201, dom.text
+    # A second user at the approved domain auto-joins that client.
+    body = _register(app_client, email="second@acme.com")
     assert body["is_primary_poc"] is False
     assert body["user"]["role"] == "client"
+    assert body["user"]["client_id"] == cid
+
+
+@pytest.mark.unit
+def test_register_rejects_generic_provider_domain(app_client: TestClient) -> None:
+    _register(app_client, email="first@acme.com")  # bootstrap admin
+    r = app_client.post(
+        "/auth/register",
+        json={
+            "email": "someone@gmail.com",
+            "password": "correct horse battery staple!",
+            "display_name": "Generic",
+        },
+    )
+    assert r.status_code == 422
+    assert "administrator" in r.text.lower()
+
+
+@pytest.mark.unit
+def test_register_rejects_unknown_domain(app_client: TestClient) -> None:
+    _register(app_client, email="first@acme.com")  # bootstrap admin
+    r = app_client.post(
+        "/auth/register",
+        json={
+            "email": "newhire@unregistered-co.com",
+            "password": "correct horse battery staple!",
+            "display_name": "Unknown",
+        },
+    )
+    assert r.status_code == 422
+    # No placeholder client is created for an unknown domain.
+    assert "domain" in r.text.lower()
 
 
 @pytest.mark.unit

@@ -117,3 +117,22 @@ class AdminClientCreateRequest(BaseModel):
     dba_name: str | None = None
     industry: str | None = None
     size_band: str | None = None
+
+
+class AdminDomainRow(BaseModel):
+    """One approved email domain for a client (Work Order B2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    client_id: uuid.UUID
+    domain: str
+    created_at: datetime
+
+
+class AdminDomainListResponse(BaseModel):
+    domains: list[AdminDomainRow]
+
+
+class AdminDomainCreateRequest(BaseModel):
+    domain: str

@@ -24,6 +24,7 @@ from app.db.session import get_db
 from app.dependencies import require_role
 from app.models.artifact import Artifact
 from app.models.client import Client
+from app.models.client_domain import ClientDomain
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
@@ -33,6 +34,9 @@ from app.schemas.admin import (
     AdminClientCreateRequest,
     AdminClientListResponse,
     AdminClientSummary,
+    AdminDomainCreateRequest,
+    AdminDomainListResponse,
+    AdminDomainRow,
     AdminIntakeQueueResponse,
     AdminServiceDetail,
     AdminServiceRequestRow,
@@ -40,6 +44,7 @@ from app.schemas.admin import (
     FulfillServiceRequestResponse,
 )
 from app.schemas.intake import ClientProfileResponse
+from app.security.email_domains import domain_of, is_generic_provider
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -207,6 +212,144 @@ def get_client(
             detail="Client not found.",
         )
     return AdminClientSummary.model_validate(client, from_attributes=True)
+
+
+@router.get(
+    "/clients/{cid}/domains",
+    response_model=AdminDomainListResponse,
+    summary="List a client's approved email domains (admin)",
+)
+def list_client_domains(
+    cid: uuid.UUID,
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminDomainListResponse:
+    if db.get(Client, cid) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found."
+        )
+    rows = (
+        db.execute(
+            select(ClientDomain)
+            .where(ClientDomain.client_id == cid)
+            .order_by(ClientDomain.domain)
+        )
+        .scalars()
+        .all()
+    )
+    return AdminDomainListResponse(
+        domains=[AdminDomainRow.model_validate(r, from_attributes=True) for r in rows]
+    )
+
+
+@router.post(
+    "/clients/{cid}/domains",
+    response_model=AdminDomainRow,
+    status_code=status.HTTP_201_CREATED,
+    summary="Approve an email domain for a client (admin)",
+)
+def add_client_domain(
+    cid: uuid.UUID,
+    body: AdminDomainCreateRequest,
+    admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> AdminDomainRow:
+    if db.get(Client, cid) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found."
+        )
+    # Accept either a bare domain or a full email; normalize to the domain.
+    raw = body.domain.strip().lower()
+    domain = domain_of(raw) if "@" in raw else raw
+    if not domain or "." not in domain:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Enter a valid domain, e.g. company.com.",
+        )
+    if is_generic_provider(domain):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Generic email providers can't be approved as a client domain.",
+        )
+    existing = db.execute(
+        select(ClientDomain).where(ClientDomain.domain == domain)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That domain is already registered to a client.",
+        )
+    row = ClientDomain(client_id=cid, domain=domain, created_by=admin.id)
+    db.add(row)
+    db.flush()
+    audit(
+        db,
+        action="client.domain.added",
+        target_type="client",
+        target_id=cid,
+        actor_user_id=admin.id,
+        details={"domain": domain},
+    )
+    db.commit()
+    db.refresh(row)
+    return AdminDomainRow.model_validate(row, from_attributes=True)
+
+
+@router.delete(
+    "/clients/{cid}/domains/{domain_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove an approved email domain (admin)",
+)
+def remove_client_domain(
+    cid: uuid.UUID,
+    domain_id: uuid.UUID,
+    admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    row = db.get(ClientDomain, domain_id)
+    if row is None or row.client_id != cid:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found."
+        )
+    db.delete(row)
+    audit(
+        db,
+        action="client.domain.removed",
+        target_type="client",
+        target_id=cid,
+        actor_user_id=admin.id,
+        details={"domain": row.domain},
+    )
+    db.commit()
+
+
+@router.delete(
+    "/services/{service_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Archive (remove) a service (admin)",
+)
+def archive_service(
+    service_id: uuid.UUID,
+    admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    """Soft-remove a service by archiving it. Data is retained per policy and
+    the workspace drops out of active lists."""
+    svc = db.get(Service, service_id)
+    if svc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Service not found."
+        )
+    svc.status = ServiceStatus.ARCHIVED
+    audit(
+        db,
+        action="service.archived",
+        target_type="service",
+        target_id=svc.id,
+        actor_user_id=admin.id,
+        details={"client_id": str(svc.client_id), "kind": svc.kind.value},
+    )
+    db.commit()
 
 
 @router.post(

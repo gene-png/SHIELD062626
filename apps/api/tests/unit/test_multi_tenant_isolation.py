@@ -75,6 +75,26 @@ def _bearer(reg: dict) -> str:
     return reg["tokens"]["access_token"]
 
 
+def _onboard_client(c: TestClient, admin_bearer: str, email: str) -> dict:
+    """B1/B2 flow: admin creates the org + approves the email's domain, then
+    the client-role user self-registers and auto-joins that org."""
+    domain = email.split("@", 1)[1]
+    created = c.post(
+        "/admin/clients",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"legal_name": f"Org {domain}"},
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    dom = c.post(
+        f"/admin/clients/{cid}/domains",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"domain": domain},
+    )
+    assert dom.status_code == 201, dom.text
+    return _register(c, email)
+
+
 def _me(c: TestClient, bearer: str) -> dict:
     r = c.get("/auth/me", headers={"Authorization": f"Bearer {bearer}"})
     assert r.status_code == 200, r.text
@@ -92,10 +112,10 @@ def test_admin_registers_with_null_client_id(app_client: TestClient) -> None:
 
 @pytest.mark.unit
 def test_each_client_user_gets_their_own_tenant(app_client: TestClient) -> None:
-    """Two separate client-role registrations produce two distinct Clients."""
-    _register(app_client, "admin@example.com")
-    a = _register(app_client, "alpha@a.example")
-    b = _register(app_client, "bravo@b.example")
+    """Two client users at different approved domains land in different tenants."""
+    admin = _register(app_client, "admin@example.com")
+    a = _onboard_client(app_client, _bearer(admin), "alpha@a.example")
+    b = _onboard_client(app_client, _bearer(admin), "bravo@b.example")
     me_a = _me(app_client, _bearer(a))
     me_b = _me(app_client, _bearer(b))
     assert me_a["role"] == "client"
@@ -122,8 +142,8 @@ def test_admin_csf_create_requires_x_client_id(app_client: TestClient) -> None:
 def test_client_cannot_see_another_clients_service(app_client: TestClient) -> None:
     """A client-role user sees only their own tenant's services (404)."""
     admin = _register(app_client, "admin@example.com")
-    a = _register(app_client, "alpha@a.example")
-    b = _register(app_client, "bravo@b.example")
+    a = _onboard_client(app_client, _bearer(admin), "alpha@a.example")
+    b = _onboard_client(app_client, _bearer(admin), "bravo@b.example")
     me_a = _me(app_client, _bearer(a))
 
     # Admin opens a CSF service under tenant A.
@@ -167,8 +187,8 @@ def test_admin_scoped_to_wrong_tenant_cannot_fetch_service(
 ) -> None:
     """An admin pointed at tenant B can't access tenant A's service by id."""
     admin = _register(app_client, "admin@example.com")
-    a = _register(app_client, "alpha@a.example")
-    b = _register(app_client, "bravo@b.example")
+    a = _onboard_client(app_client, _bearer(admin), "alpha@a.example")
+    b = _onboard_client(app_client, _bearer(admin), "bravo@b.example")
     me_a = _me(app_client, _bearer(a))
     me_b = _me(app_client, _bearer(b))
 

@@ -53,8 +53,12 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     # test client so these single-tenant-style tests resolve to it. Client-role
     # callers are pinned to their own client and ignore this header.
     seed = TestSession()
+    from app.models.client_domain import ClientDomain as _ClientDomain
+
     tenant = Client(legal_name="Test Tenant")
     seed.add(tenant)
+    seed.flush()
+    seed.add(_ClientDomain(client_id=tenant.id, domain="example.com"))
     seed.commit()
     cid = str(tenant.id)
     seed.close()

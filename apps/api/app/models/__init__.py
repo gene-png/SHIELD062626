@@ -19,6 +19,7 @@ from app.models.capability import (
     CapabilityListStatus,
 )
 from app.models.client import Client
+from app.models.client_domain import ClientDomain
 from app.models.csf_assessment import (
     CsfAnswer,
     CsfAssessment,
@@ -49,6 +50,7 @@ __all__ = [
     "CapabilityList",
     "CapabilityListStatus",
     "Client",
+    "ClientDomain",
     "CsfAnswer",
     "CsfAssessment",
     "CsfAssessmentStatus",

@@ -50,9 +50,9 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker]]:
 
 def _register_and_bearer(client: TestClient) -> str:
     # The first registrant becomes the platform admin (client_id IS NULL).
-    # Intake is a client-facing flow, so burn the admin slot first, then drive
-    # intake as a second, client-role user: post-0013 they're auto-bound to
-    # their own "(pending intake)" client and need no X-Client-Id header.
+    # Under Work Order B1 a client can only self-register against a pre-approved
+    # org domain, so the admin first creates the org + approves "example.com",
+    # then the client-role user registers and auto-joins it.
     admin = client.post(
         "/auth/register",
         json={
@@ -62,6 +62,20 @@ def _register_and_bearer(client: TestClient) -> str:
         },
     )
     assert admin.status_code == 201, admin.text
+    admin_bearer = admin.json()["tokens"]["access_token"]
+    created = client.post(
+        "/admin/clients",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"legal_name": "(pending intake)"},
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    dom = client.post(
+        f"/admin/clients/{cid}/domains",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"domain": "example.com"},
+    )
+    assert dom.status_code == 201, dom.text
     r = client.post(
         "/auth/register",
         json={

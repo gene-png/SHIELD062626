@@ -41,6 +41,20 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
+    # Work Order B1: a client user can only self-register against a pre-approved
+    # org domain. Seed a "(pending intake)" client + the example.com domain so
+    # the second registrant in these tests auto-joins it.
+    from app.models.client import Client as _Client
+    from app.models.client_domain import ClientDomain as _ClientDomain
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="(pending intake)")
+    _seed.add(_tenant)
+    _seed.flush()
+    _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
+    _seed.commit()
+    _seed.close()
+
     with TestClient(app) as c:
         yield c
 
