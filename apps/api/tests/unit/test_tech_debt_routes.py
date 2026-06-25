@@ -648,7 +648,6 @@ def test_finalize_deliverable_renders_pdf_and_xlsx(app_client) -> None:
     body = r.json()
     assert body["version"] == 1
     assert body["finalized_at"] is not None
-    assert body["released_to_client_at"] is None
     assert body["pdf_artifact_id"] is not None
     assert body["xlsx_artifact_id"] is not None
     assert body["pdf_filename"].endswith(".pdf")
@@ -671,13 +670,13 @@ def test_finalize_requires_approved_list(app_client) -> None:
 
 
 @pytest.mark.unit
-def test_release_marks_release_supersedes_earlier_idempotent(app_client) -> None:
+def test_latest_returns_newest_finalized_version(app_client) -> None:
     c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     bearer = admin["tokens"]["access_token"]
     svc_id, _ = _seed_three_item_list(c, bearer, provider)
     _approve_list(c, bearer, svc_id)
-    r1 = c.post(
+    c.post(
         f"/tech-debt/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer}"},
     )
@@ -686,39 +685,35 @@ def test_release_marks_release_supersedes_earlier_idempotent(app_client) -> None
         headers={"Authorization": f"Bearer {bearer}"},
     )
     v2 = r2.json()["id"]
-    release = c.post(
-        f"/tech-debt/deliverables/{v2}/release",
-        headers={"Authorization": f"Bearer {bearer}"},
-    )
-    assert release.status_code == 200
-    stamp = release.json()["released_to_client_at"]
-    assert stamp is not None
-    # Idempotent.
-    again = c.post(
-        f"/tech-debt/deliverables/{v2}/release",
-        headers={"Authorization": f"Bearer {bearer}"},
-    )
-    assert again.json()["released_to_client_at"] == stamp
-    # Latest endpoint returns v2.
+    # Latest endpoint returns the newest version (admin-only; Work Order A1).
     latest = c.get(
         f"/tech-debt/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer}"},
     )
     assert latest.json()["id"] == v2
-    # And r1 is now superseded.
-    assert r1.json()["id"]  # placeholder; superseded_by is internal
+    assert latest.json()["version"] == 2
 
 
 @pytest.mark.unit
-def test_release_unknown_deliverable_404(app_client) -> None:
-    c, _, _ = app_client
+def test_client_cannot_reach_latest_deliverable(app_client) -> None:
+    """Work Order A1: the latest-deliverable endpoint is admin-only."""
+    c, _, provider = app_client
     admin = _register(c, "admin@example.com")
     bearer = admin["tokens"]["access_token"]
-    r = c.post(
-        f"/tech-debt/deliverables/{_uuid.uuid4()}/release",
+    svc_id, _ = _seed_three_item_list(c, bearer, provider)
+    _approve_list(c, bearer, svc_id)
+    c.post(
+        f"/tech-debt/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer}"},
     )
-    assert r.status_code == 404
+    client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
+    bearer_client = client["tokens"]["access_token"]
+    latest = c.get(
+        f"/tech-debt/services/{svc_id}/deliverables/latest",
+        headers={"Authorization": f"Bearer {bearer_client}"},
+    )
+    assert latest.status_code == 403
 
 
 @pytest.mark.unit

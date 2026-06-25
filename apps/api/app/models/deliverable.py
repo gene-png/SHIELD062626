@@ -1,9 +1,12 @@
-"""Deliverable - the released PDF / XLSX pair for a service.
+"""Deliverable - the finalized PDF / XLSX pair for a service.
 
-Master Spec §11:
   deliverables    id, service_id, title, summary, version,
                   pdf_artifact_id, xlsx_artifact_id, finalized_at,
-                  finalized_by, released_to_client_at, superseded_by
+                  finalized_by, superseded_by
+
+Deliverables are admin-only (Work Order A1): there is no client release
+path and no `released_to_client_at` column. `version`/`superseded_by`
+keep internal history; an admin downloads and shares outside the app.
 
 Filenames follow Master Spec §15.5: `{Company}_{Service}{MMDDYY}.{ext}`.
 The slugifier lives in app.deliverables.filename (Phase 3 stage 8).
@@ -42,8 +45,6 @@ class Deliverable(UUIDPKMixin, TimestampMixin, Base):
     finalized_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
-
-    released_to_client_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     superseded_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("deliverables.id", ondelete="SET NULL")

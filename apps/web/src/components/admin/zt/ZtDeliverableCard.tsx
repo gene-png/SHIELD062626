@@ -11,11 +11,7 @@ import {
   StatusPill,
 } from "@shield/design-system";
 
-import {
-  finalizeZtDeliverable,
-  releaseZtDeliverable,
-  ZtProxyError,
-} from "@/lib/zt/client";
+import { finalizeZtDeliverable, ZtProxyError } from "@/lib/zt/client";
 import type { ZtAssessmentStatus, ZtDeliverable } from "@/lib/zt/types";
 
 export interface ZtDeliverableCardProps {
@@ -54,14 +50,11 @@ export function ZtDeliverableCard({
   deliverable,
   onChange,
 }: ZtDeliverableCardProps): JSX.Element {
-  const [busy, setBusy] = React.useState<"finalize" | "release" | null>(null);
+  const [busy, setBusy] = React.useState<"finalize" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const canFinalize =
     assessmentStatus === "approved" || assessmentStatus === "released";
-  const isReleased = Boolean(deliverable?.released_to_client_at);
-  const isFinalized = Boolean(deliverable?.finalized_at);
-  const canRelease = isFinalized && !isReleased;
 
   async function onFinalize(): Promise<void> {
     setBusy("finalize");
@@ -76,48 +69,27 @@ export function ZtDeliverableCard({
     }
   }
 
-  async function onRelease(): Promise<void> {
-    if (!deliverable) return;
-    setBusy("release");
-    setError(null);
-    try {
-      const next = await releaseZtDeliverable(deliverable.id);
-      onChange(next);
-    } catch (err) {
-      setError(describeError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Evaluation &amp; report</CardTitle>
         <CardDescription>
           Once you&apos;ve reviewed and approved the inputs, send for evaluation
-          to run the gap analysis and produce the PDF + XLSX report, then
-          release it to the client. Re-running on the same day appends{" "}
-          <code>_v2</code> and supersedes the prior version.
+          to run the gap analysis and produce the PDF + XLSX report. Reports are
+          admin-only — download and share them outside the app. Re-running on the
+          same day appends <code>_v2</code> to the filename.
         </CardDescription>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           {deliverable ? (
             <>
-              <StatusPill tone={isReleased ? "success" : "info"} withDot>
-                {isReleased
-                  ? `Released v${deliverable.version}`
-                  : `Finalized v${deliverable.version}`}
+              <StatusPill tone="info" withDot>
+                {`Finalized v${deliverable.version}`}
               </StatusPill>
               <span className="text-xs text-ink-tertiary">
                 Finalized {fmtTime(deliverable.finalized_at)}
               </span>
-              {isReleased ? (
-                <span className="text-xs text-ink-tertiary">
-                  · Released {fmtTime(deliverable.released_to_client_at)}
-                </span>
-              ) : null}
             </>
           ) : (
             <StatusPill tone="neutral" withDot>
@@ -163,18 +135,6 @@ export function ZtDeliverableCard({
               : deliverable
                 ? "Re-run evaluation"
                 : "Send for evaluation"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void onRelease()}
-            disabled={!canRelease || busy !== null}
-            className="rounded-md border border-border bg-surface-card px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy === "release"
-              ? "Releasing…"
-              : isReleased
-                ? "Released"
-                : "Release to client"}
           </button>
           {!canFinalize && !deliverable ? (
             <span className="text-xs text-ink-tertiary">

@@ -89,12 +89,12 @@ def _register(c: TestClient, email: str) -> dict:
     return r.json()
 
 
-def _seed_and_release(
+def _seed_and_finalize(
     c: TestClient, bearer: str, *, score_tier: int = 3
 ) -> tuple[str, str]:
     """Open service, create assessment, score every subcategory at
-    `score_tier`, approve, finalize, release. Returns (service_id,
-    deliverable_id).
+    `score_tier`, approve, finalize. Returns (service_id, deliverable_id).
+    Deliverables are admin-only (Work Order A1) so there is no release step.
     """
     sr = c.post(
         "/csf/services",
@@ -121,18 +121,14 @@ def _seed_and_release(
         f"/csf/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer}"},
     )
+    assert fin.status_code == 201, fin.text
     deliv_id = fin.json()["id"]
-    rel = c.post(
-        f"/csf/deliverables/{deliv_id}/release",
-        headers={"Authorization": f"Bearer {bearer}"},
-    )
-    assert rel.status_code == 200, rel.text
     return svc_id, deliv_id
 
 
 @pytest.mark.unit
 def test_phase4_acceptance_gate(app_client) -> None:
-    """The full Phase 4 happy path from admin through to client download."""
+    """Work Order A1: admin can finalize + download; clients never can."""
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
@@ -140,50 +136,39 @@ def test_phase4_acceptance_gate(app_client) -> None:
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
 
-    svc_id, deliv_id = _seed_and_release(c, bearer_admin, score_tier=3)
+    svc_id, deliv_id = _seed_and_finalize(c, bearer_admin, score_tier=3)
 
-    # Client sees the released deliverable in the global list.
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
+    # Admin reads the latest deliverable and downloads both artifacts.
+    latest = c.get(
+        f"/csf/services/{svc_id}/deliverables/latest",
+        headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-    assert listing.status_code == 200
-    items = listing.json()["items"]
-    target = next((i for i in items if i["id"] == deliv_id), None)
-    assert target is not None
-    assert target["service_id"] == svc_id
+    assert latest.status_code == 200
+    target = latest.json()
+    assert target["id"] == deliv_id
     assert target["version"] == 1
-    assert target["released_to_client_at"] is not None
-    assert target["pdf_artifact_id"] is not None
-    assert target["xlsx_artifact_id"] is not None
     assert "NIST_CSF_2_0_Assessment" in target["pdf_filename"]
 
-    # Client can read the latest assessment now that it's released.
-    assess = c.get(
-        f"/csf/services/{svc_id}/assessments/latest",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    assert assess.status_code == 200
-    assert assess.json()["status"] == "released"
-
-    # PDF + XLSX downloads work for the client.
     pdf = c.get(
         f"/artifacts/{target['pdf_artifact_id']}/download",
-        headers={"Authorization": f"Bearer {bearer_client}"},
+        headers={"Authorization": f"Bearer {bearer_admin}"},
     )
     assert pdf.status_code == 200
     assert pdf.content.startswith(b"%PDF-")
-    assert pdf.headers["content-type"].startswith("application/pdf")
-    assert "attachment" in pdf.headers["content-disposition"]
 
-    xlsx = c.get(
-        f"/artifacts/{target['xlsx_artifact_id']}/download",
+    # Client is blocked from the deliverable endpoint and artifact download.
+    blocked = c.get(
+        f"/csf/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_client}"},
     )
-    assert xlsx.status_code == 200
-    assert xlsx.content[:2] == b"PK"
+    assert blocked.status_code == 403
+    pdf_client = c.get(
+        f"/artifacts/{target['pdf_artifact_id']}/download",
+        headers={"Authorization": f"Bearer {bearer_client}"},
+    )
+    assert pdf_client.status_code == 404
 
-    # Score + gap remain admin-only even after release.
+    # Score + gap remain admin-only.
     s = c.get(
         f"/csf/services/{svc_id}/score",
         headers={"Authorization": f"Bearer {bearer_client}"},
@@ -197,7 +182,7 @@ def test_phase4_acceptance_gate(app_client) -> None:
 
 
 @pytest.mark.unit
-def test_unreleased_csf_deliverable_invisible_to_client(app_client) -> None:
+def test_csf_deliverable_invisible_to_client(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
@@ -205,86 +190,41 @@ def test_unreleased_csf_deliverable_invisible_to_client(app_client) -> None:
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
 
-    # Seed but DON'T release.
-    sr = c.post(
-        "/csf/services",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-        json={"kind": "nist_csf", "title": "Atlas - CSF"},
-    )
-    svc_id = sr.json()["id"]
-    a = c.post(
-        f"/csf/services/{svc_id}/assessments",
+    svc_id, _ = _seed_and_finalize(c, bearer_admin, score_tier=2)
+    latest = c.get(
+        f"/csf/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-    for ans in a.json()["answers"]:
-        c.patch(
-            f"/csf/answers/{ans['id']}",
-            headers={"Authorization": f"Bearer {bearer_admin}"},
-            json={"maturity_tier": 2},
-        )
-    c.post(
-        f"/csf/assessments/{a.json()['id']}/approve",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-    )
-    fin = c.post(
-        f"/csf/services/{svc_id}/deliverables/finalize",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-    )
-    deliv_id = fin.json()["id"]
-
-    # Not released - global list omits it.
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    assert all(i["id"] != deliv_id for i in listing.json()["items"])
-    # Detail 404s for the client.
-    detail = c.get(
-        f"/deliverables/{deliv_id}",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    assert detail.status_code == 404
-    # Client artifact download forbidden until release.
+    # Client artifact download forbidden.
     pdf = c.get(
-        f"/artifacts/{fin.json()['pdf_artifact_id']}/download",
+        f"/artifacts/{latest.json()['pdf_artifact_id']}/download",
         headers={"Authorization": f"Bearer {bearer_client}"},
     )
     assert pdf.status_code == 404
 
 
 @pytest.mark.unit
-def test_csf_re_release_supersedes_prior_in_client_list(app_client) -> None:
+def test_csf_latest_returns_newest_version(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
-    client = _register(c, "client@example.com")
-    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
-    bearer_client = client["tokens"]["access_token"]
 
-    svc_id, v1_id = _seed_and_release(c, bearer_admin, score_tier=2)
+    svc_id, v1_id = _seed_and_finalize(c, bearer_admin, score_tier=2)
 
-    # Re-finalize on the same day -> v2, then release it too.
+    # Re-finalize on the same day -> v2.
     fin2 = c.post(
         f"/csf/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
     v2_id = fin2.json()["id"]
-    c.post(
-        f"/csf/deliverables/{v2_id}/release",
+    assert v1_id != v2_id
+
+    latest = c.get(
+        f"/csf/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    items = [i for i in listing.json()["items"] if i["service_id"] == svc_id]
-    # Superseded v1 is hidden; only v2 visible.
-    assert len(items) == 1
-    assert items[0]["id"] == v2_id
-    assert items[0]["version"] == 2
-    # v1 was a real deliverable but is now masked.
-    assert v1_id != v2_id
+    assert latest.json()["id"] == v2_id
+    assert latest.json()["version"] == 2
 
 
 @pytest.mark.unit

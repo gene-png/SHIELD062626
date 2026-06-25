@@ -333,16 +333,6 @@ export function EngagementsView(): JSX.Element {
                         >
                           Continue →
                         </Link>
-                      ) : e.assessment_status === "released" ||
-                        e.status === "released" ? (
-                        <Link
-                          href="/deliverables"
-                          className={cn(
-                            "rounded-md border border-border bg-surface-card px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken",
-                          )}
-                        >
-                          View report
-                        </Link>
                       ) : null}
                     </div>
                   </CardBody>

@@ -760,7 +760,6 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         xlsx_filename=xlsx_title,
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
-        released_to_client_at=deliv.released_to_client_at,
         superseded_by=deliv.superseded_by,
     )
 
@@ -944,70 +943,19 @@ def finalize_zt_deliverable(
     return _serialize_deliverable(db, deliv)
 
 
-@router.post(
-    "/deliverables/{deliverable_id}/release",
+@router.get(
+    "/services/{service_id}/deliverables/latest",
     response_model=DeliverableResponse,
-    summary="Release a finalized ZT deliverable to the client (admin)",
+    summary="Most recent ZT deliverable for a service (admin)",
 )
-def release_zt_deliverable(
-    deliverable_id: uuid.UUID,
+def latest_zt_deliverable(
+    service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
-    if deliv.finalized_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Deliverable must be finalized before release.",
-        )
-    if deliv.released_to_client_at is not None:
-        return _serialize_deliverable(db, deliv)
-    deliv.released_to_client_at = utcnow()
-    earlier = (
-        db.execute(
-            select(Deliverable).where(
-                Deliverable.service_id == deliv.service_id,
-                Deliverable.id != deliv.id,
-                Deliverable.superseded_by.is_(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for prev in earlier:
-        prev.superseded_by = deliv.id
-    a = _latest_assessment(db, deliv.service_id)
-    if a is not None and a.status != ZtAssessmentStatus.RELEASED:
-        a.status = ZtAssessmentStatus.RELEASED
-    audit(
-        db,
-        action="zt.deliverable.released",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={
-            "service_id": str(deliv.service_id),
-            "version": deliv.version,
-            "superseded": [str(p.id) for p in earlier],
-        },
-    )
-    db.commit()
-    db.refresh(deliv)
-    return _serialize_deliverable(db, deliv)
-
-
-@router.get(
-    "/services/{service_id}/deliverables/latest",
-    response_model=DeliverableResponse,
-    summary="Most recent ZT deliverable for a service",
-)
-def latest_zt_deliverable(
-    service_id: uuid.UUID,
-    user: Annotated[User, Depends(current_user)],
-    client: Annotated[Client, Depends(current_client)],
-    db: Annotated[Session, Depends(get_db)],
-) -> DeliverableResponse:
+    # Deliverables are admin-only (Work Order A1): clients never see or
+    # download them in-app.
     svc = require_service_in_tenant(db, service_id, client.id)
     if svc.kind not in _SERVICE_KIND_TO_FRAMEWORK:
         raise HTTPException(
@@ -1024,10 +972,5 @@ def latest_zt_deliverable(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
-        )
-    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No released deliverable yet.",
         )
     return _serialize_deliverable(db, deliv)

@@ -35,12 +35,6 @@ export async function PublicHeader(): Promise<JSX.Element> {
               >
                 Engagements
               </Link>
-              <Link
-                href="/deliverables"
-                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
-              >
-                Deliverables
-              </Link>
               {role === "admin" ? (
                 <Link
                   href="/admin/queue"
@@ -49,9 +43,7 @@ export async function PublicHeader(): Promise<JSX.Element> {
                   Admin queue
                 </Link>
               ) : null}
-              {role === "admin" || role === "reviewer" ? (
-                <ClientSwitcher />
-              ) : null}
+              {role === "admin" ? <ClientSwitcher /> : null}
               <span className="text-xs text-ink-tertiary">
                 {session.user?.email}
               </span>

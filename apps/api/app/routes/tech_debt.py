@@ -507,7 +507,6 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         xlsx_filename=xlsx_title,
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
-        released_to_client_at=deliv.released_to_client_at,
         superseded_by=deliv.superseded_by,
     )
 
@@ -667,60 +666,6 @@ def finalize_deliverable(
     return _serialize_deliverable(db, deliv)
 
 
-@router.post(
-    "/deliverables/{deliverable_id}/release",
-    response_model=DeliverableResponse,
-    summary="Release a finalized deliverable to the client (admin)",
-)
-def release_deliverable(
-    deliverable_id: uuid.UUID,
-    user: Annotated[User, _admin_required],
-    client: Annotated[Client, Depends(current_client)],
-    db: Annotated[Session, Depends(get_db)],
-) -> DeliverableResponse:
-    deliv = require_deliverable_in_tenant(db, deliverable_id, client.id)
-    if deliv.finalized_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Deliverable must be finalized before release.",
-        )
-    if deliv.released_to_client_at is not None:
-        # Idempotent re-release returns the existing state without
-        # changing the stamp (preserves the original release timestamp).
-        return _serialize_deliverable(db, deliv)
-    deliv.released_to_client_at = utcnow()
-    # Mark earlier deliverables for this service as superseded.
-    earlier = (
-        db.execute(
-            select(Deliverable).where(
-                Deliverable.service_id == deliv.service_id,
-                Deliverable.id != deliv.id,
-                Deliverable.superseded_by.is_(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for prev in earlier:
-        prev.superseded_by = deliv.id
-
-    audit(
-        db,
-        action="deliverable.released",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={
-            "service_id": str(deliv.service_id),
-            "version": deliv.version,
-            "superseded": [str(p.id) for p in earlier],
-        },
-    )
-    db.commit()
-    db.refresh(deliv)
-    return _serialize_deliverable(db, deliv)
-
-
 @router.get(
     "/services/{service_id}/deliverables/latest",
     response_model=DeliverableResponse,
@@ -728,10 +673,12 @@ def release_deliverable(
 )
 def latest_deliverable(
     service_id: uuid.UUID,
-    user: Annotated[User, Depends(current_user)],
+    user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
+    # Deliverables are admin-only (Work Order A1): clients never see or
+    # download them in-app.
     svc = require_service_in_tenant(db, service_id, client.id)
     deliv = db.execute(
         select(Deliverable)
@@ -743,12 +690,5 @@ def latest_deliverable(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
-        )
-    # v1: admins always see; clients only see released deliverables.
-    # The actual client-facing route lands in stage 9 under /deliverables/.
-    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No released deliverable yet.",
         )
     return _serialize_deliverable(db, deliv)

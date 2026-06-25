@@ -141,5 +141,4 @@ class DeliverableResponse(BaseModel):
     xlsx_filename: str | None
     finalized_at: datetime | None
     finalized_by: uuid.UUID | None
-    released_to_client_at: datetime | None
     superseded_by: uuid.UUID | None

@@ -121,7 +121,10 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
                 Our team reviews your intake and any documents you uploaded.
               </li>
               <li>We confirm scope and schedule the assessment kickoff.</li>
-              <li>Completed reports will appear under Deliverables.</li>
+              <li>
+                We&apos;ll message you here if we need anything else, and share
+                results with you directly.
+              </li>
             </ul>
           </div>
 
@@ -131,12 +134,6 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600"
             >
               My engagements
-            </Link>
-            <Link
-              href="/deliverables"
-              className="rounded-md border border-border bg-surface-card px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken"
-            >
-              Go to deliverables
             </Link>
             <Link
               href="/"
