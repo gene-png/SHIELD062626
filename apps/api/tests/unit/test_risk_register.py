@@ -29,7 +29,9 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, FixtureProvider]]:
 
     from app.db.session import get_db
     from app.main import create_app
+    from app.routes.artifacts import _storage_dep
     from app.routes.risk import _llm_dep
+    from app.storage.local import LocalFilesystemStorage
 
     def override_get_db() -> Iterator[Session]:
         db = TestSession()
@@ -39,9 +41,11 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, FixtureProvider]]:
             db.close()
 
     provider = FixtureProvider()
+    storage = LocalFilesystemStorage(tmp_path / "storage")
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[_llm_dep] = lambda: LLMClient(provider)
+    app.dependency_overrides[_storage_dep] = lambda: storage
     with TestClient(app) as c:
         yield c, provider
 
@@ -127,6 +131,38 @@ def test_generate_derives_tier_in_code_and_validates_links(app_client) -> None:
     assert e["origin"] == "ai_generated"
     assert body["tier_counts"]["critical"] == 1
     assert body["axis_counts"]["detection"] == 1
+
+
+@pytest.mark.unit
+def test_export_renders_and_stores_three_files(app_client) -> None:
+    c, provider = app_client
+    bearer, cid = _admin(c)
+    technique, capability = _seed_attack_and_zt(c, bearer, cid)
+    bh = {"Authorization": f"Bearer {bearer}"}
+    provider.register_static(
+        "risk_synthesize",
+        LLMResponse(
+            '{"entries": [{"title": "Risk one", "axis": "detection",'
+            ' "likelihood": "high", "impact": "catastrophic",'
+            ' "recommended_action": "remediate"}]}'
+        ),
+    )
+    c.post(f"/risk/clients/{cid}/register/generate", headers=bh)
+    r = c.post(f"/risk/clients/{cid}/register/export", headers=bh)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["xlsx_filename"].endswith(".xlsx")
+    assert body["pdf_filename"].endswith(".pdf")
+    assert body["docx_filename"].endswith(".docx")
+    # Each downloads as a real file (artifact download is tenant-scoped, so the
+    # admin names the active client via X-Client-Id).
+    dh = {**bh, "X-Client-Id": cid}
+    xlsx = c.get(f"/artifacts/{body['xlsx_artifact_id']}/download", headers=dh)
+    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+    pdf = c.get(f"/artifacts/{body['pdf_artifact_id']}/download", headers=dh)
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+    docx = c.get(f"/artifacts/{body['docx_artifact_id']}/download", headers=dh)
+    assert docx.status_code == 200 and docx.content[:2] == b"PK"
 
 
 @pytest.mark.unit

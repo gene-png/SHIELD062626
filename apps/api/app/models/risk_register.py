@@ -38,6 +38,17 @@ class RiskRegister(UUIDPKMixin, TimestampMixin, Base):
         ForeignKey("risk_registers.id", ondelete="SET NULL")
     )
 
+    # Exported artifacts (XLSX + PDF + Word), set on export.
+    xlsx_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
+    pdf_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
+    docx_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("artifacts.id", ondelete="SET NULL")
+    )
+
 
 class RiskEntry(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "risk_entries"

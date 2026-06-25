@@ -52,6 +52,12 @@ class RiskRegisterResponse(BaseModel):
     generated_by: uuid.UUID | None
     finalized_at: datetime | None
     created_at: datetime
+    xlsx_artifact_id: uuid.UUID | None = None
+    pdf_artifact_id: uuid.UUID | None = None
+    docx_artifact_id: uuid.UUID | None = None
+    xlsx_filename: str | None = None
+    pdf_filename: str | None = None
+    docx_filename: str | None = None
     entries: list[RiskEntryResponse]
     # Dashboard rollups (code-computed).
     tier_counts: dict[str, int] = {}
