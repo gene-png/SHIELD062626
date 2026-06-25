@@ -452,6 +452,8 @@ def patch_answer(
         row.notes = data["notes"]
     if "evidence_artifact_id" in data:
         row.evidence_artifact_id = data["evidence_artifact_id"]
+    if data.get("locked") is not None:
+        row.locked = bool(data["locked"])
     row.answered_by = user.id
     row.answered_at = utcnow()
     audit(

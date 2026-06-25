@@ -95,6 +95,9 @@ class CapabilityItem(UUIDPKMixin, TimestampMixin, Base):
     # 0-100. Set by the AI extractor; an admin edit clears it (the row is
     # now human-curated, no longer a low-confidence guess).
     confidence_pct: Mapped[int | None] = mapped_column(Integer)
+
+    # Work Order C2: a locked row is never changed by a Run-AI rerun.
+    locked: Mapped[bool] = mapped_column(default=False, nullable=False)
     source_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )

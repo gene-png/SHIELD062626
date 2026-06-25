@@ -51,6 +51,7 @@ class CapabilityItemResponse(BaseModel):
     disposition: CapabilityDisposition | None
     disposition_rationale: str | None
     consolidation_target_id: uuid.UUID | None
+    locked: bool = False
 
 
 class CapabilityListResponse(BaseModel):
@@ -83,6 +84,8 @@ class CapabilityItemPatch(BaseModel):
     disposition: CapabilityDisposition | None = None
     disposition_rationale: str | None = Field(default=None, max_length=4000)
     consolidation_target_id: uuid.UUID | None = None
+    # Work Order C2: lock/unlock this row against AI reruns.
+    locked: bool | None = None
 
 
 class ConsolidationPlanSummary(BaseModel):

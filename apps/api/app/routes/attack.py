@@ -98,6 +98,7 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
                 status=status_enum,
                 notes=r.notes,
                 evidence_artifact_id=r.evidence_artifact_id,
+                locked=r.locked,
                 answered_by=r.answered_by,
                 answered_at=r.answered_at,
             )
@@ -353,6 +354,8 @@ def patch_coverage(
         row.notes = data["notes"]
     if "evidence_artifact_id" in data:
         row.evidence_artifact_id = data["evidence_artifact_id"]
+    if data.get("locked") is not None:
+        row.locked = bool(data["locked"])
     row.answered_by = user.id
     row.answered_at = utcnow()
     audit(
@@ -376,6 +379,7 @@ def patch_coverage(
         status=status_enum,
         notes=row.notes,
         evidence_artifact_id=row.evidence_artifact_id,
+        locked=row.locked,
         answered_by=row.answered_by,
         answered_at=row.answered_at,
     )

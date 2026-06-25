@@ -110,6 +110,9 @@ class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
     # NULL = unscored. Validated per framework at the route boundary.
     maturity_stage: Mapped[int | None] = mapped_column(SmallInteger)
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Work Order C2: a locked row is never changed by a Run-AI rerun.
+    locked: Mapped[bool] = mapped_column(default=False, nullable=False)
     evidence_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )

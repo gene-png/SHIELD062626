@@ -298,10 +298,16 @@ def patch_capability_item(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Patch body is empty.",
         )
+    # Lock/unlock is a meta-action handled separately so a NULL never reaches
+    # the NOT NULL column and so it doesn't clear AI confidence on its own.
+    locked_val = data.pop("locked", None)
     for field, value in data.items():
         setattr(item, field, value)
-    # Human edit -> no longer an AI guess.
-    item.confidence_pct = None
+    if data:
+        # A content edit -> no longer an AI guess.
+        item.confidence_pct = None
+    if locked_val is not None:
+        item.locked = bool(locked_val)
 
     audit(
         db,

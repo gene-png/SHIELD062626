@@ -117,6 +117,9 @@ class CsfAnswer(UUIDPKMixin, TimestampMixin, Base):
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )
 
+    # Work Order C2: a locked row is never changed by a Run-AI rerun.
+    locked: Mapped[bool] = mapped_column(default=False, nullable=False)
+
     # Bookkeeping: who last touched the row.
     answered_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")

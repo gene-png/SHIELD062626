@@ -78,6 +78,7 @@ class AttackCoverageResponse(BaseModel):
     status: CoverageStatus | None
     notes: str | None
     evidence_artifact_id: uuid.UUID | None
+    locked: bool = False
     answered_by: uuid.UUID | None
     answered_at: datetime | None
 
@@ -98,6 +99,8 @@ class AttackCoveragePatch(BaseModel):
     status: CoverageStatus | None = None
     notes: str | None = Field(default=None, max_length=8000)
     evidence_artifact_id: uuid.UUID | None = None
+    # Work Order C2: lock/unlock this row against AI reruns.
+    locked: bool | None = None
 
 
 # ---------------------------------------------------------------------------
