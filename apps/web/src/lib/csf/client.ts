@@ -6,8 +6,13 @@ import type {
   CsfAssessment,
   CsfCatalog,
   CsfDeliverable,
+  CsfDimensionScore,
+  CsfDimensionScorePatch,
   CsfInterviewQuestionnaire,
+  CsfProfile,
+  CsfRunAiResponse,
   CsfScoreSummary,
+  EnterpriseProfile,
   GapAnalysis,
 } from "./types";
 
@@ -224,4 +229,55 @@ export async function fetchGapAnalysis(
     }
     throw err;
   }
+}
+
+// --- Full-Playbook tiered Working Profile (Work Order D4) ---
+
+export async function seedProfiles(
+  serviceId: string,
+  tiers: string[] = ["high", "moderate", "low"],
+): Promise<string[]> {
+  return jsonRequest<string[]>(
+    `/api/proxy/csf/services/${serviceId}/profiles/seed`,
+    { method: "POST", body: { tiers } },
+  );
+}
+
+export async function fetchProfile(
+  serviceId: string,
+  tier: string,
+): Promise<CsfProfile> {
+  return jsonRequest<CsfProfile>(
+    `/api/proxy/csf/services/${serviceId}/profile/${tier}`,
+  );
+}
+
+export async function patchDimensionScore(
+  scoreId: string,
+  patch: CsfDimensionScorePatch,
+): Promise<CsfDimensionScore> {
+  return jsonRequest<CsfDimensionScore>(
+    `/api/proxy/csf/dimension-scores/${scoreId}`,
+    { method: "PATCH", body: patch },
+  );
+}
+
+export async function fetchEnterpriseProfile(
+  serviceId: string,
+): Promise<EnterpriseProfile | null> {
+  try {
+    return await jsonRequest<EnterpriseProfile>(
+      `/api/proxy/csf/services/${serviceId}/enterprise-profile`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function runCsfAi(serviceId: string): Promise<CsfRunAiResponse> {
+  return jsonRequest<CsfRunAiResponse>(
+    `/api/proxy/csf/services/${serviceId}/run-ai`,
+    { method: "POST" },
+  );
 }

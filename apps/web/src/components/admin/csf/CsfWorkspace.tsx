@@ -36,6 +36,7 @@ import type {
 
 import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
+import { CsfPlaybookPanel } from "./CsfPlaybookPanel";
 import { CsfQuestionnaire } from "./CsfQuestionnaire";
 import { CsfScoreCard } from "./CsfScoreCard";
 
@@ -339,6 +340,7 @@ export function CsfWorkspace({
       ) : (
         <>
           <CsfScoreCard score={score} />
+          <CsfPlaybookPanel serviceId={serviceId} readOnly={readOnly} />
           <CsfGapList
             analysis={gap}
             targetTier={targetTier}

@@ -149,3 +149,74 @@ export interface CsfDeliverable {
   released_to_client_at: string | null;
   superseded_by: string | null;
 }
+
+// --- Full-Playbook tiered Working Profile (Work Order D4) ---
+
+export interface CsfDimensionScore {
+  id: string;
+  tier: string;
+  subcategory_code: string;
+  governance: number;
+  policy: number;
+  implementation: number;
+  monitoring: number;
+  improvement: number;
+  in_scope: boolean;
+  rationale: string | null;
+  what_we_found: string | null;
+  has_evidence: boolean;
+  target_level: number | null;
+  locked: boolean;
+  total: number;
+  level: number;
+  evidence_capped: boolean;
+}
+
+export interface CsfProfile {
+  tier: string;
+  rows: CsfDimensionScore[];
+}
+
+export interface CsfDimensionScorePatch {
+  governance?: number;
+  policy?: number;
+  implementation?: number;
+  monitoring?: number;
+  improvement?: number;
+  in_scope?: boolean;
+  rationale?: string | null;
+  what_we_found?: string | null;
+  has_evidence?: boolean;
+  target_level?: number | null;
+  locked?: boolean;
+}
+
+export interface EnterpriseSubcategory {
+  subcategory_code: string;
+  name: string;
+  function: string;
+  tier_levels: Record<string, number>;
+  enterprise_level: number;
+  rollup_rule: number;
+  target_level: number | null;
+  gap: boolean;
+  priority: string | null;
+}
+
+export interface EnterpriseProfile {
+  tiers_in_use: string[];
+  subcategories: EnterpriseSubcategory[];
+}
+
+export interface CsfDimensionChange {
+  tier: string;
+  subcategory_code: string;
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface CsfRunAiResponse {
+  changed: CsfDimensionChange[];
+  rows: CsfDimensionScore[];
+}
