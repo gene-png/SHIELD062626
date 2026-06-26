@@ -218,3 +218,69 @@ class GapAnalysisResponse(BaseModel):
     unscored_count: int
     gap_count_by_function: dict[str, int]
     gaps: list[GapItem]
+
+
+# ---------------------------------------------------------------------------
+# Full-Playbook tiered Working Profile (Work Order D4)
+# ---------------------------------------------------------------------------
+
+
+class CsfDimensionScoreResponse(BaseModel):
+    id: uuid.UUID
+    tier: str
+    subcategory_code: str
+    governance: int
+    policy: int
+    implementation: int
+    monitoring: int
+    improvement: int
+    in_scope: bool
+    rationale: str | None
+    what_we_found: str | None
+    has_evidence: bool
+    target_level: int | None
+    locked: bool
+    # Code-computed (app/csf/playbook.py).
+    total: int
+    level: int
+    evidence_capped: bool
+
+
+class CsfProfileResponse(BaseModel):
+    tier: str
+    rows: list[CsfDimensionScoreResponse]
+
+
+class CsfDimensionScorePatch(BaseModel):
+    governance: int | None = Field(default=None, ge=0, le=2)
+    policy: int | None = Field(default=None, ge=0, le=2)
+    implementation: int | None = Field(default=None, ge=0, le=2)
+    monitoring: int | None = Field(default=None, ge=0, le=2)
+    improvement: int | None = Field(default=None, ge=0, le=2)
+    in_scope: bool | None = None
+    rationale: str | None = Field(default=None, max_length=8000)
+    what_we_found: str | None = Field(default=None, max_length=8000)
+    has_evidence: bool | None = None
+    target_level: int | None = Field(default=None, ge=1, le=5)
+    locked: bool | None = None
+
+
+class ProfileSeedRequest(BaseModel):
+    tiers: list[str] = ["high", "moderate", "low"]
+
+
+class EnterpriseSubcategory(BaseModel):
+    subcategory_code: str
+    name: str
+    function: str
+    tier_levels: dict[str, int]
+    enterprise_level: int
+    rollup_rule: int
+    target_level: int | None
+    gap: bool
+    priority: str | None
+
+
+class EnterpriseProfileResponse(BaseModel):
+    tiers_in_use: list[str]
+    subcategories: list[EnterpriseSubcategory]

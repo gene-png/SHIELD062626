@@ -47,11 +47,21 @@ from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
+from app.csf.catalog import subcategory_by_code
+from app.csf.playbook import (
+    DimensionScores,
+    Tier,
+    gap_priority,
+    is_gap,
+    score_tier,
+    weighted_floor_rollup,
+)
 from app.models.csf_assessment import (
     CsfAnswer,
     CsfAssessment,
     CsfAssessmentStatus,
 )
+from app.models.csf_profile import CsfDimensionScore
 from app.models.deliverable import Deliverable
 from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
@@ -67,15 +77,21 @@ from app.schemas.csf import (
     CsfAnswerPatch,
     CsfAnswerResponse,
     CsfAssessmentResponse,
+    CsfDimensionScorePatch,
+    CsfDimensionScoreResponse,
+    CsfProfileResponse,
     CsfScoreSummary,
     CsfSelfAssessmentSubmit,
     CsfQuestionnaireResponse,
     CsfServiceCreateRequest,
     CsfServiceResponse,
+    EnterpriseProfileResponse,
+    EnterpriseSubcategory,
     FunctionScore,
     GapAnalysisResponse,
     GapItem,
     InterviewQuestion,
+    ProfileSeedRequest,
 )
 from app.schemas.tech_debt import DeliverableResponse
 from app.storage import StorageBackend
@@ -751,6 +767,251 @@ def gap_analysis(
             )
             for g in analysis.gaps
         ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Full-Playbook tiered Working Profile (Work Order D4)
+# ---------------------------------------------------------------------------
+
+_VALID_TIERS = {t.value for t in Tier}
+
+
+def _dims(row: CsfDimensionScore) -> DimensionScores:
+    return DimensionScores(
+        governance=row.governance,
+        policy=row.policy,
+        implementation=row.implementation,
+        monitoring=row.monitoring,
+        improvement=row.improvement,
+    )
+
+
+def _score_response(row: CsfDimensionScore) -> CsfDimensionScoreResponse:
+    result = score_tier(_dims(row), has_evidence=row.has_evidence)
+    return CsfDimensionScoreResponse(
+        id=row.id,
+        tier=row.tier,
+        subcategory_code=row.subcategory_code,
+        governance=row.governance,
+        policy=row.policy,
+        implementation=row.implementation,
+        monitoring=row.monitoring,
+        improvement=row.improvement,
+        in_scope=row.in_scope,
+        rationale=row.rationale,
+        what_we_found=row.what_we_found,
+        has_evidence=row.has_evidence,
+        target_level=row.target_level,
+        locked=row.locked,
+        total=result.total,
+        level=result.level,
+        evidence_capped=result.evidence_capped,
+    )
+
+
+@router.post(
+    "/services/{service_id}/profiles/seed",
+    response_model=list[str],
+    summary="Seed the tiered Working Profile rows for the requested tiers (admin)",
+)
+def seed_profiles(
+    service_id: uuid.UUID,
+    body: ProfileSeedRequest,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[str]:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    tiers = [t for t in body.tiers if t in _VALID_TIERS]
+    if not tiers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No valid tiers (high/moderate/low).",
+        )
+    existing = {
+        (r.tier, r.subcategory_code)
+        for r in db.execute(
+            select(CsfDimensionScore.tier, CsfDimensionScore.subcategory_code).where(
+                CsfDimensionScore.assessment_id == a.id
+            )
+        ).all()
+    }
+    created = 0
+    for tier in tiers:
+        for sc in SUBCATEGORIES:
+            if (tier, sc.code) in existing:
+                continue
+            db.add(
+                CsfDimensionScore(
+                    assessment_id=a.id,
+                    client_id=client.id,
+                    tier=tier,
+                    subcategory_code=sc.code,
+                )
+            )
+            created += 1
+    audit(
+        db,
+        action="csf.profiles_seeded",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"tiers": tiers, "created": created},
+    )
+    db.commit()
+    return tiers
+
+
+@router.get(
+    "/services/{service_id}/profile/{tier}",
+    response_model=CsfProfileResponse,
+    summary="The tiered Working Profile for one tier, with computed totals/levels (admin)",
+)
+def get_profile(
+    service_id: uuid.UUID,
+    tier: str,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfProfileResponse:
+    if tier not in _VALID_TIERS:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown tier."
+        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
+        )
+    rows = (
+        db.execute(
+            select(CsfDimensionScore)
+            .where(
+                CsfDimensionScore.assessment_id == a.id,
+                CsfDimensionScore.tier == tier,
+            )
+            .order_by(CsfDimensionScore.subcategory_code)
+        )
+        .scalars()
+        .all()
+    )
+    return CsfProfileResponse(tier=tier, rows=[_score_response(r) for r in rows])
+
+
+@router.patch(
+    "/dimension-scores/{score_id}",
+    response_model=CsfDimensionScoreResponse,
+    summary="Set dimension scores / scope / target / lock on one row (admin)",
+)
+def patch_dimension_score(
+    score_id: uuid.UUID,
+    body: CsfDimensionScorePatch,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfDimensionScoreResponse:
+    row = db.get(CsfDimensionScore, score_id)
+    if row is None or row.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Score row not found."
+        )
+    data = body.model_dump(exclude_unset=True)
+    for f in (
+        "governance", "policy", "implementation", "monitoring", "improvement",
+        "in_scope", "rationale", "what_we_found", "has_evidence", "target_level",
+        "locked",
+    ):
+        if f in data and data[f] is not None:
+            setattr(row, f, data[f])
+        elif f in data and f in ("rationale", "what_we_found", "target_level"):
+            setattr(row, f, None)  # explicit clear allowed for nullable text/target
+    db.commit()
+    return _score_response(row)
+
+
+@router.get(
+    "/services/{service_id}/enterprise-profile",
+    response_model=EnterpriseProfileResponse,
+    summary="Roll the tiered profiles up to one Enterprise level per subcategory (admin)",
+)
+def enterprise_profile(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EnterpriseProfileResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
+        )
+    rows = (
+        db.execute(
+            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+    )
+    # subcategory_code -> {tier: row}
+    by_subcat: dict[str, dict[str, CsfDimensionScore]] = {}
+    tiers_in_use: set[str] = set()
+    for r in rows:
+        if not r.in_scope:
+            continue
+        by_subcat.setdefault(r.subcategory_code, {})[r.tier] = r
+        tiers_in_use.add(r.tier)
+
+    out: list[EnterpriseSubcategory] = []
+    for code in sorted(by_subcat):
+        tier_rows = by_subcat[code]
+        tier_levels = {
+            tier: score_tier(_dims(row), has_evidence=row.has_evidence).level
+            for tier, row in tier_rows.items()
+        }
+        rollup = weighted_floor_rollup(
+            {Tier(t): lvl for t, lvl in tier_levels.items()},
+            # IG core/supporting metadata isn't in the catalog yet; defaults keep
+            # the roll-up on rules 1/3/4/6 until the IG import lands.
+            is_core_primary=False,
+            is_supporting_or_supplemental=False,
+        )
+        # Per-subcategory target: the highest target set across tiers, if any.
+        targets = [row.target_level for row in tier_rows.values() if row.target_level]
+        target = max(targets) if targets else None
+        gap = is_gap(rollup.score, target) if target is not None else False
+        priority = (
+            gap_priority(
+                is_core=False,
+                high_tier=Tier.HIGH.value in tier_rows,
+                multi_system=len(tier_rows) > 1,
+            )
+            if gap
+            else None
+        )
+        sc = subcategory_by_code(code)
+        out.append(
+            EnterpriseSubcategory(
+                subcategory_code=code,
+                name=getattr(sc, "name", code),
+                function=str(getattr(sc, "function", "")),
+                tier_levels=tier_levels,
+                enterprise_level=rollup.score,
+                rollup_rule=rollup.rule,
+                target_level=target,
+                gap=gap,
+                priority=priority,
+            )
+        )
+    return EnterpriseProfileResponse(
+        tiers_in_use=sorted(tiers_in_use), subcategories=out
     )
 
 
