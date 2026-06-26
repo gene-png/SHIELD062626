@@ -18,6 +18,8 @@ import {
   runCsfAi,
   seedProfiles,
 } from "@/lib/csf/client";
+
+import { CsfDimensionEditor } from "./CsfDimensionEditor";
 import type {
   CsfRunAiResponse,
   EnterpriseProfile,
@@ -169,6 +171,7 @@ export function CsfPlaybookPanel({
   const gapCount = enterprise?.subcategories.filter((s) => s.gap).length ?? 0;
 
   return (
+    <div className="flex flex-col gap-6">
     <Card>
       <CardHeader>
         <CardTitle>Full Playbook — Working Profiles</CardTitle>
@@ -248,5 +251,13 @@ export function CsfPlaybookPanel({
         )}
       </CardBody>
     </Card>
+    {seeded ? (
+      <CsfDimensionEditor
+        serviceId={serviceId}
+        readOnly={readOnly}
+        onChanged={() => void reload()}
+      />
+    ) : null}
+    </div>
   );
 }
