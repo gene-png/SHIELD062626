@@ -50,6 +50,7 @@ from app.models.client import Client
 from app.ai.diff import diff_keyed_rows
 from app.ai.engine import run_job
 from app.ai.llm import LLMClient
+from app.csf import playbook_export as csf_playbook_export
 from app.csf.catalog import subcategory_by_code
 from app.csf.playbook import (
     DimensionScores,
@@ -83,6 +84,7 @@ from app.schemas.csf import (
     CsfDimensionChange,
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
+    CsfPlaybookExportResponse,
     CsfProfileResponse,
     CsfRunAiResponse,
     CsfScoreSummary,
@@ -958,6 +960,16 @@ def enterprise_profile(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
         )
+    out, tiers_in_use = _enterprise_subcategories(db, a)
+    return EnterpriseProfileResponse(
+        tiers_in_use=sorted(tiers_in_use), subcategories=out
+    )
+
+
+def _enterprise_subcategories(
+    db: Session, a: CsfAssessment
+) -> tuple[list[EnterpriseSubcategory], set[str]]:
+    """The weighted-floor Enterprise roll-up per in-scope subcategory."""
     rows = (
         db.execute(
             select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
@@ -965,7 +977,6 @@ def enterprise_profile(
         .scalars()
         .all()
     )
-    # subcategory_code -> {tier: row}
     by_subcat: dict[str, dict[str, CsfDimensionScore]] = {}
     tiers_in_use: set[str] = set()
     for r in rows:
@@ -988,7 +999,6 @@ def enterprise_profile(
             is_core_primary=False,
             is_supporting_or_supplemental=False,
         )
-        # Per-subcategory target: the highest target set across tiers, if any.
         targets = [row.target_level for row in tier_rows.values() if row.target_level]
         target = max(targets) if targets else None
         gap = is_gap(rollup.score, target) if target is not None else False
@@ -1015,9 +1025,7 @@ def enterprise_profile(
                 priority=priority,
             )
         )
-    return EnterpriseProfileResponse(
-        tiers_in_use=sorted(tiers_in_use), subcategories=out
-    )
+    return out, tiers_in_use
 
 
 def _llm_dep() -> LLMClient:
@@ -1133,6 +1141,78 @@ def run_ai(
         for r in sorted(rows.values(), key=lambda r: (r.tier, r.subcategory_code))
     ]
     return CsfRunAiResponse(changed=changes, rows=out_rows)
+
+
+@router.post(
+    "/services/{service_id}/playbook/export",
+    response_model=CsfPlaybookExportResponse,
+    summary="Render + store the CSF full-Playbook workbook (XLSX) (admin)",
+)
+def export_playbook(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[StorageBackend, Depends(_storage_dep)],
+) -> CsfPlaybookExportResponse:
+    """An Enterprise Profile sheet (weighted-floor roll-up) + one sheet per tier
+    with the five dimension scores and computed total/level/cap."""
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
+        )
+    all_rows = (
+        db.execute(
+            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+    )
+    if not all_rows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seed the Working Profile before exporting.",
+        )
+    enterprise_rows, _ = _enterprise_subcategories(db, a)
+    tier_profiles: dict[str, list] = {}
+    for tier in ("high", "moderate", "low"):
+        trows = sorted(
+            (r for r in all_rows if r.tier == tier),
+            key=lambda r: r.subcategory_code,
+        )
+        if trows:
+            tier_profiles[tier] = [_score_response(r) for r in trows]
+
+    org = None if client.legal_name == "(pending intake)" else client.legal_name
+    data = csf_playbook_export.render_xlsx(
+        client_name=org or "Client",
+        version=a.version,
+        enterprise_rows=enterprise_rows,
+        tier_profiles=tier_profiles,
+    )
+    art = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        client_id=client.id,
+        filename=f"CSF_Playbook_v{a.version}.xlsx",
+        mime_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        data=data,
+    )
+    audit(
+        db,
+        action="csf.playbook_exported",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"version": a.version},
+    )
+    db.commit()
+    return CsfPlaybookExportResponse(xlsx_artifact_id=art.id, xlsx_filename=art.title)
 
 
 # ---------------------------------------------------------------------------

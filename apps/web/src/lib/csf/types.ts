@@ -220,3 +220,8 @@ export interface CsfRunAiResponse {
   changed: CsfDimensionChange[];
   rows: CsfDimensionScore[];
 }
+
+export interface CsfPlaybookExport {
+  xlsx_artifact_id: string;
+  xlsx_filename: string;
+}

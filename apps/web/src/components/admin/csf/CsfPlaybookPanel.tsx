@@ -14,6 +14,7 @@ import {
 
 import {
   CsfProxyError,
+  exportPlaybook,
   fetchEnterpriseProfile,
   runCsfAi,
   seedProfiles,
@@ -21,6 +22,7 @@ import {
 
 import { CsfDimensionEditor } from "./CsfDimensionEditor";
 import type {
+  CsfPlaybookExport,
   CsfRunAiResponse,
   EnterpriseProfile,
   EnterpriseSubcategory,
@@ -112,10 +114,14 @@ export function CsfPlaybookPanel({
     null,
   );
   const [loading, setLoading] = React.useState(true);
-  const [busy, setBusy] = React.useState<"seed" | "run" | null>(null);
+  const [busy, setBusy] = React.useState<"seed" | "run" | "export" | null>(
+    null,
+  );
   const [runResult, setRunResult] = React.useState<CsfRunAiResponse | null>(
     null,
   );
+  const [exportResult, setExportResult] =
+    React.useState<CsfPlaybookExport | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const reload = React.useCallback(async () => {
@@ -167,6 +173,18 @@ export function CsfPlaybookPanel({
     }
   }
 
+  async function onExport(): Promise<void> {
+    setBusy("export");
+    setError(null);
+    try {
+      setExportResult(await exportPlaybook(serviceId));
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const seeded = (enterprise?.subcategories.length ?? 0) > 0;
   const gapCount = enterprise?.subcategories.filter((s) => s.gap).length ?? 0;
 
@@ -209,6 +227,24 @@ export function CsfPlaybookPanel({
               {busy === "run" ? "Running…" : "Run AI (csf_score)"}
             </button>
           )}
+          {seeded ? (
+            <button
+              type="button"
+              onClick={() => void onExport()}
+              disabled={busy !== null}
+              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy === "export" ? "Exporting…" : "Export XLSX"}
+            </button>
+          ) : null}
+          {exportResult ? (
+            <a
+              href={`/api/proxy/artifacts/${exportResult.xlsx_artifact_id}/download`}
+              className="text-sm font-medium text-brand-500 hover:underline"
+            >
+              Download {exportResult.xlsx_filename}
+            </a>
+          ) : null}
           {seeded ? (
             <span className="text-sm text-ink-secondary">
               {enterprise?.tiers_in_use.length ?? 0} tier(s) in use ·{" "}

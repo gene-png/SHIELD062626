@@ -302,3 +302,10 @@ class CsfRunAiResponse(BaseModel):
 
     changed: list[CsfDimensionChange]
     rows: list[CsfDimensionScoreResponse]
+
+
+class CsfPlaybookExportResponse(BaseModel):
+    """The stored CSF Playbook workbook artifact (Work Order D4)."""
+
+    xlsx_artifact_id: uuid.UUID
+    xlsx_filename: str

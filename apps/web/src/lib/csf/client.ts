@@ -9,6 +9,7 @@ import type {
   CsfDimensionScore,
   CsfDimensionScorePatch,
   CsfInterviewQuestionnaire,
+  CsfPlaybookExport,
   CsfProfile,
   CsfRunAiResponse,
   CsfScoreSummary,
@@ -278,6 +279,15 @@ export async function fetchEnterpriseProfile(
 export async function runCsfAi(serviceId: string): Promise<CsfRunAiResponse> {
   return jsonRequest<CsfRunAiResponse>(
     `/api/proxy/csf/services/${serviceId}/run-ai`,
+    { method: "POST" },
+  );
+}
+
+export async function exportPlaybook(
+  serviceId: string,
+): Promise<CsfPlaybookExport> {
+  return jsonRequest<CsfPlaybookExport>(
+    `/api/proxy/csf/services/${serviceId}/playbook/export`,
     { method: "POST" },
   );
 }
