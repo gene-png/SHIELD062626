@@ -239,24 +239,16 @@ export function CsfPlaybookPanel({
           ) : null}
           {exportResult ? (
             <span className="flex flex-wrap items-center gap-3 text-sm font-medium">
-              <a
-                href={`/api/proxy/artifacts/${exportResult.xlsx_artifact_id}/download`}
-                className="text-brand-500 hover:underline"
-              >
-                XLSX
-              </a>
-              <a
-                href={`/api/proxy/artifacts/${exportResult.pdf_artifact_id}/download`}
-                className="text-brand-500 hover:underline"
-              >
-                PDF
-              </a>
-              <a
-                href={`/api/proxy/artifacts/${exportResult.docx_artifact_id}/download`}
-                className="text-brand-500 hover:underline"
-              >
-                Word
-              </a>
+              {exportResult.artifacts.map((a) => (
+                <a
+                  key={a.kind}
+                  href={`/api/proxy/artifacts/${a.artifact_id}/download`}
+                  className="text-brand-500 hover:underline"
+                  title={a.filename}
+                >
+                  {a.label}
+                </a>
+              ))}
             </span>
           ) : null}
           {seeded ? (

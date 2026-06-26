@@ -305,12 +305,15 @@ class CsfRunAiResponse(BaseModel):
     rows: list[CsfDimensionScoreResponse]
 
 
-class CsfPlaybookExportResponse(BaseModel):
-    """The stored CSF Playbook artifacts — XLSX workbook + PDF/Word report (D4)."""
+class ExportedArtifact(BaseModel):
+    kind: str  # xlsx | exec_pdf | exec_docx | full_pdf | full_docx
+    label: str
+    artifact_id: uuid.UUID
+    filename: str
 
-    xlsx_artifact_id: uuid.UUID
-    xlsx_filename: str
-    pdf_artifact_id: uuid.UUID
-    pdf_filename: str
-    docx_artifact_id: uuid.UUID
-    docx_filename: str
+
+class CsfPlaybookExportResponse(BaseModel):
+    """The stored CSF Playbook artifacts — XLSX workbook + executive briefing +
+    full playbook, each as a downloadable file (Work Order D4)."""
+
+    artifacts: list[ExportedArtifact]

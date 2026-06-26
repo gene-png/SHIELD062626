@@ -80,15 +80,16 @@ def test_playbook_export_produces_downloadable_xlsx(app_client) -> None:
 
     ex = c.post(f"/csf/services/{svc_id}/playbook/export", headers=h)
     assert ex.status_code == 200, ex.text
-    body = ex.json()
-    assert body["xlsx_filename"].endswith(".xlsx")
-    assert body["pdf_filename"].endswith(".pdf")
-    assert body["docx_filename"].endswith(".docx")
+    arts = {a["kind"]: a for a in ex.json()["artifacts"]}
+    # XLSX workbook + executive briefing (PDF+Word) + full playbook (PDF+Word).
+    assert set(arts) == {"xlsx", "exec_pdf", "exec_docx", "full_pdf", "full_docx"}
 
     dh = {**h, "X-Client-Id": cid}
-    xlsx = c.get(f"/artifacts/{body['xlsx_artifact_id']}/download", headers=dh)
-    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
-    pdf = c.get(f"/artifacts/{body['pdf_artifact_id']}/download", headers=dh)
-    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
-    docx = c.get(f"/artifacts/{body['docx_artifact_id']}/download", headers=dh)
-    assert docx.status_code == 200 and docx.content[:2] == b"PK"
+    magic = {
+        "xlsx": b"PK", "exec_pdf": b"%PDF-", "exec_docx": b"PK",
+        "full_pdf": b"%PDF-", "full_docx": b"PK",
+    }
+    for kind, art in arts.items():
+        dl = c.get(f"/artifacts/{art['artifact_id']}/download", headers=dh)
+        assert dl.status_code == 200, f"{kind}: {dl.status_code}"
+        assert dl.content.startswith(magic[kind]), f"{kind} wrong magic bytes"

@@ -28,8 +28,25 @@ def add_title(doc: Any, title: str, subtitle: str | None = None) -> None:
         doc.add_paragraph(subtitle)
 
 
-def add_heading(doc: Any, text: str) -> None:
-    doc.add_heading(text, level=1)
+def add_heading(doc: Any, text: str, level: int = 1) -> None:
+    doc.add_heading(text, level=level)
+
+
+def add_page_break(doc: Any) -> None:
+    doc.add_page_break()
+
+
+def shade_cell(cell: Any, hex_color: str) -> None:
+    """Set a table cell's background fill (python-docx has no direct API)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color.lstrip("#"))
+    tc_pr.append(shd)
 
 
 def add_paragraphs(doc: Any, lines: Iterable[str]) -> None:
@@ -37,7 +54,8 @@ def add_paragraphs(doc: Any, lines: Iterable[str]) -> None:
         doc.add_paragraph(line)
 
 
-def add_table(doc: Any, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> None:
+def add_table(doc: Any, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> Any:
+    """Add a styled table. Returns the table so callers can shade cells."""
     table = doc.add_table(rows=1, cols=len(headers))
     try:
         table.style = "Light Grid Accent 1"
@@ -51,6 +69,7 @@ def add_table(doc: Any, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -
         cells = table.add_row().cells
         for i, val in enumerate(row):
             cells[i].text = "" if val is None else str(val)
+    return table
 
 
 def to_bytes(doc: Any) -> bytes:

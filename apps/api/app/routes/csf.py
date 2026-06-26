@@ -85,6 +85,7 @@ from app.schemas.csf import (
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
     CsfPlaybookExportResponse,
+    ExportedArtifact,
     CsfProfileResponse,
     CsfRunAiResponse,
     CsfScoreSummary,
@@ -1192,45 +1193,53 @@ def export_playbook(
     org = None if client.legal_name == "(pending intake)" else client.legal_name
     name = org or "Client"
     base = f"CSF_Playbook_v{a.version}"
+    on = utcnow().strftime("%Y-%m-%d")
+    xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    pdf_mime = "application/pdf"
 
-    xlsx = _write_artifact(
-        db, storage=storage, user=user, client_id=client.id,
-        filename=f"{base}.xlsx",
-        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        data=csf_playbook_export.render_xlsx(
-            client_name=name, version=a.version,
-            enterprise_rows=enterprise_rows, tier_profiles=tier_profiles,
-        ),
-    )
-    pdf = _write_artifact(
-        db, storage=storage, user=user, client_id=client.id,
-        filename=f"{base}.pdf", mime_type="application/pdf",
-        data=csf_playbook_export.render_pdf(
-            client_name=name, version=a.version, enterprise_rows=enterprise_rows,
-        ),
-    )
-    docx = _write_artifact(
-        db, storage=storage, user=user, client_id=client.id,
-        filename=f"{base}.docx", mime_type=DOCX_MIME,
-        data=csf_playbook_export.render_docx(
-            client_name=name, version=a.version, enterprise_rows=enterprise_rows,
-        ),
-    )
+    specs = [
+        ("xlsx", "Data workbook (XLSX)", f"{base}.xlsx", xlsx_mime,
+         csf_playbook_export.render_xlsx(
+             client_name=name, version=a.version,
+             enterprise_rows=enterprise_rows, tier_profiles=tier_profiles)),
+        ("exec_pdf", "Executive briefing (PDF)", f"{base}_Executive.pdf", pdf_mime,
+         csf_playbook_export.render_exec_pdf(
+             client_name=name, version=a.version,
+             enterprise_rows=enterprise_rows, generated_on=on)),
+        ("exec_docx", "Executive briefing (Word)", f"{base}_Executive.docx", DOCX_MIME,
+         csf_playbook_export.render_exec_docx(
+             client_name=name, version=a.version,
+             enterprise_rows=enterprise_rows, generated_on=on)),
+        ("full_pdf", "Full playbook (PDF)", f"{base}_Full.pdf", pdf_mime,
+         csf_playbook_export.render_full_pdf(
+             client_name=name, version=a.version,
+             enterprise_rows=enterprise_rows, generated_on=on)),
+        ("full_docx", "Full playbook (Word)", f"{base}_Full.docx", DOCX_MIME,
+         csf_playbook_export.render_full_docx(
+             client_name=name, version=a.version,
+             enterprise_rows=enterprise_rows, generated_on=on)),
+    ]
+    artifacts: list[ExportedArtifact] = []
+    for kind, label, filename, mime, data in specs:
+        art = _write_artifact(
+            db, storage=storage, user=user, client_id=client.id,
+            filename=filename, mime_type=mime, data=data,
+        )
+        artifacts.append(
+            ExportedArtifact(kind=kind, label=label, artifact_id=art.id, filename=art.title)
+        )
+
     audit(
         db,
         action="csf.playbook_exported",
         target_type="csf_assessment",
         target_id=a.id,
         actor_user_id=user.id,
-        details={"version": a.version},
+        details={"version": a.version, "artifacts": len(artifacts)},
     )
     a.documents_stale = False  # Work Order C3: exporting refreshes the documents
     db.commit()
-    return CsfPlaybookExportResponse(
-        xlsx_artifact_id=xlsx.id, xlsx_filename=xlsx.title,
-        pdf_artifact_id=pdf.id, pdf_filename=pdf.title,
-        docx_artifact_id=docx.id, docx_filename=docx.title,
-    )
+    return CsfPlaybookExportResponse(artifacts=artifacts)
 
 
 # ---------------------------------------------------------------------------

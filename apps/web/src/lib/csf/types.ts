@@ -222,11 +222,13 @@ export interface CsfRunAiResponse {
   rows: CsfDimensionScore[];
 }
 
+export interface ExportedArtifact {
+  kind: string;
+  label: string;
+  artifact_id: string;
+  filename: string;
+}
+
 export interface CsfPlaybookExport {
-  xlsx_artifact_id: string;
-  xlsx_filename: string;
-  pdf_artifact_id: string;
-  pdf_filename: string;
-  docx_artifact_id: string;
-  docx_filename: string;
+  artifacts: ExportedArtifact[];
 }
