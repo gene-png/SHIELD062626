@@ -98,6 +98,7 @@ class AttackAssessmentResponse(BaseModel):
     status: AttackAssessmentStatus
     approved_at: datetime | None
     approved_by: uuid.UUID | None
+    documents_stale: bool = False
     coverage: list[AttackCoverageResponse]
 
 

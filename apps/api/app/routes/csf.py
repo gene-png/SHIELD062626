@@ -163,6 +163,7 @@ def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentRespons
         status=a.status,
         approved_at=a.approved_at,
         approved_by=a.approved_by,
+        documents_stale=a.documents_stale,
         answers=_serialize_answers(rows),
         client_target_tier=_client_target_tier(db, a.service_id),
         client_profile=_client_profile(db, a.service_id),
@@ -1127,6 +1128,7 @@ def run_ai(
                 )
             )
 
+    a.documents_stale = True  # Work Order C3
     audit(
         db,
         action="csf.run_ai",
@@ -1222,6 +1224,7 @@ def export_playbook(
         actor_user_id=user.id,
         details={"version": a.version},
     )
+    a.documents_stale = False  # Work Order C3: exporting refreshes the documents
     db.commit()
     return CsfPlaybookExportResponse(
         xlsx_artifact_id=xlsx.id, xlsx_filename=xlsx.title,
@@ -1453,6 +1456,7 @@ def finalize_csf_deliverable(
             "gap_count": gap.total_gap_count,
         },
     )
+    assessment.documents_stale = False  # Work Order C3
     db.commit()
     db.refresh(deliv)
     return _serialize_deliverable(db, deliv)

@@ -55,6 +55,7 @@ export interface AttackAssessment {
   status: AttackAssessmentStatus;
   approved_at: string | null;
   approved_by: string | null;
+  documents_stale?: boolean;
   coverage: AttackCoverageRow[];
 }
 

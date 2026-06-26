@@ -36,6 +36,7 @@ import type {
 } from "@/lib/zt/types";
 
 import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
@@ -397,6 +398,7 @@ export function ZtWorkspace({
             stages={catalog.stages}
           />
           <ZtRoadmapCard analysis={gap} />
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <ZtDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}

@@ -94,6 +94,7 @@ class ZtAssessmentResponse(BaseModel):
     status: ZtAssessmentStatus
     approved_at: datetime | None
     approved_by: uuid.UUID | None
+    documents_stale: bool = False
     answers: list[ZtAnswerResponse]
     # Target stage the client picked at intake (2-4), or null if not set.
     client_target_stage: int | None = None

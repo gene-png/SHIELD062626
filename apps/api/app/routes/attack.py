@@ -131,6 +131,7 @@ def _serialize_assessment(
         status=a.status,
         approved_at=a.approved_at,
         approved_by=a.approved_by,
+        documents_stale=a.documents_stale,
         coverage=_serialize_coverage(rows),
     )
 
@@ -540,6 +541,7 @@ def run_ai(
         for ch in d.changes
     ]
 
+    a.documents_stale = True  # Work Order C3
     audit(
         db,
         action="attack.run_ai",
@@ -874,6 +876,7 @@ def finalize_attack_deliverable(
             "gap_count": rollup.gap,
         },
     )
+    assessment.documents_stale = False  # Work Order C3
     db.commit()
     db.refresh(deliv)
     return _serialize_deliverable(db, deliv)

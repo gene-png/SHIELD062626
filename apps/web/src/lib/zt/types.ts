@@ -55,6 +55,7 @@ export interface ZtAssessment {
   status: ZtAssessmentStatus;
   approved_at: string | null;
   approved_by: string | null;
+  documents_stale?: boolean;
   answers: ZtAnswer[];
   client_target_stage: number | null;
 }

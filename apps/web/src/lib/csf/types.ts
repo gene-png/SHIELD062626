@@ -61,6 +61,7 @@ export interface CsfAssessment {
   status: CsfAssessmentStatus;
   approved_at: string | null;
   approved_by: string | null;
+  documents_stale?: boolean;
   answers: CsfAnswer[];
   client_target_tier: number | null;
   client_profile: string | null;

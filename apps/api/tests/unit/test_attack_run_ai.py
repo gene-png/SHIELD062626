@@ -148,3 +148,25 @@ def test_run_ai_skips_locked_rows(app_client) -> None:
     row = next(t for t in body["coverage"] if t["technique_code"] == code)
     assert row["status"] is None
     assert all(ch["technique_code"] != code for ch in body["changed"])
+
+
+@pytest.mark.unit
+def test_run_ai_marks_documents_stale(app_client) -> None:
+    c, _TestSession, provider = app_client
+    bearer, cid = _admin(c)
+    h = {"Authorization": f"Bearer {bearer}", "X-Client-Id": cid}
+    svc = c.post("/attack/services", headers=h, json={"kind": "attack_coverage", "title": "Acme"})
+    svc_id = svc.json()["id"]
+    a = c.post(f"/attack/services/{svc_id}/assessments", headers=h)
+    code = a.json()["coverage"][0]["technique_code"]
+    assert a.json()["documents_stale"] is False
+
+    provider.register_static(
+        "mitre_map",
+        LLMResponse('{"techniques": [{"technique_code": "' + code + '", "status": "covered"}]}'),
+    )
+    c.post(f"/attack/services/{svc_id}/run-ai", headers=h)
+
+    latest = c.get(f"/attack/services/{svc_id}/assessments/latest", headers=h)
+    assert latest.status_code == 200, latest.text
+    assert latest.json()["documents_stale"] is True  # Work Order C3

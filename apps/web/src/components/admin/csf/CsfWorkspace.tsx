@@ -35,6 +35,7 @@ import type {
 } from "@/lib/csf/types";
 
 import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 
 import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
@@ -349,6 +350,7 @@ export function CsfWorkspace({
             targetTier={targetTier}
             onChangeTargetTier={(t) => void onChangeTargetTier(t)}
           />
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <CsfDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}

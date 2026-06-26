@@ -35,6 +35,7 @@ import type {
 } from "@/lib/attack/types";
 
 import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
@@ -369,6 +370,7 @@ export function AttackWorkspace({
               ) : null}
             </CardBody>
           </Card>
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <AttackDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}

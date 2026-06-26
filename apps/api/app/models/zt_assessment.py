@@ -68,6 +68,8 @@ class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Work Order C3: an AI run sets this true; finalize clears it.
+    documents_stale: Mapped[bool] = mapped_column(default=False, nullable=False)
     status: Mapped[ZtAssessmentStatus] = mapped_column(
         SAEnum(
             ZtAssessmentStatus,
