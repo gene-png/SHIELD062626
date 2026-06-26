@@ -158,9 +158,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     command.upgrade(cfg, "head")
 
     engine = create_engine(url, future=True)
-    TestSession = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
     from app.db.session import get_db
     from app.main import create_app
@@ -174,7 +172,24 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.flush()
+    from app.models.client_domain import ClientDomain as _ClientDomain
+
+    _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c
 
 

@@ -20,6 +20,7 @@ import {
   fetchLatestDeliverable,
   fetchScore,
   patchAnswer,
+  runZtAi,
   ZtProxyError,
 } from "@/lib/zt/client";
 import type {
@@ -30,11 +31,16 @@ import type {
   ZtCatalog,
   ZtDeliverable,
   ZtFramework,
+  ZtRunAiResponse,
   ZtScoreSummary,
 } from "@/lib/zt/types";
 
+import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
+import { ZtRoadmapCard } from "./ZtRoadmapCard";
 import { ZtQuestionnaire } from "./ZtQuestionnaire";
 import { ZtScoreCard } from "./ZtScoreCard";
 
@@ -81,7 +87,12 @@ export function ZtWorkspace({
     null,
   );
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
+  const [busy, setBusy] = React.useState<"create" | "approve" | "run" | null>(
+    null,
+  );
+  const [runResult, setRunResult] = React.useState<ZtRunAiResponse | null>(
+    null,
+  );
   const [targetStage, setTargetStage] = React.useState(3);
 
   const answersByCode = React.useMemo(() => {
@@ -208,6 +219,23 @@ export function ZtWorkspace({
     }
   }
 
+  async function onRunAi(): Promise<void> {
+    setBusy("run");
+    setRunResult(null);
+    try {
+      const result = await runZtAi(serviceId);
+      setRunResult(result);
+      // Re-pull so the questionnaire + score reflect the AI's suggestions.
+      const a = await fetchLatestAssessment(serviceId);
+      setAssessment(a);
+      await refreshScoreAndGap(targetStage);
+    } catch (err) {
+      setLoadError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const readOnly =
     assessment?.status === "approved" || assessment?.status === "released";
 
@@ -234,15 +262,19 @@ export function ZtWorkspace({
                 assessment.status === "approved" ||
                 assessment.status === "released"
                   ? "success"
-                  : "info"
+                  : assessment.status === "submitted"
+                    ? "warning"
+                    : "info"
               }
               withDot
             >
               {assessment.status === "draft"
                 ? `Draft v${assessment.version}`
-                : assessment.status === "approved"
-                  ? `Approved v${assessment.version}`
-                  : `Released v${assessment.version}`}
+                : assessment.status === "submitted"
+                  ? `Submitted v${assessment.version}`
+                  : assessment.status === "approved"
+                    ? `Approved v${assessment.version}`
+                    : `Released v${assessment.version}`}
             </StatusPill>
           ) : (
             <StatusPill tone="neutral" withDot>
@@ -253,7 +285,11 @@ export function ZtWorkspace({
             <button
               type="button"
               onClick={() => void onApprove()}
-              disabled={busy !== null || assessment.status !== "draft"}
+              disabled={
+                busy !== null ||
+                (assessment.status !== "draft" &&
+                  assessment.status !== "submitted")
+              }
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {assessment.status === "approved"
@@ -262,7 +298,9 @@ export function ZtWorkspace({
                   ? "Released"
                   : busy === "approve"
                     ? "Approving…"
-                    : "Approve"}
+                    : assessment.status === "submitted"
+                      ? "Approve client inputs"
+                      : "Approve"}
             </button>
           ) : (
             <button
@@ -276,6 +314,17 @@ export function ZtWorkspace({
           )}
         </div>
       </header>
+
+      {assessment?.status === "submitted" ? (
+        <div className="rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning-fg">
+          <span className="font-semibold">
+            Client self-assessment submitted.
+          </span>{" "}
+          Review and edit their answers below for completeness and accuracy,
+          then <span className="font-medium">Approve client inputs</span> and
+          send for evaluation in the deliverable section.
+        </div>
+      ) : null}
 
       {loadError ? (
         <Card>
@@ -301,13 +350,58 @@ export function ZtWorkspace({
         />
       ) : (
         <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Run AI (zt_score)</CardTitle>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-3">
+              <p className="text-sm text-ink-secondary">
+                Suggest a current and target maturity stage per capability (on
+                this framework&apos;s scale) plus per-pillar narratives. Locked
+                rows are left untouched.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => void onRunAi()}
+                  disabled={busy !== null || readOnly}
+                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busy === "run" ? "Running…" : "Run AI"}
+                </button>
+              </div>
+              {runResult ? (
+                <p className="text-sm text-ink-secondary" aria-live="polite">
+                  Updated{" "}
+                  <span className="font-semibold text-ink-primary">
+                    {runResult.changed.length}
+                  </span>{" "}
+                  field
+                  {runResult.changed.length === 1 ? "" : "s"} across{" "}
+                  {
+                    new Set(runResult.changed.map((c) => c.capability_code))
+                      .size
+                  }{" "}
+                  capabilit
+                  {new Set(runResult.changed.map((c) => c.capability_code))
+                    .size === 1
+                    ? "y"
+                    : "ies"}
+                  .
+                </p>
+              ) : null}
+            </CardBody>
+          </Card>
           <ZtScoreCard score={score} />
+          <MessageThread serviceId={serviceId} />
           <ZtGapList
             analysis={gap}
             targetStage={targetStage}
             onChangeTargetStage={(s) => void onChangeTargetStage(s)}
             stages={catalog.stages}
           />
+          <ZtRoadmapCard analysis={gap} />
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <ZtDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}

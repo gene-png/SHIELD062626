@@ -34,3 +34,79 @@ export async function fulfillServiceRequest(
   }
   return (await res.json()) as FulfillServiceRequestResponse;
 }
+
+// --- Client + domain management (Work Order B2) -----------------------------
+
+export interface ClientSummary {
+  id: string;
+  legal_name: string;
+  dba_name: string | null;
+  industry: string | null;
+  size_band: string | null;
+  intake_completed_at: string | null;
+  created_at: string;
+}
+
+export interface DomainRow {
+  id: string;
+  client_id: string;
+  domain: string;
+  created_at: string;
+}
+
+async function _detail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: string };
+    if (body?.detail) return body.detail;
+  } catch {
+    /* keep default */
+  }
+  return `Request failed (${res.status}).`;
+}
+
+export async function listClients(): Promise<ClientSummary[]> {
+  const res = await fetch("/api/proxy/admin/clients", { cache: "no-store" });
+  if (!res.ok) throw new Error(await _detail(res));
+  return ((await res.json()) as { clients: ClientSummary[] }).clients;
+}
+
+export async function createClient(body: {
+  legal_name: string;
+  industry?: string;
+}): Promise<ClientSummary> {
+  const res = await fetch("/api/proxy/admin/clients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await _detail(res));
+  return (await res.json()) as ClientSummary;
+}
+
+export async function listDomains(cid: string): Promise<DomainRow[]> {
+  const res = await fetch(`/api/proxy/admin/clients/${cid}/domains`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await _detail(res));
+  return ((await res.json()) as { domains: DomainRow[] }).domains;
+}
+
+export async function addDomain(
+  cid: string,
+  domain: string,
+): Promise<DomainRow> {
+  const res = await fetch(`/api/proxy/admin/clients/${cid}/domains`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain }),
+  });
+  if (!res.ok) throw new Error(await _detail(res));
+  return (await res.json()) as DomainRow;
+}
+
+export async function removeDomain(cid: string, did: string): Promise<void> {
+  const res = await fetch(`/api/proxy/admin/clients/${cid}/domains/${did}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await _detail(res));
+}

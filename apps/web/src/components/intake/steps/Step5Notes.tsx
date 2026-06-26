@@ -135,7 +135,7 @@ export function Step5Notes({
         ) : (
           <p className="text-sm text-ink-secondary">
             Add notes or target deadlines for each service. These ride along
-            when you submit; you can refine them in the engagement workspace
+            when you submit; you can refine them in the assessment workspace
             afterwards.
           </p>
         )}

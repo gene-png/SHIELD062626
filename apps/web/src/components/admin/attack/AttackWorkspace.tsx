@@ -20,6 +20,7 @@ import {
   fetchLatestAssessment,
   fetchLatestDeliverable,
   patchCoverage,
+  runAttackAi,
 } from "@/lib/attack/client";
 import type {
   AttackAssessment,
@@ -28,9 +29,13 @@ import type {
   AttackCoverageRow,
   AttackDeliverable,
   AttackHeatmap,
+  AttackRunAiResponse,
   CatalogTechnique,
   TacticHeatmapEntry,
 } from "@/lib/attack/types";
+
+import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
@@ -68,7 +73,12 @@ export function AttackWorkspace({
   const [deliverable, setDeliverable] =
     React.useState<AttackDeliverable | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
+  const [busy, setBusy] = React.useState<"create" | "approve" | "run" | null>(
+    null,
+  );
+  const [runResult, setRunResult] = React.useState<AttackRunAiResponse | null>(
+    null,
+  );
   const [selectedCode, setSelectedCode] = React.useState<string | null>(null);
   const [showSubs, setShowSubs] = React.useState(false);
 
@@ -197,6 +207,23 @@ export function AttackWorkspace({
     }
   }
 
+  async function onRunAi(): Promise<void> {
+    setBusy("run");
+    setRunResult(null);
+    try {
+      const result = await runAttackAi(serviceId);
+      setRunResult(result);
+      // Re-pull the assessment so the matrix reflects the AI's suggestions.
+      const a = await fetchLatestAssessment(serviceId);
+      setAssessment(a);
+      await refreshHeatmap();
+    } catch (err) {
+      setLoadError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const readOnly =
     assessment?.status === "approved" || assessment?.status === "released";
 
@@ -298,12 +325,57 @@ export function AttackWorkspace({
       ) : (
         <>
           <AttackHeatmapCard heatmap={heatmap} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Run AI (mitre_map)</CardTitle>
+            </CardHeader>
+            <CardBody className="flex flex-col gap-3">
+              <p className="text-sm text-ink-secondary">
+                Suggest a coverage status and the detection / prevention /
+                response tooling per technique from this client&apos;s Tech Debt
+                capability list. Locked rows are left untouched; you stay in
+                control of the final call.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => void onRunAi()}
+                  disabled={busy !== null || readOnly}
+                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busy === "run" ? "Running…" : "Run AI"}
+                </button>
+              </div>
+              {runResult ? (
+                <p className="text-sm text-ink-secondary" aria-live="polite">
+                  Updated{" "}
+                  <span className="font-semibold text-ink-primary">
+                    {runResult.changed.length}
+                  </span>{" "}
+                  field
+                  {runResult.changed.length === 1 ? "" : "s"} across{" "}
+                  {new Set(runResult.changed.map((c) => c.technique_code)).size}{" "}
+                  technique
+                  {new Set(runResult.changed.map((c) => c.technique_code))
+                    .size === 1
+                    ? ""
+                    : "s"}
+                  .{" "}
+                  {runResult.tools_available === 0
+                    ? "No tools were available from the Tech Debt list, so only statuses were inferred."
+                    : `${runResult.tools_available} tool${runResult.tools_available === 1 ? "" : "s"} available for mapping.`}
+                </p>
+              ) : null}
+            </CardBody>
+          </Card>
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <AttackDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}
             deliverable={deliverable}
             onChange={setDeliverable}
           />
+          <MessageThread serviceId={serviceId} />
           <AttackTechniquePanel
             technique={selectedTechnique}
             coverage={selectedCoverage}

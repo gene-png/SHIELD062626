@@ -4,12 +4,21 @@
 
 import type { ClientProfileResponse, ServiceType } from "@/lib/intake/types";
 
+/** Mirrors AdminServiceDetail in apps/api/app/schemas/admin.py. */
+export interface AdminServiceDetail {
+  id: string;
+  kind: string;
+  status: string;
+  title: string;
+  client_id: string;
+}
+
 export interface AdminUserSummary {
   id: string;
   email: string;
   display_name: string | null;
   title: string | null;
-  role: "admin" | "reviewer" | "client";
+  role: "admin" | "client";
   last_login_at: string | null;
   created_at: string;
 }

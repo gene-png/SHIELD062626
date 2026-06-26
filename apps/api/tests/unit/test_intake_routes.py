@@ -49,6 +49,33 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker]]:
 
 
 def _register_and_bearer(client: TestClient) -> str:
+    # The first registrant becomes the platform admin (client_id IS NULL).
+    # Under Work Order B1 a client can only self-register against a pre-approved
+    # org domain, so the admin first creates the org + approves "example.com",
+    # then the client-role user registers and auto-joins it.
+    admin = client.post(
+        "/auth/register",
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "Admin",
+        },
+    )
+    assert admin.status_code == 201, admin.text
+    admin_bearer = admin.json()["tokens"]["access_token"]
+    created = client.post(
+        "/admin/clients",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"legal_name": "(pending intake)"},
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    dom = client.post(
+        f"/admin/clients/{cid}/domains",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+        json={"domain": "example.com"},
+    )
+    assert dom.status_code == 201, dom.text
     r = client.post(
         "/auth/register",
         json={

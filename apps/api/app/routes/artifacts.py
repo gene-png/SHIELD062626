@@ -23,9 +23,9 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user
+from app.dependencies import current_client, current_user
 from app.models.artifact import Artifact, ArtifactOrigin
-from app.models.deliverable import Deliverable
+from app.models.client import Client
 from app.models.user import User, UserRole
 from app.schemas.artifact import ArtifactListResponse, ArtifactResponse
 from app.storage import StorageBackend, get_storage
@@ -71,6 +71,7 @@ def _storage_dep() -> StorageBackend:
 async def upload_artifact(
     file: Annotated[UploadFile, File(description="Document to upload")],
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
     notes: Annotated[str | None, Form()] = None,
@@ -99,6 +100,7 @@ async def upload_artifact(
     stored = storage.put(key, data, content_type=mime)
 
     artifact = Artifact(
+        client_id=client.id,
         title=title,
         file_storage_key=stored.key,
         mime_type=mime,
@@ -138,17 +140,16 @@ async def upload_artifact(
 )
 def list_artifacts(
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ArtifactListResponse:
-    rows = (
-        db.execute(
-            select(Artifact)
-            .where(Artifact.uploaded_by == user.id)
-            .order_by(Artifact.uploaded_at.desc())
-        )
-        .scalars()
-        .all()
-    )
+    # Admins see every artifact in the active tenant; client users
+    # only see their own uploads inside that tenant.
+    stmt = select(Artifact).where(Artifact.client_id == client.id)
+    if user.role == UserRole.CLIENT:
+        stmt = stmt.where(Artifact.uploaded_by == user.id)
+    stmt = stmt.order_by(Artifact.uploaded_at.desc())
+    rows = db.execute(stmt).scalars().all()
     return ArtifactListResponse(
         items=[ArtifactResponse.model_validate(r, from_attributes=True) for r in rows]
     )
@@ -162,30 +163,21 @@ def list_artifacts(
 def get_artifact(
     artifact_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ArtifactResponse:
     row = db.get(Artifact, artifact_id)
-    if row is None or row.uploaded_by != user.id:
+    if row is None or row.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artifact not found.",
+        )
+    if user.role == UserRole.CLIENT and row.uploaded_by != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",
         )
     return ArtifactResponse.model_validate(row, from_attributes=True)
-
-
-def _is_released_deliverable_artifact(db: Session, artifact_id: uuid.UUID) -> bool:
-    """True if `artifact_id` is the PDF or XLSX of a released deliverable.
-
-    Used to broaden download auth so engagement CLIENT users can fetch
-    a deliverable they didn't personally upload.
-    """
-    row = db.execute(
-        select(Deliverable).where(
-            (Deliverable.pdf_artifact_id == artifact_id)
-            | (Deliverable.xlsx_artifact_id == artifact_id)
-        )
-    ).scalar_one_or_none()
-    return row is not None and row.released_to_client_at is not None
 
 
 @router.get(
@@ -195,26 +187,24 @@ def _is_released_deliverable_artifact(db: Session, artifact_id: uuid.UUID) -> bo
 def download_artifact(
     artifact_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> Response:
     row = db.get(Artifact, artifact_id)
-    if row is None:
+    if row is None or row.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",
         )
-    # Three permitted readers (v1 single-tenant):
-    #   1. the uploader (admin who finalized, or any user who uploaded
-    #      via intake);
-    #   2. any admin / reviewer (audit + ops);
-    #   3. any client when the artifact is part of a released deliverable.
+    # Two permitted readers within the active tenant:
+    #   1. the uploader;
+    #   2. any admin (audit + ops).
+    # Clients never download deliverables in-app (Work Order A1): deliverable
+    # artifacts are admin-only and an admin shares them outside the app.
     is_uploader = row.uploaded_by == user.id
-    is_staff = user.role in (UserRole.ADMIN, UserRole.REVIEWER)
-    is_released = user.role == UserRole.CLIENT and _is_released_deliverable_artifact(
-        db, artifact_id
-    )
-    if not (is_uploader or is_staff or is_released):
+    is_staff = user.role == UserRole.ADMIN
+    if not (is_uploader or is_staff):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",

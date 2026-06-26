@@ -59,13 +59,9 @@ def upgrade() -> None:
             name="fk_attack_assessments_approved_by_users",
             ondelete="SET NULL",
         ),
-        sa.UniqueConstraint(
-            "service_id", "version", name="uq_attack_assessments_service_version"
-        ),
+        sa.UniqueConstraint("service_id", "version", name="uq_attack_assessments_service_version"),
     )
-    op.create_index(
-        "ix_attack_assessments_service_id", "attack_assessments", ["service_id"]
-    )
+    op.create_index("ix_attack_assessments_service_id", "attack_assessments", ["service_id"])
     op.create_index("ix_attack_assessments_status", "attack_assessments", ["status"])
 
     op.create_table(
@@ -111,12 +107,8 @@ def upgrade() -> None:
             name="uq_attack_coverage_assessment_technique",
         ),
     )
-    op.create_index(
-        "ix_attack_coverage_assessment_id", "attack_coverage", ["assessment_id"]
-    )
-    op.create_index(
-        "ix_attack_coverage_technique_code", "attack_coverage", ["technique_code"]
-    )
+    op.create_index("ix_attack_coverage_assessment_id", "attack_coverage", ["assessment_id"])
+    op.create_index("ix_attack_coverage_technique_code", "attack_coverage", ["technique_code"])
 
 
 def downgrade() -> None:

@@ -5,7 +5,8 @@ import * as React from "react";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
-import { fetchIntake, submitIntake } from "@/lib/intake/client";
+import { fetchIntake, ProxyError, submitIntake } from "@/lib/intake/client";
+import { SelectClientPrompt } from "@/components/site/SelectClientPrompt";
 import {
   WIZARD_STEPS,
   type ClientProfilePatch,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/intake/types";
 
 import { IntakeProgress } from "./IntakeProgress";
+import { IntakeSubmitted } from "./IntakeSubmitted";
 import { SaveStatus } from "./SaveStatus";
 import { Step1Services } from "./steps/Step1Services";
 import { Step2Organization } from "./steps/Step2Organization";
@@ -43,6 +45,7 @@ export function IntakeWizard(): JSX.Element {
     new Set(),
   );
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [needsClient, setNeedsClient] = React.useState(false);
 
   const [serviceInputs, setServiceInputs] = React.useState<
     Record<ServiceType, ServiceRequestInput>
@@ -50,6 +53,7 @@ export function IntakeWizard(): JSX.Element {
 
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [submitted, setSubmitted] = React.useState(false);
 
   const autoSave = useIntakeAutoSave((next) => setState(next));
 
@@ -78,6 +82,12 @@ export function IntakeWizard(): JSX.Element {
       })
       .catch((err) => {
         if (cancelled) return;
+        // Admin/reviewer with no active client selected: the backend returns
+        // 400 "X-Client-Id required". Show a friendly picker prompt instead.
+        if (err instanceof ProxyError && err.status === 400) {
+          setNeedsClient(true);
+          return;
+        }
         setLoadError(
           err instanceof Error ? err.message : "Failed to load intake.",
         );
@@ -151,6 +161,7 @@ export function IntakeWizard(): JSX.Element {
         service_requests: requests,
       });
       setState(next);
+      setSubmitted(true);
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : "Failed to submit intake.",
@@ -163,6 +174,10 @@ export function IntakeWizard(): JSX.Element {
   const isFirst = STEP_INDEX[step] === 0;
   const isLast = STEP_INDEX[step] === WIZARD_STEPS.length - 1;
 
+  if (needsClient) {
+    return <SelectClientPrompt action="start the intake" />;
+  }
+
   if (loadError) {
     return (
       <Card>
@@ -174,6 +189,10 @@ export function IntakeWizard(): JSX.Element {
         </CardBody>
       </Card>
     );
+  }
+
+  if (submitted && state) {
+    return <IntakeSubmitted state={state} />;
   }
 
   const userEmail = session.data?.user?.email ?? null;

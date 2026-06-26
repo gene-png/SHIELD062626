@@ -54,6 +54,31 @@ export interface IntakeStateResponse {
   intake_completed_at: string | null;
 }
 
+/** One assessment = one Service (workspace) the client owns. */
+export interface AssessmentResponse {
+  service_id: string;
+  service_type: ServiceType;
+  title: string;
+  status: string;
+  assessment_status: string | null;
+  created_at: string;
+}
+
+export interface AssessmentCreateRequest {
+  service_type: ServiceType;
+  name?: string;
+  csf_target_tier?: number;
+  csf_profile?: CsfProfile;
+  zt_target_stage?: number;
+}
+
+/** Service types a client can self-start as a standalone assessment. */
+export const ASSESSMENT_SERVICE_TYPES: ReadonlyArray<ServiceType> = [
+  "nist_csf",
+  "zero_trust_cisa",
+  "zero_trust_dod",
+];
+
 export interface ClientProfilePatch {
   legal_name?: string;
   dba_name?: string;

@@ -27,21 +27,36 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.audit import audit
+from app.csf import playbook_export as csf_playbook_export
 from app.csf.catalog import (
     CATEGORIES,
     FUNCTIONS,
     SUBCATEGORIES,
     all_codes,
+    min_profile_for_category,
+    subcategory_by_code,
 )
 from app.csf.exporters import build_context as build_csf_context
+from app.csf.exporters import render_docx as render_csf_docx
 from app.csf.exporters import render_pdf as render_csf_pdf
 from app.csf.exporters import render_xlsx as render_csf_xlsx
 from app.csf.gap import analyze as analyze_gaps
 from app.csf.maturity import TIER_DEFINITIONS
+from app.csf.playbook import (
+    DimensionScores,
+    Tier,
+    gap_priority,
+    is_gap,
+    score_tier,
+    weighted_floor_rollup,
+)
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
-from app.dependencies import current_user, require_role
+from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -50,7 +65,9 @@ from app.models.csf_assessment import (
     CsfAssessment,
     CsfAssessmentStatus,
 )
+from app.models.csf_profile import CsfDimensionScore
 from app.models.deliverable import Deliverable
+from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
@@ -64,18 +81,35 @@ from app.schemas.csf import (
     CsfAnswerPatch,
     CsfAnswerResponse,
     CsfAssessmentResponse,
+    CsfDimensionChange,
+    CsfDimensionScorePatch,
+    CsfDimensionScoreResponse,
+    CsfPlaybookExportResponse,
+    CsfProfileResponse,
+    CsfQuestionnaireResponse,
+    CsfRunAiResponse,
     CsfScoreSummary,
+    CsfSelfAssessmentSubmit,
     CsfServiceCreateRequest,
     CsfServiceResponse,
+    EnterpriseProfileResponse,
+    EnterpriseSubcategory,
+    ExportedArtifact,
     FunctionScore,
     GapAnalysisResponse,
     GapItem,
+    InterviewQuestion,
+    ProfileSeedRequest,
 )
 from app.schemas.tech_debt import DeliverableResponse
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
     SERVICE_SLUG_NIST_CSF,
     deliverable_filename,
+)
+from app.tenant import (
+    require_csf_assessment_in_tenant,
+    require_service_in_tenant,
 )
 
 router = APIRouter(prefix="/csf", tags=["csf"])
@@ -107,12 +141,17 @@ def _client_target_tier(db: Session, service_id: uuid.UUID) -> int | None:
     return sr.csf_target_tier if sr is not None else None
 
 
+def _client_profile(db: Session, service_id: uuid.UUID) -> str | None:
+    """The CSF impact profile the client chose at intake (LOW/MOD/HIGH)."""
+    svc = db.get(Service, service_id)
+    if svc is None or svc.source_request_id is None:
+        return None
+    sr = db.get(ServiceRequest, svc.source_request_id)
+    return sr.csf_profile if sr is not None else None
+
+
 def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentResponse:
-    rows = (
-        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     return CsfAssessmentResponse(
         id=a.id,
         service_id=a.service_id,
@@ -120,8 +159,10 @@ def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentRespons
         status=a.status,
         approved_at=a.approved_at,
         approved_by=a.approved_by,
+        documents_stale=a.documents_stale,
         answers=_serialize_answers(rows),
         client_target_tier=_client_target_tier(db, a.service_id),
+        client_profile=_client_profile(db, a.service_id),
     )
 
 
@@ -132,6 +173,63 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> CsfAssessment | No
         .order_by(CsfAssessment.version.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+# Impact profile (set at intake) -> the interview-questionnaire framework_key
+# loaded into the `questions` table. HIGH is the most complete questionnaire,
+# so it's the fallback when no profile has been chosen yet.
+_PROFILE_TO_TIER_KEY = {
+    "LOW": "csf-tier-low",
+    "MOD": "csf-tier-moderate",
+    "HIGH": "csf-tier-high",
+}
+_DEFAULT_TIER_KEY = "csf-tier-high"
+
+
+@router.get(
+    "/services/{service_id}/questionnaire",
+    response_model=CsfQuestionnaireResponse,
+    summary="Interview prompts for the service's impact tier",
+)
+def get_interview_questionnaire(
+    service_id: uuid.UUID,
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfQuestionnaireResponse:
+    """Tier-resolved interview prompts (read-only).
+
+    Each prompt carries the CSF subcategories it informs so the workspace can
+    surface it inline on those subcategory cards. Any signed-in role scoped to
+    the tenant may read it.
+    """
+    require_service_in_tenant(db, service_id, client.id)
+    profile = _client_profile(db, service_id)
+    framework_key = _PROFILE_TO_TIER_KEY.get((profile or "").upper(), _DEFAULT_TIER_KEY)
+    rows = (
+        db.execute(
+            select(Question)
+            .where(Question.framework_key == framework_key)
+            .order_by(Question.order_index)
+        )
+        .scalars()
+        .all()
+    )
+    return CsfQuestionnaireResponse(
+        framework_key=framework_key,
+        profile=profile,
+        questions=[
+            InterviewQuestion(
+                external_id=q.external_id,
+                section_name=q.pillar,
+                order_index=q.order_index,
+                stem=q.stem,
+                cues=list(q.cues or []),
+                csf_subcategories=list(q.framework_activities or []),
+            )
+            for q in rows
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +246,7 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> CsfAssessment | No
 def create_csf_service(
     body: CsfServiceCreateRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfServiceResponse:
     if body.kind != ServiceKind.NIST_CSF:
@@ -159,6 +258,7 @@ def create_csf_service(
         kind=ServiceKind.NIST_CSF,
         status=ServiceStatus.IN_PROGRESS,
         title=body.title,
+        client_id=client.id,
         source_request_id=body.source_request_id,
         opened_by=user.id,
     )
@@ -203,6 +303,7 @@ def get_catalog(
                     category=s.category,
                     name=s.name,
                     outcome=s.outcome,
+                    min_profile=min_profile_for_category(s.category),
                 )
                 for s in SUBCATEGORIES
                 if s.category == cat.code
@@ -249,18 +350,15 @@ def get_catalog(
 def create_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     prior = _latest_assessment(db, svc.id)
     version = (prior.version + 1) if prior else 1
     assessment = CsfAssessment(
         service_id=svc.id,
+        client_id=client.id,
         version=version,
         status=CsfAssessmentStatus.DRAFT,
     )
@@ -272,6 +370,7 @@ def create_assessment(
         db.add(
             CsfAnswer(
                 assessment_id=assessment.id,
+                client_id=client.id,
                 subcategory_code=sc.code,
             )
         )
@@ -296,14 +395,10 @@ def create_assessment(
 def latest_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     assessment = _latest_assessment(db, svc.id)
     if assessment is None:
         raise HTTPException(
@@ -334,6 +429,7 @@ def patch_answer(
     answer_id: uuid.UUID,
     body: CsfAnswerPatch,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAnswerResponse:
     data = body.model_dump(exclude_unset=True)
@@ -343,7 +439,7 @@ def patch_answer(
             detail="At least one field is required.",
         )
     row = db.get(CsfAnswer, answer_id)
-    if row is None:
+    if row is None or row.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Answer not found.",
@@ -374,6 +470,8 @@ def patch_answer(
         row.notes = data["notes"]
     if "evidence_artifact_id" in data:
         row.evidence_artifact_id = data["evidence_artifact_id"]
+    if data.get("locked") is not None:
+        row.locked = bool(data["locked"])
     row.answered_by = user.id
     row.answered_at = utcnow()
     audit(
@@ -392,6 +490,132 @@ def patch_answer(
     return CsfAnswerResponse.model_validate(row, from_attributes=True)
 
 
+# ---------------------------------------------------------------------------
+# Client self-assessment (client fills their own draft, then submits for review)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/services/{service_id}/self-assessment",
+    response_model=CsfAssessmentResponse,
+    summary="The client's own assessment for this service (any status)",
+)
+def get_self_assessment(
+    service_id: uuid.UUID,
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfAssessmentResponse:
+    """Read the client's own assessment so they can fill the questionnaire.
+
+    Tenant-scoped (current_client), so a client only ever reaches their own.
+    Unlike the admin `assessments/latest`, this is not gated on RELEASED - the
+    client owns these answers. The score/gap/deliverable stay admin-only until
+    the report is released.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    assessment = _latest_assessment(db, svc.id)
+    if assessment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    return _serialize_assessment(db, assessment)
+
+
+@router.patch(
+    "/self-assessment/answers/{answer_id}",
+    response_model=CsfAnswerResponse,
+    summary="Client updates one answer on their own draft self-assessment",
+)
+def patch_self_assessment_answer(
+    answer_id: uuid.UUID,
+    body: CsfAnswerPatch,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfAnswerResponse:
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field is required.",
+        )
+    row = db.get(CsfAnswer, answer_id)
+    if row is None or row.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Answer not found.",
+        )
+    a = db.get(CsfAssessment, row.assessment_id)
+    if a is None or a.status != CsfAssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Your self-assessment is no longer editable.",
+        )
+    if "maturity_tier" in data and data["maturity_tier"] is not None:
+        t = int(data["maturity_tier"])
+        if not 1 <= t <= 4:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="maturity_tier must be 1-4.",
+            )
+        row.maturity_tier = t
+    elif "maturity_tier" in data:
+        row.maturity_tier = None
+    if "notes" in data:
+        row.notes = data["notes"]
+    row.answered_by = user.id
+    row.answered_at = utcnow()
+    db.commit()
+    db.refresh(row)
+    return CsfAnswerResponse.model_validate(row, from_attributes=True)
+
+
+@router.post(
+    "/services/{service_id}/self-assessment/submit",
+    response_model=CsfAssessmentResponse,
+    summary="Client submits their self-assessment for admin review",
+)
+def submit_self_assessment(
+    service_id: uuid.UUID,
+    body: CsfSelfAssessmentSubmit,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfAssessmentResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No assessment yet.",
+        )
+    if a.status != CsfAssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This self-assessment has already been submitted.",
+        )
+    # Persist the (possibly adjusted) maturity target so the gap engine measures
+    # against the client's goal.
+    if body.target_tier is not None and svc.source_request_id is not None:
+        sr = db.get(ServiceRequest, svc.source_request_id)
+        if sr is not None:
+            sr.csf_target_tier = body.target_tier
+    a.status = CsfAssessmentStatus.SUBMITTED
+    audit(
+        db,
+        action="csf.self_assessment.submitted",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"service_id": str(svc.id), "version": a.version},
+    )
+    db.commit()
+    db.refresh(a)
+    return _serialize_assessment(db, a)
+
+
 @router.post(
     "/assessments/{assessment_id}/approve",
     response_model=CsfAssessmentResponse,
@@ -400,14 +624,10 @@ def patch_answer(
 def approve_assessment(
     assessment_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
-    a = db.get(CsfAssessment, assessment_id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found.",
-        )
+    a = require_csf_assessment_in_tenant(db, assessment_id, client.id)
     if a.status == CsfAssessmentStatus.APPROVED:
         return _serialize_assessment(db, a)
     if a.status == CsfAssessmentStatus.RELEASED:
@@ -444,23 +664,17 @@ def approve_assessment(
 def score_latest(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfScoreSummary:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No assessment yet.",
         )
-    rows = db.execute(
-        select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)
-    ).scalars().all()
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     answers: dict[str, int | None] = {r.subcategory_code: r.maturity_tier for r in rows}
     # Defensive: ignore unknown codes.
     valid = all_codes()
@@ -502,27 +716,19 @@ def score_latest(
 def gap_analysis(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     target_tier: int = 3,
     top_n: int = 20,
 ) -> GapAnalysisResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No assessment yet.",
         )
-    rows = (
-        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     valid = all_codes()
     answers: dict[str, int | None] = {
         r.subcategory_code: r.maturity_tier for r in rows if r.subcategory_code in valid
@@ -530,9 +736,7 @@ def gap_analysis(
     notes: dict[str, str | None] = {
         r.subcategory_code: r.notes for r in rows if r.subcategory_code in valid
     }
-    analysis = analyze_gaps(
-        answers, notes=notes, target_tier=target_tier, top_n=top_n
-    )
+    analysis = analyze_gaps(answers, notes=notes, target_tier=target_tier, top_n=top_n)
     return GapAnalysisResponse(
         assessment_id=a.id,
         version=a.version,
@@ -561,6 +765,506 @@ def gap_analysis(
 
 
 # ---------------------------------------------------------------------------
+# Full-Playbook tiered Working Profile (Work Order D4)
+# ---------------------------------------------------------------------------
+
+_VALID_TIERS = {t.value for t in Tier}
+
+
+def _dims(row: CsfDimensionScore) -> DimensionScores:
+    return DimensionScores(
+        governance=row.governance,
+        policy=row.policy,
+        implementation=row.implementation,
+        monitoring=row.monitoring,
+        improvement=row.improvement,
+    )
+
+
+def _score_response(row: CsfDimensionScore) -> CsfDimensionScoreResponse:
+    result = score_tier(_dims(row), has_evidence=row.has_evidence)
+    return CsfDimensionScoreResponse(
+        id=row.id,
+        tier=row.tier,
+        subcategory_code=row.subcategory_code,
+        governance=row.governance,
+        policy=row.policy,
+        implementation=row.implementation,
+        monitoring=row.monitoring,
+        improvement=row.improvement,
+        in_scope=row.in_scope,
+        rationale=row.rationale,
+        what_we_found=row.what_we_found,
+        has_evidence=row.has_evidence,
+        target_level=row.target_level,
+        locked=row.locked,
+        total=result.total,
+        level=result.level,
+        evidence_capped=result.evidence_capped,
+    )
+
+
+@router.post(
+    "/services/{service_id}/profiles/seed",
+    response_model=list[str],
+    summary="Seed the tiered Working Profile rows for the requested tiers (admin)",
+)
+def seed_profiles(
+    service_id: uuid.UUID,
+    body: ProfileSeedRequest,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[str]:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    tiers = [t for t in body.tiers if t in _VALID_TIERS]
+    if not tiers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No valid tiers (high/moderate/low).",
+        )
+    existing = {
+        (r.tier, r.subcategory_code)
+        for r in db.execute(
+            select(CsfDimensionScore.tier, CsfDimensionScore.subcategory_code).where(
+                CsfDimensionScore.assessment_id == a.id
+            )
+        ).all()
+    }
+    created = 0
+    for tier in tiers:
+        for sc in SUBCATEGORIES:
+            if (tier, sc.code) in existing:
+                continue
+            db.add(
+                CsfDimensionScore(
+                    assessment_id=a.id,
+                    client_id=client.id,
+                    tier=tier,
+                    subcategory_code=sc.code,
+                )
+            )
+            created += 1
+    audit(
+        db,
+        action="csf.profiles_seeded",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"tiers": tiers, "created": created},
+    )
+    db.commit()
+    return tiers
+
+
+@router.get(
+    "/services/{service_id}/profile/{tier}",
+    response_model=CsfProfileResponse,
+    summary="The tiered Working Profile for one tier, with computed totals/levels (admin)",
+)
+def get_profile(
+    service_id: uuid.UUID,
+    tier: str,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfProfileResponse:
+    if tier not in _VALID_TIERS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown tier.")
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    rows = (
+        db.execute(
+            select(CsfDimensionScore)
+            .where(
+                CsfDimensionScore.assessment_id == a.id,
+                CsfDimensionScore.tier == tier,
+            )
+            .order_by(CsfDimensionScore.subcategory_code)
+        )
+        .scalars()
+        .all()
+    )
+    return CsfProfileResponse(tier=tier, rows=[_score_response(r) for r in rows])
+
+
+@router.patch(
+    "/dimension-scores/{score_id}",
+    response_model=CsfDimensionScoreResponse,
+    summary="Set dimension scores / scope / target / lock on one row (admin)",
+)
+def patch_dimension_score(
+    score_id: uuid.UUID,
+    body: CsfDimensionScorePatch,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfDimensionScoreResponse:
+    row = db.get(CsfDimensionScore, score_id)
+    if row is None or row.client_id != client.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Score row not found.")
+    data = body.model_dump(exclude_unset=True)
+    for f in (
+        "governance",
+        "policy",
+        "implementation",
+        "monitoring",
+        "improvement",
+        "in_scope",
+        "rationale",
+        "what_we_found",
+        "has_evidence",
+        "target_level",
+        "locked",
+    ):
+        if f in data and data[f] is not None:
+            setattr(row, f, data[f])
+        elif f in data and f in ("rationale", "what_we_found", "target_level"):
+            setattr(row, f, None)  # explicit clear allowed for nullable text/target
+    db.commit()
+    return _score_response(row)
+
+
+@router.get(
+    "/services/{service_id}/enterprise-profile",
+    response_model=EnterpriseProfileResponse,
+    summary="Roll the tiered profiles up to one Enterprise level per subcategory (admin)",
+)
+def enterprise_profile(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EnterpriseProfileResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    out, tiers_in_use = _enterprise_subcategories(db, a)
+    return EnterpriseProfileResponse(tiers_in_use=sorted(tiers_in_use), subcategories=out)
+
+
+def _enterprise_subcategories(
+    db: Session, a: CsfAssessment
+) -> tuple[list[EnterpriseSubcategory], set[str]]:
+    """The weighted-floor Enterprise roll-up per in-scope subcategory."""
+    rows = (
+        db.execute(select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id))
+        .scalars()
+        .all()
+    )
+    by_subcat: dict[str, dict[str, CsfDimensionScore]] = {}
+    tiers_in_use: set[str] = set()
+    for r in rows:
+        if not r.in_scope:
+            continue
+        by_subcat.setdefault(r.subcategory_code, {})[r.tier] = r
+        tiers_in_use.add(r.tier)
+
+    out: list[EnterpriseSubcategory] = []
+    for code in sorted(by_subcat):
+        tier_rows = by_subcat[code]
+        tier_levels = {
+            tier: score_tier(_dims(row), has_evidence=row.has_evidence).level
+            for tier, row in tier_rows.items()
+        }
+        rollup = weighted_floor_rollup(
+            {Tier(t): lvl for t, lvl in tier_levels.items()},
+            # IG core/supporting metadata isn't in the catalog yet; defaults keep
+            # the roll-up on rules 1/3/4/6 until the IG import lands.
+            is_core_primary=False,
+            is_supporting_or_supplemental=False,
+        )
+        targets = [row.target_level for row in tier_rows.values() if row.target_level]
+        target = max(targets) if targets else None
+        gap = is_gap(rollup.score, target) if target is not None else False
+        priority = (
+            gap_priority(
+                is_core=False,
+                high_tier=Tier.HIGH.value in tier_rows,
+                multi_system=len(tier_rows) > 1,
+            )
+            if gap
+            else None
+        )
+        sc = subcategory_by_code(code)
+        out.append(
+            EnterpriseSubcategory(
+                subcategory_code=code,
+                name=getattr(sc, "name", code),
+                function=str(getattr(sc, "function", "")),
+                tier_levels=tier_levels,
+                enterprise_level=rollup.score,
+                rollup_rule=rollup.rule,
+                target_level=target,
+                gap=gap,
+                priority=priority,
+            )
+        )
+    return out, tiers_in_use
+
+
+def _llm_dep() -> LLMClient:
+    return LLMClient.from_settings()
+
+
+_DIM_FIELDS = ("governance", "policy", "implementation", "monitoring", "improvement")
+_RUN_FIELDS = (*_DIM_FIELDS, "what_we_found")
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=CsfRunAiResponse,
+    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+) -> CsfRunAiResponse:
+    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
+    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
+    rows are untouched; code does the total/level/cap + Enterprise roll-up.
+    Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (CsfAssessmentStatus.APPROVED, CsfAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+    rows = {
+        f"{r.tier}|{r.subcategory_code}": r
+        for r in db.execute(
+            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+    }
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seed the Working Profile before running AI.",
+        )
+    locked_keys = frozenset(k for k, r in rows.items() if r.locked)
+
+    def _snap() -> dict[str, dict]:
+        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
+
+    before = _snap()
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    result = run_job(
+        db,
+        llm,
+        "csf_score",
+        inputs={
+            "tiers": sorted({r.tier for r in rows.values()}),
+            "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+        },
+        requested_by=user.id,
+        service_id=svc.id,
+        client_org_name=client_org,
+    )
+    data = result.data if isinstance(result.data, dict) else {}
+
+    for sugg in data.get("scores", []):
+        if not isinstance(sugg, dict):
+            continue
+        row = rows.get(f"{sugg.get('tier')}|{sugg.get('subcategory_code')}")
+        if row is None or row.locked:
+            continue
+        for dim in _DIM_FIELDS:
+            if dim in sugg:
+                try:
+                    v = int(sugg[dim])
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= v <= 2:
+                    setattr(row, dim, v)
+        if isinstance(sugg.get("what_we_found"), str):
+            row.what_we_found = sugg["what_we_found"]
+
+    db.flush()
+    after = _snap()
+    diffs = diff_keyed_rows(before, after, list(_RUN_FIELDS), locked_keys=locked_keys)
+    changes: list[CsfDimensionChange] = []
+    for d in diffs:
+        tier, _, code = d.key.partition("|")
+        for ch in d.changes:
+            changes.append(
+                CsfDimensionChange(
+                    tier=tier, subcategory_code=code, field=ch.field, old=ch.old, new=ch.new
+                )
+            )
+
+    a.documents_stale = True  # Work Order C3
+    audit(
+        db,
+        action="csf.run_ai",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"changed_rows": len(diffs)},
+    )
+    db.commit()
+    out_rows = [
+        _score_response(r)
+        for r in sorted(rows.values(), key=lambda r: (r.tier, r.subcategory_code))
+    ]
+    return CsfRunAiResponse(changed=changes, rows=out_rows)
+
+
+@router.post(
+    "/services/{service_id}/playbook/export",
+    response_model=CsfPlaybookExportResponse,
+    summary="Render + store the CSF full-Playbook workbook (XLSX) (admin)",
+)
+def export_playbook(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    storage: Annotated[StorageBackend, Depends(_storage_dep)],
+) -> CsfPlaybookExportResponse:
+    """An Enterprise Profile sheet (weighted-floor roll-up) + one sheet per tier
+    with the five dimension scores and computed total/level/cap."""
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    all_rows = (
+        db.execute(select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id))
+        .scalars()
+        .all()
+    )
+    if not all_rows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seed the Working Profile before exporting.",
+        )
+    enterprise_rows, _ = _enterprise_subcategories(db, a)
+    tier_profiles: dict[str, list] = {}
+    for tier in ("high", "moderate", "low"):
+        trows = sorted(
+            (r for r in all_rows if r.tier == tier),
+            key=lambda r: r.subcategory_code,
+        )
+        if trows:
+            tier_profiles[tier] = [_score_response(r) for r in trows]
+
+    from app.docx_export import DOCX_MIME
+
+    org = None if client.legal_name == "(pending intake)" else client.legal_name
+    name = org or "Client"
+    base = f"CSF_Playbook_v{a.version}"
+    on = utcnow().strftime("%Y-%m-%d")
+    xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    pdf_mime = "application/pdf"
+
+    specs = [
+        (
+            "xlsx",
+            "Data workbook (XLSX)",
+            f"{base}.xlsx",
+            xlsx_mime,
+            csf_playbook_export.render_xlsx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                tier_profiles=tier_profiles,
+            ),
+        ),
+        (
+            "exec_pdf",
+            "Executive briefing (PDF)",
+            f"{base}_Executive.pdf",
+            pdf_mime,
+            csf_playbook_export.render_exec_pdf(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "exec_docx",
+            "Executive briefing (Word)",
+            f"{base}_Executive.docx",
+            DOCX_MIME,
+            csf_playbook_export.render_exec_docx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "full_pdf",
+            "Full playbook (PDF)",
+            f"{base}_Full.pdf",
+            pdf_mime,
+            csf_playbook_export.render_full_pdf(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "full_docx",
+            "Full playbook (Word)",
+            f"{base}_Full.docx",
+            DOCX_MIME,
+            csf_playbook_export.render_full_docx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+    ]
+    artifacts: list[ExportedArtifact] = []
+    for kind, label, filename, mime, data in specs:
+        art = _write_artifact(
+            db,
+            storage=storage,
+            user=user,
+            client_id=client.id,
+            filename=filename,
+            mime_type=mime,
+            data=data,
+        )
+        artifacts.append(
+            ExportedArtifact(kind=kind, label=label, artifact_id=art.id, filename=art.title)
+        )
+
+    audit(
+        db,
+        action="csf.playbook_exported",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"version": a.version, "artifacts": len(artifacts)},
+    )
+    a.documents_stale = False  # Work Order C3: exporting refreshes the documents
+    db.commit()
+    return CsfPlaybookExportResponse(artifacts=artifacts)
+
+
+# ---------------------------------------------------------------------------
 # Deliverables
 # ---------------------------------------------------------------------------
 
@@ -568,12 +1272,16 @@ def gap_analysis(
 def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableResponse:
     pdf_title = None
     xlsx_title = None
+    docx_title = None
     if deliv.pdf_artifact_id:
         a = db.get(Artifact, deliv.pdf_artifact_id)
         pdf_title = a.title if a else None
     if deliv.xlsx_artifact_id:
         a = db.get(Artifact, deliv.xlsx_artifact_id)
         xlsx_title = a.title if a else None
+    if deliv.docx_artifact_id:
+        a = db.get(Artifact, deliv.docx_artifact_id)
+        docx_title = a.title if a else None
     return DeliverableResponse(
         id=deliv.id,
         service_id=deliv.service_id,
@@ -582,11 +1290,12 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         version=deliv.version,
         pdf_artifact_id=deliv.pdf_artifact_id,
         xlsx_artifact_id=deliv.xlsx_artifact_id,
+        docx_artifact_id=deliv.docx_artifact_id,
         pdf_filename=pdf_title,
         xlsx_filename=xlsx_title,
+        docx_filename=docx_title,
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
-        released_to_client_at=deliv.released_to_client_at,
         superseded_by=deliv.superseded_by,
     )
 
@@ -596,6 +1305,7 @@ def _write_artifact(
     *,
     storage: StorageBackend,
     user: User,
+    client_id: uuid.UUID,
     filename: str,
     mime_type: str,
     data: bytes,
@@ -605,6 +1315,7 @@ def _write_artifact(
     key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
+        client_id=client_id,
         title=filename,
         file_storage_key=key,
         mime_type=mime_type,
@@ -628,15 +1339,11 @@ def _write_artifact(
 def finalize_csf_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     assessment = _latest_assessment(db, svc.id)
     if assessment is None:
         raise HTTPException(
@@ -658,9 +1365,7 @@ def finalize_csf_deliverable(
     )
     valid = all_codes()
     tier_map: dict[str, int | None] = {
-        r.subcategory_code: r.maturity_tier
-        for r in answers
-        if r.subcategory_code in valid
+        r.subcategory_code: r.maturity_tier for r in answers if r.subcategory_code in valid
     }
     notes_map: dict[str, str | None] = {
         r.subcategory_code: r.notes for r in answers if r.subcategory_code in valid
@@ -668,16 +1373,13 @@ def finalize_csf_deliverable(
     score = compute_score(tier_map)
     gap = analyze_gaps(tier_map, notes=notes_map)
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    client_name = client.legal_name if client is not None else None
+    client_name = client.legal_name
     if client_name == "(pending intake)":
         client_name = None
 
     # Filename version: same-day re-finalize -> v2, v3, ...
     today = utcnow().date()
-    existing_count = db.execute(
-        select(Deliverable).where(Deliverable.service_id == svc.id)
-    ).all()
+    existing_count = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
     next_version = len(existing_count) + 1
 
     pdf_name = deliverable_filename(
@@ -694,6 +1396,13 @@ def finalize_csf_deliverable(
         day=today,
         version=next_version,
     )
+    docx_name = deliverable_filename(
+        company=client_name,
+        service_slug=SERVICE_SLUG_NIST_CSF,
+        extension="docx",
+        day=today,
+        version=next_version,
+    )
 
     ctx = build_csf_context(
         client_legal_name=client_name,
@@ -705,11 +1414,13 @@ def finalize_csf_deliverable(
     )
     pdf_bytes = render_csf_pdf(ctx)
     xlsx_bytes = render_csf_xlsx(ctx)
+    docx_bytes = render_csf_docx(ctx)
 
     pdf_artifact = _write_artifact(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=pdf_name,
         mime_type="application/pdf",
         data=pdf_bytes,
@@ -718,9 +1429,21 @@ def finalize_csf_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=xlsx_name,
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=xlsx_bytes,
+    )
+    from app.docx_export import DOCX_MIME
+
+    docx_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        client_id=client.id,
+        filename=docx_name,
+        mime_type=DOCX_MIME,
+        data=docx_bytes,
     )
 
     summary_line = (
@@ -736,6 +1459,7 @@ def finalize_csf_deliverable(
         version=next_version,
         pdf_artifact_id=pdf_artifact.id,
         xlsx_artifact_id=xlsx_artifact.id,
+        docx_artifact_id=docx_artifact.id,
         finalized_at=utcnow(),
         finalized_by=user.id,
     )
@@ -759,66 +1483,7 @@ def finalize_csf_deliverable(
             "gap_count": gap.total_gap_count,
         },
     )
-    db.commit()
-    db.refresh(deliv)
-    return _serialize_deliverable(db, deliv)
-
-
-@router.post(
-    "/deliverables/{deliverable_id}/release",
-    response_model=DeliverableResponse,
-    summary="Release a finalized CSF deliverable to the client (admin)",
-)
-def release_csf_deliverable(
-    deliverable_id: uuid.UUID,
-    user: Annotated[User, _admin_required],
-    db: Annotated[Session, Depends(get_db)],
-) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliverable not found.",
-        )
-    if deliv.finalized_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Deliverable must be finalized before release.",
-        )
-    if deliv.released_to_client_at is not None:
-        return _serialize_deliverable(db, deliv)
-    deliv.released_to_client_at = utcnow()
-    earlier = (
-        db.execute(
-            select(Deliverable).where(
-                Deliverable.service_id == deliv.service_id,
-                Deliverable.id != deliv.id,
-                Deliverable.superseded_by.is_(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for prev in earlier:
-        prev.superseded_by = deliv.id
-    # Mirror the assessment status so the latest-assessment client
-    # gate (admin-only until released) unlocks.
-    a = _latest_assessment(db, deliv.service_id)
-    if a is not None and a.status != CsfAssessmentStatus.RELEASED:
-        a.status = CsfAssessmentStatus.RELEASED
-
-    audit(
-        db,
-        action="csf.deliverable.released",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={
-            "service_id": str(deliv.service_id),
-            "version": deliv.version,
-            "superseded": [str(p.id) for p in earlier],
-        },
-    )
+    assessment.documents_stale = False  # Work Order C3
     db.commit()
     db.refresh(deliv)
     return _serialize_deliverable(db, deliv)
@@ -827,19 +1492,17 @@ def release_csf_deliverable(
 @router.get(
     "/services/{service_id}/deliverables/latest",
     response_model=DeliverableResponse,
-    summary="Most recent CSF deliverable for a service",
+    summary="Most recent CSF deliverable for a service (admin)",
 )
 def latest_csf_deliverable(
     service_id: uuid.UUID,
-    user: Annotated[User, Depends(current_user)],
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.NIST_CSF:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CSF service not found.",
-        )
+    # Deliverables are admin-only (Work Order A1): clients never see or
+    # download them in-app.
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     deliv = db.execute(
         select(Deliverable)
         .where(Deliverable.service_id == svc.id)
@@ -850,10 +1513,5 @@ def latest_csf_deliverable(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
-        )
-    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No released deliverable yet.",
         )
     return _serialize_deliverable(db, deliv)

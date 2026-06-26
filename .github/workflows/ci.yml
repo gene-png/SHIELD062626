@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install bandit
+          pip install bandit pip-audit
 
       - name: ruff check
         working-directory: apps/api
@@ -46,6 +46,13 @@ jobs:
 
       - name: bandit
         run: bandit -q -c pyproject.toml -r apps/api/app
+
+      # Work Order F: dependency audit. Surfaces advisories; Dependabot opens the
+      # fix PRs, so this reports without blocking on a freshly-published CVE.
+      - name: pip-audit
+        working-directory: apps/api
+        continue-on-error: true
+        run: pip-audit
 
   web:
     name: Web (prettier + eslint + typecheck + build)
@@ -64,6 +71,11 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      # Work Order F: dependency audit (Dependabot opens the fix PRs).
+      - name: pnpm audit
+        continue-on-error: true
+        run: pnpm audit --audit-level high
 
       - name: prettier --check
         run: pnpm format:check

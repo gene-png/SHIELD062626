@@ -13,7 +13,6 @@ import {
 
 import {
   finalizeDeliverable,
-  releaseDeliverable,
   TechDebtProxyError,
 } from "@/lib/tech_debt/client";
 import type { CapabilityListStatus, Deliverable } from "@/lib/tech_debt/types";
@@ -54,13 +53,10 @@ export function DeliverableCard({
   deliverable,
   onChange,
 }: DeliverableCardProps): JSX.Element {
-  const [busy, setBusy] = React.useState<"finalize" | "release" | null>(null);
+  const [busy, setBusy] = React.useState<"finalize" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const canFinalize = capabilityListStatus === "approved";
-  const isReleased = Boolean(deliverable?.released_to_client_at);
-  const isFinalized = Boolean(deliverable?.finalized_at);
-  const canRelease = isFinalized && !isReleased;
 
   async function onFinalize(): Promise<void> {
     setBusy("finalize");
@@ -75,47 +71,26 @@ export function DeliverableCard({
     }
   }
 
-  async function onRelease(): Promise<void> {
-    if (!deliverable) return;
-    setBusy("release");
-    setError(null);
-    try {
-      const next = await releaseDeliverable(deliverable.id);
-      onChange(next);
-    } catch (err) {
-      setError(describeError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Deliverable</CardTitle>
         <CardDescription>
-          Render the PDF + XLSX from the approved capability list, then release
-          to the client. Re-finalize on the same day appends <code>_v2</code> to
-          the filename and supersedes the prior version.
+          Render the PDF + XLSX from the approved capability list. Deliverables
+          are admin-only — download and share them outside the app. Re-finalize
+          on the same day appends <code>_v2</code> to the filename.
         </CardDescription>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           {deliverable ? (
             <>
-              <StatusPill tone={isReleased ? "success" : "info"} withDot>
-                {isReleased
-                  ? `Released v${deliverable.version}`
-                  : `Finalized v${deliverable.version}`}
+              <StatusPill tone="info" withDot>
+                {`Finalized v${deliverable.version}`}
               </StatusPill>
               <span className="text-xs text-ink-tertiary">
                 Finalized {fmtTime(deliverable.finalized_at)}
               </span>
-              {isReleased ? (
-                <span className="text-xs text-ink-tertiary">
-                  · Released {fmtTime(deliverable.released_to_client_at)}
-                </span>
-              ) : null}
             </>
           ) : (
             <StatusPill tone="neutral" withDot>
@@ -161,18 +136,6 @@ export function DeliverableCard({
               : deliverable
                 ? "Re-finalize"
                 : "Finalize"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void onRelease()}
-            disabled={!canRelease || busy !== null}
-            className="rounded-md border border-border bg-surface-card px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {busy === "release"
-              ? "Releasing…"
-              : isReleased
-                ? "Released"
-                : "Release to client"}
           </button>
           {!canFinalize && !deliverable ? (
             <span className="text-xs text-ink-tertiary">

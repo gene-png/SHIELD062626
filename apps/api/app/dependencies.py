@@ -1,17 +1,26 @@
-"""FastAPI dependencies: current user resolution.
+"""FastAPI dependencies: current user + current client (tenant) resolution.
 
 `current_user` reads the `Authorization: Bearer <token>` header, verifies the
 access token, and loads the User row. Routes that don't need the user but
 need the role take `require_role` instead (Phase 1 stage 7).
+
+`current_client` resolves the active tenant for the request:
+  - Client-role user: pinned to user.client_id (request can't escape it).
+  - Admin/reviewer (User.client_id IS NULL): must send X-Client-Id header
+    naming an existing client. Cross-tenant admin routes that operate on
+    all clients (e.g. GET /admin/clients) should not take this dependency.
 """
 
 from __future__ import annotations
+
+import uuid
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.models.user import User
+from app.models.client import Client
+from app.models.user import User, UserRole
 from app.security.jwt import TokenError, verify_token
 
 
@@ -75,6 +84,57 @@ def require_role(*allowed: UserRoleT) -> Callable[[User], User]:
         return user
 
     return _guard
+
+
+def current_client(
+    request: Request,
+    user: User = Depends(current_user),  # noqa: B008 - FastAPI DI idiom
+    db: Session = Depends(get_db),  # noqa: B008 - FastAPI DI idiom
+) -> Client:
+    """Resolve the active tenant for this request.
+
+    Client-role users are pinned to their own client_id. Platform-level
+    users (admin/reviewer with client_id IS NULL) must send X-Client-Id
+    to choose which client they're operating on. The header value must
+    reference an existing client.
+    """
+    if user.role == UserRole.CLIENT:
+        if user.client_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Client-role user is not bound to a client.",
+            )
+        client = db.get(Client, user.client_id)
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Your client account is no longer available.",
+            )
+        return client
+
+    # Platform admin/reviewer: client_id is typically NULL; they pick the
+    # active tenant via X-Client-Id. If user.client_id is set (legacy data),
+    # the header still wins so a platform admin can switch contexts.
+    header_val = request.headers.get("X-Client-Id")
+    if not header_val:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Client-Id header is required for this role.",
+        )
+    try:
+        client_uuid = uuid.UUID(header_val)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Client-Id must be a UUID.",
+        ) from exc
+    client = db.get(Client, client_uuid)
+    if client is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No client with that id.",
+        )
+    return client
 
 
 # Type aliases (kept at module bottom so the require_role docstring above can

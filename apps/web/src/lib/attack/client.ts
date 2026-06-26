@@ -7,6 +7,7 @@ import type {
   AttackCoverageRow,
   AttackDeliverable,
   AttackHeatmap,
+  AttackRunAiResponse,
 } from "./types";
 
 interface JsonRequestInit {
@@ -95,6 +96,15 @@ export async function approveAssessment(
 ): Promise<AttackAssessment> {
   return jsonRequest<AttackAssessment>(
     `/api/proxy/attack/assessments/${assessmentId}/approve`,
+    { method: "POST" },
+  );
+}
+
+export async function runAttackAi(
+  serviceId: string,
+): Promise<AttackRunAiResponse> {
+  return jsonRequest<AttackRunAiResponse>(
+    `/api/proxy/attack/services/${serviceId}/run-ai`,
     { method: "POST" },
   );
 }

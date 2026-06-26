@@ -221,7 +221,9 @@ export function Step6Review({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={submitting || picks.length === 0 || !legalName || targetsIncomplete}
+        disabled={
+          submitting || picks.length === 0 || !legalName || targetsIncomplete
+        }
         className="self-end rounded-md bg-brand-500 px-5 py-2.5 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting

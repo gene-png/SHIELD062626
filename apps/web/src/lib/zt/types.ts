@@ -1,7 +1,11 @@
 /** Wire types mirroring apps/api/app/schemas/zt.py. */
 
 export type ZtFramework = "cisa_ztmm_2_0" | "dod_ztra";
-export type ZtAssessmentStatus = "draft" | "approved" | "released";
+export type ZtAssessmentStatus =
+  | "draft"
+  | "submitted"
+  | "approved"
+  | "released";
 
 export interface CatalogCapability {
   code: string;
@@ -35,6 +39,8 @@ export interface ZtAnswer {
   assessment_id: string;
   capability_code: string;
   maturity_stage: number | null;
+  target_stage?: number | null;
+  locked?: boolean;
   notes: string | null;
   evidence_artifact_id: string | null;
   answered_by: string | null;
@@ -49,14 +55,32 @@ export interface ZtAssessment {
   status: ZtAssessmentStatus;
   approved_at: string | null;
   approved_by: string | null;
+  documents_stale?: boolean;
   answers: ZtAnswer[];
   client_target_stage: number | null;
 }
 
 export interface ZtAnswerPatch {
   maturity_stage?: number | null;
+  target_stage?: number | null;
+  locked?: boolean;
   notes?: string;
   evidence_artifact_id?: string | null;
+}
+
+export interface ZtCapabilityChange {
+  capability_code: string;
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface ZtRunAiResponse {
+  changed: ZtCapabilityChange[];
+  answers: ZtAnswer[];
+  pillar_narratives: Record<string, string>;
+  executive_summary: string | null;
+  roadmap_summary: string | null;
 }
 
 export interface PillarScore {
@@ -104,6 +128,18 @@ export interface GapAnalysis {
   unscored_count: number;
   gap_count_by_pillar: Record<string, number>;
   gaps: GapItem[];
+  roadmap?: RoadmapEntry[];
+}
+
+export interface RoadmapEntry {
+  month: number;
+  code: string;
+  pillar_code: string;
+  pillar_name: string;
+  name: string;
+  current_stage: number;
+  target_stage: number;
+  priority_score: number;
 }
 
 export interface ZtDeliverable {

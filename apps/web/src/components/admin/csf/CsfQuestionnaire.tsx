@@ -7,6 +7,7 @@ import type {
   CsfAnswer,
   CsfAnswerPatch,
   CsfCatalog,
+  CsfInterviewQuestion,
 } from "@/lib/csf/types";
 
 import { TierPicker } from "./TierPicker";
@@ -14,6 +15,9 @@ import { TierPicker } from "./TierPicker";
 export interface CsfQuestionnaireProps {
   catalog: CsfCatalog;
   answersByCode: Record<string, CsfAnswer>;
+  /** Interview prompts keyed by the subcategory code each one informs.
+   * Supplemental context for the assessor; sparse by design. */
+  questionsByCode?: Record<string, CsfInterviewQuestion[]>;
   readOnly?: boolean;
   onAnswerUpdate: (
     answerId: string,
@@ -70,6 +74,7 @@ function FunctionTabBar({
 export function CsfQuestionnaire({
   catalog,
   answersByCode,
+  questionsByCode = {},
   readOnly = false,
   onAnswerUpdate,
 }: CsfQuestionnaireProps): JSX.Element {
@@ -143,6 +148,27 @@ export function CsfQuestionnaire({
                           ariaLabel={`Maturity tier for ${sub.code}`}
                         />
                       </div>
+                      {questionsByCode[sub.code]?.length ? (
+                        <div className="mt-3 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-sunken p-2.5">
+                          {questionsByCode[sub.code].map((q) => (
+                            <div key={q.external_id}>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">
+                                Interview · {q.section_name}
+                              </p>
+                              <p className="mt-0.5 text-sm text-ink-primary">
+                                {q.stem}
+                              </p>
+                              {q.cues.length ? (
+                                <ul className="mt-1 list-disc pl-4 text-xs text-ink-secondary">
+                                  {q.cues.map((cue, i) => (
+                                    <li key={i}>{cue}</li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <details className="mt-2">
                         <summary className="cursor-pointer text-xs font-medium text-ink-tertiary hover:text-ink-secondary">
                           Notes {ans.notes ? "·" : ""}{" "}

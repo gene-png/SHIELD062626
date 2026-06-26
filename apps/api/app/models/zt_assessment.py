@@ -36,6 +36,9 @@ from app.models._common import TimestampMixin, UUIDPKMixin
 
 class ZtAssessmentStatus(enum.StrEnum):
     DRAFT = "draft"
+    # Client finished their self-assessment; awaiting admin review. Admins can
+    # still edit in this state; clients cannot.
+    SUBMITTED = "submitted"
     APPROVED = "approved"
     RELEASED = "released"
 
@@ -48,16 +51,14 @@ class ZtFramework(enum.StrEnum):
 class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "zt_assessments"
     __table_args__ = (
-        UniqueConstraint(
-            "service_id", "version", name="uq_zt_assessments_service_version"
-        ),
+        UniqueConstraint("service_id", "version", name="uq_zt_assessments_service_version"),
     )
 
     service_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("services.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     framework: Mapped[ZtFramework] = mapped_column(
@@ -65,6 +66,8 @@ class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Work Order C3: an AI run sets this true; finalize clears it.
+    documents_stale: Mapped[bool] = mapped_column(default=False, nullable=False)
     status: Mapped[ZtAssessmentStatus] = mapped_column(
         SAEnum(
             ZtAssessmentStatus,
@@ -95,17 +98,24 @@ class ZtAnswer(UUIDPKMixin, TimestampMixin, Base):
     assessment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("zt_assessments.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     # Framework-prefixed code (e.g. "CISA.ID.01" or "DOD.USR.01").
     # Validated against the in-memory catalog at the route boundary.
     capability_code: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    # 1..4 (MaturityStage). NULL = unscored.
+    # 1..level_count(framework): CISA 1-4, DoD 1-3 (Work Order A4).
+    # NULL = unscored. Validated per framework at the route boundary.
     maturity_stage: Mapped[int | None] = mapped_column(SmallInteger)
+    # Work Order D3: per-capability target stage (gap = current < target).
+    # NULL falls back to the assessment/engagement default target.
+    target_stage: Mapped[int | None] = mapped_column(SmallInteger)
     notes: Mapped[str | None] = mapped_column(Text)
+
+    # Work Order C2: a locked row is never changed by a Run-AI rerun.
+    locked: Mapped[bool] = mapped_column(default=False, nullable=False)
     evidence_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )

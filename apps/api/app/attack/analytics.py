@@ -65,9 +65,7 @@ def _pct(numer: float, denom: float) -> float:
     return round(numer / denom * 100, 1)
 
 
-def _coverage_for_codes(
-    codes: list[str], coverage_map: Mapping[str, str | None]
-) -> dict[str, int]:
+def _coverage_for_codes(codes: list[str], coverage_map: Mapping[str, str | None]) -> dict[str, int]:
     counts = {s.value: 0 for s in _STATUS_BUCKETS}
     counts["unscored"] = 0
     for code in codes:
@@ -83,16 +81,8 @@ def compute(coverage_map: Mapping[str, str | None]) -> CoverageRollup:
     by_tactic: list[TacticCoverage] = []
     for ta in TACTICS:
         # Parent techniques mapped to this tactic.
-        parent_codes = [
-            t.id
-            for t in parent_techniques()
-            if ta.id in t.tactics
-        ]
-        sub_codes = [
-            t.id
-            for t in TECHNIQUES
-            if t.is_sub_technique and ta.id in t.tactics
-        ]
+        parent_codes = [t.id for t in parent_techniques() if ta.id in t.tactics]
+        sub_codes = [t.id for t in TECHNIQUES if t.is_sub_technique and ta.id in t.tactics]
         all_codes = parent_codes + sub_codes
         counts = _coverage_for_codes(all_codes, coverage_map)
         addressable = (

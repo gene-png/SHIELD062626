@@ -13,9 +13,7 @@ from app.csf.scoring import compute as compute_score
 from app.models.csf_assessment import CsfAnswer, CsfAssessment, CsfAssessmentStatus
 
 
-def _build_inputs(
-    *, answers_tier: int | None = 3
-) -> tuple[CsfAssessment, list[CsfAnswer]]:
+def _build_inputs(*, answers_tier: int | None = 3) -> tuple[CsfAssessment, list[CsfAnswer]]:
     a = CsfAssessment(
         id=uuid.uuid4(),
         service_id=uuid.uuid4(),
@@ -68,8 +66,7 @@ def test_xlsx_score_summary_carries_overall_label(context_with_full_tier3) -> No
     raw = render_xlsx(context_with_full_tier3)
     wb = load_workbook(io.BytesIO(raw))
     ws = wb["Score Summary"]
-    cells = [(ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value)
-             for r in range(1, 7)]
+    cells = [(ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value) for r in range(1, 7)]
     label = dict(cells).get("Overall maturity")
     # All tier 3 -> Repeatable.
     assert label == "Repeatable"

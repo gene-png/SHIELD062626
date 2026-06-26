@@ -111,9 +111,7 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
     ws.append(["Assessment version", ctx.assessment.version])
     ws.append(["Overall maturity", ctx.score.overall_maturity_label])
     ws.append(["Average tier", _fmt_tier(ctx.score.average_tier)])
-    ws.append(
-        ["Coverage", f"{ctx.score.answered_subcategories}/{ctx.score.total_subcategories}"]
-    )
+    ws.append(["Coverage", f"{ctx.score.answered_subcategories}/{ctx.score.total_subcategories}"])
     for row in ws.iter_rows(min_row=1, max_row=6, min_col=1, max_col=1):
         for cell in row:
             cell.font = bold
@@ -238,6 +236,71 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+def render_docx(ctx: CsfDeliverableContext) -> bytes:
+    """Word deliverable mirroring the PDF (Work Order C4)."""
+    from app.docx_export import (
+        add_heading,
+        add_paragraphs,
+        add_table,
+        add_title,
+        new_document,
+        to_bytes,
+    )
+
+    doc = new_document(f"{ctx.service_title} — {ctx.client_legal_name}")
+    add_title(doc, ctx.service_title, ctx.client_legal_name)
+
+    add_heading(doc, "Maturity summary")
+    add_paragraphs(
+        doc,
+        [
+            f"Overall maturity: {ctx.score.overall_maturity_label}",
+            f"Average tier: {_fmt_tier(ctx.score.average_tier)}",
+            f"Coverage: {ctx.score.answered_subcategories}/"
+            f"{ctx.score.total_subcategories} ({ctx.score.coverage_pct}%)",
+        ],
+    )
+
+    add_heading(doc, "Per-function rollup")
+    add_table(
+        doc,
+        ["Function", "Name", "Average tier", "Coverage"],
+        [
+            [
+                fs.function.value,
+                fs.function_name,
+                _fmt_tier(fs.average_tier),
+                f"{fs.answered_count}/{fs.subcategory_count} ({fs.coverage_pct}%)",
+            ]
+            for fs in ctx.score.by_function
+        ],
+    )
+
+    add_heading(doc, f"Top remediation gaps (target T{ctx.gap.target_tier})")
+    if not ctx.gap.gaps:
+        add_paragraphs(
+            doc,
+            [f"No gaps at target tier {ctx.gap.target_tier} " f"({ctx.gap.target_label})."],
+        )
+    else:
+        add_table(
+            doc,
+            ["Code", "Function", "Subcategory", "Current → Target", "Priority"],
+            [
+                [
+                    g.code,
+                    g.function.value,
+                    g.name,
+                    f"T{g.current_tier} → T{g.target_tier}",
+                    f"{g.priority_score:.2f}",
+                ]
+                for g in ctx.gap.gaps
+            ],
+        )
+
+    return to_bytes(doc)
+
+
 def render_pdf(ctx: CsfDeliverableContext) -> bytes:
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -284,9 +347,7 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
     )
 
     story.append(Paragraph("Per-function rollup", h2))
-    fn_table_data: list[list] = [
-        ["Function", "Name", "Average tier", "Coverage"]
-    ]
+    fn_table_data: list[list] = [["Function", "Name", "Average tier", "Coverage"]]
     for fs in ctx.score.by_function:
         fn_table_data.append(
             [
@@ -310,8 +371,7 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
     if not ctx.gap.gaps:
         story.append(
             Paragraph(
-                f"No gaps at target tier {ctx.gap.target_tier} "
-                f"({ctx.gap.target_label}).",
+                f"No gaps at target tier {ctx.gap.target_tier} " f"({ctx.gap.target_label}).",
                 body,
             )
         )

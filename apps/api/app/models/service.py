@@ -59,6 +59,12 @@ class Service(UUIDPKMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
 
+    # Multi-tenant scope. Every service belongs to exactly one client; routes
+    # filter by this to keep one client's workspaces invisible to another.
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+
     # When opened from a service_request, this points back at it so the
     # admin queue can correlate "request" ↔ "live engagement".
     source_request_id: Mapped[uuid.UUID | None] = mapped_column(

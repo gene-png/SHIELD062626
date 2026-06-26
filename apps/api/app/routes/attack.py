@@ -23,6 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.attack.analytics import compute as compute_heatmap
 from app.attack.catalog import (
     TACTICS,
@@ -33,11 +36,12 @@ from app.attack.catalog import (
 )
 from app.attack.coverage import COVERAGE_DEFINITIONS, CoverageStatus
 from app.attack.exporters import build_context as build_attack_context
+from app.attack.exporters import render_docx as render_attack_docx
 from app.attack.exporters import render_pdf as render_attack_pdf
 from app.attack.exporters import render_xlsx as render_attack_xlsx
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user, require_role
+from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.attack_assessment import (
@@ -45,6 +49,7 @@ from app.models.attack_assessment import (
     AttackAssessmentStatus,
     AttackCoverage,
 )
+from app.models.capability import CapabilityItem, CapabilityList
 from app.models.client import Client
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
@@ -55,17 +60,23 @@ from app.schemas.attack import (
     AttackCoveragePatch,
     AttackCoverageResponse,
     AttackHeatmap,
+    AttackRunAiResponse,
     AttackServiceCreateRequest,
     AttackServiceResponse,
     CatalogCoverageDefinition,
     CatalogResponse,
     CatalogTactic,
     CatalogTechnique,
+    CoverageChange,
     TacticHeatmapEntry,
 )
 from app.schemas.tech_debt import DeliverableResponse
 from app.storage import StorageBackend
 from app.tech_debt.filename import SERVICE_SLUG_ATTACK, deliverable_filename
+from app.tenant import (
+    require_attack_assessment_in_tenant,
+    require_service_in_tenant,
+)
 
 router = APIRouter(prefix="/attack", tags=["attack"])
 
@@ -81,9 +92,7 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
     ordered = sorted(rows, key=lambda r: r.technique_code)
     out: list[AttackCoverageResponse] = []
     for r in ordered:
-        status_enum = (
-            CoverageStatus(r.status) if r.status is not None else None
-        )
+        status_enum = CoverageStatus(r.status) if r.status is not None else None
         out.append(
             AttackCoverageResponse(
                 id=r.id,
@@ -92,6 +101,11 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
                 status=status_enum,
                 notes=r.notes,
                 evidence_artifact_id=r.evidence_artifact_id,
+                locked=r.locked,
+                detection_tools=r.detection_tools,
+                prevention_tools=r.prevention_tools,
+                response_tools=r.response_tools,
+                rationale=r.rationale,
                 answered_by=r.answered_by,
                 answered_at=r.answered_at,
             )
@@ -99,9 +113,7 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
     return out
 
 
-def _serialize_assessment(
-    db: Session, a: AttackAssessment
-) -> AttackAssessmentResponse:
+def _serialize_assessment(db: Session, a: AttackAssessment) -> AttackAssessmentResponse:
     rows = (
         db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
         .scalars()
@@ -114,6 +126,7 @@ def _serialize_assessment(
         status=a.status,
         approved_at=a.approved_at,
         approved_by=a.approved_by,
+        documents_stale=a.documents_stale,
         coverage=_serialize_coverage(rows),
     )
 
@@ -141,6 +154,7 @@ def _latest_assessment(db: Session, service_id: uuid.UUID) -> AttackAssessment |
 def create_attack_service(
     body: AttackServiceCreateRequest,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackServiceResponse:
     if body.kind != ServiceKind.ATTACK_COVERAGE:
@@ -152,6 +166,7 @@ def create_attack_service(
         kind=ServiceKind.ATTACK_COVERAGE,
         status=ServiceStatus.IN_PROGRESS,
         title=body.title,
+        client_id=client.id,
         source_request_id=body.source_request_id,
         opened_by=user.id,
     )
@@ -184,9 +199,7 @@ def get_catalog(
     _user: Annotated[User, Depends(current_user)],
 ) -> CatalogResponse:
     tactic_rows = [
-        CatalogTactic(
-            id=t.id, shortname=t.shortname, name=t.name, description=t.description
-        )
+        CatalogTactic(id=t.id, shortname=t.shortname, name=t.name, description=t.description)
         for t in TACTICS
     ]
     technique_rows = [
@@ -230,18 +243,15 @@ def get_catalog(
 def create_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.ATTACK_COVERAGE:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ATT&CK service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
     prior = _latest_assessment(db, svc.id)
     version = (prior.version + 1) if prior else 1
     assessment = AttackAssessment(
         service_id=svc.id,
+        client_id=client.id,
         version=version,
         status=AttackAssessmentStatus.DRAFT,
     )
@@ -253,6 +263,7 @@ def create_assessment(
         db.add(
             AttackCoverage(
                 assessment_id=assessment.id,
+                client_id=client.id,
                 technique_code=t.id,
                 status=None,
             )
@@ -278,14 +289,10 @@ def create_assessment(
 def latest_assessment(
     service_id: uuid.UUID,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackAssessmentResponse:
-    svc = db.get(Service, service_id)
-    if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -314,6 +321,7 @@ def patch_coverage(
     coverage_id: uuid.UUID,
     body: AttackCoveragePatch,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackCoverageResponse:
     data = body.model_dump(exclude_unset=True)
@@ -323,7 +331,7 @@ def patch_coverage(
             detail="At least one field is required.",
         )
     row = db.get(AttackCoverage, coverage_id)
-    if row is None:
+    if row is None or row.client_id != client.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Coverage row not found.",
@@ -350,6 +358,11 @@ def patch_coverage(
         row.notes = data["notes"]
     if "evidence_artifact_id" in data:
         row.evidence_artifact_id = data["evidence_artifact_id"]
+    if data.get("locked") is not None:
+        row.locked = bool(data["locked"])
+    for f in ("detection_tools", "prevention_tools", "response_tools", "rationale"):
+        if f in data:
+            setattr(row, f, data[f])
     row.answered_by = user.id
     row.answered_at = utcnow()
     audit(
@@ -373,9 +386,166 @@ def patch_coverage(
         status=status_enum,
         notes=row.notes,
         evidence_artifact_id=row.evidence_artifact_id,
+        locked=row.locked,
+        detection_tools=row.detection_tools,
+        prevention_tools=row.prevention_tools,
+        response_tools=row.response_tools,
+        rationale=row.rationale,
         answered_by=row.answered_by,
         answered_at=row.answered_at,
     )
+
+
+def _llm_dep() -> LLMClient:
+    return LLMClient.from_settings()
+
+
+def _client_tool_names(db: Session, client_id: uuid.UUID) -> list[str]:
+    """Tool names from the client's Tech Debt capability list(s), if any.
+
+    ATT&CK maps the client's security tooling to techniques; the canonical
+    source is the Tech Debt approved capability list (Work Order D2).
+    """
+    names = (
+        db.execute(
+            select(CapabilityItem.name)
+            .join(CapabilityList, CapabilityItem.capability_list_id == CapabilityList.id)
+            .join(Service, CapabilityList.service_id == Service.id)
+            .where(
+                Service.client_id == client_id,
+                Service.kind == ServiceKind.TECH_DEBT,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return sorted({n.strip() for n in names if n and n.strip()})
+
+
+_VALID_STATUSES = {s.value for s in CoverageStatus}
+_DIFF_FIELDS = (
+    "status",
+    "detection_tools",
+    "prevention_tools",
+    "response_tools",
+    "rationale",
+)
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=AttackRunAiResponse,
+    summary="Run the mitre_map AI job: suggest coverage + D/P/R per technique (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+) -> AttackRunAiResponse:
+    """The ATT&CK 'Run AI'. Suggests coverage status + which listed tools provide
+    Detection / Prevention / Response per technique, validating every cited tool
+    against the client's capability list. AI suggests; locked rows are left
+    untouched; code computes coverage % elsewhere. Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (AttackAssessmentStatus.APPROVED, AttackAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+
+    tools = _client_tool_names(db, client.id)
+    valid_tools = {t.lower() for t in tools}
+
+    rows = {
+        r.technique_code: r
+        for r in db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
+        .scalars()
+        .all()
+    }
+    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+
+    def _snap() -> dict[str, dict]:
+        return {
+            code: {
+                "status": r.status,
+                "detection_tools": list(r.detection_tools or []),
+                "prevention_tools": list(r.prevention_tools or []),
+                "response_tools": list(r.response_tools or []),
+                "rationale": r.rationale,
+            }
+            for code, r in rows.items()
+        }
+
+    before = _snap()
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    result = run_job(
+        db,
+        llm,
+        "mitre_map",
+        inputs={"capability_list": tools, "technique_codes": sorted(rows)},
+        requested_by=user.id,
+        service_id=svc.id,
+        client_org_name=client_org,
+    )
+
+    def _validate_tools(names: object) -> list[str]:
+        if not isinstance(names, list):
+            return []
+        # Only tools that actually appear in the client's capability list.
+        return [t for t in names if isinstance(t, str) and t.lower() in valid_tools]
+
+    for sugg in (result.data or {}).get("techniques", []):
+        if not isinstance(sugg, dict):
+            continue
+        row = rows.get(sugg.get("technique_code"))
+        if row is None or row.locked:
+            continue
+        st = sugg.get("status")
+        if isinstance(st, str) and st in _VALID_STATUSES:
+            row.status = st
+        if "detection_tools" in sugg:
+            row.detection_tools = _validate_tools(sugg["detection_tools"])
+        if "prevention_tools" in sugg:
+            row.prevention_tools = _validate_tools(sugg["prevention_tools"])
+        if "response_tools" in sugg:
+            row.response_tools = _validate_tools(sugg["response_tools"])
+        if isinstance(sugg.get("rationale"), str):
+            row.rationale = sugg["rationale"]
+        row.answered_by = user.id
+        row.answered_at = utcnow()
+
+    db.flush()
+    after = _snap()
+    diffs = diff_keyed_rows(before, after, _DIFF_FIELDS, locked_keys=locked_keys)
+    changes = [
+        CoverageChange(technique_code=d.key, field=ch.field, old=ch.old, new=ch.new)
+        for d in diffs
+        for ch in d.changes
+    ]
+
+    a.documents_stale = True  # Work Order C3
+    audit(
+        db,
+        action="attack.run_ai",
+        target_type="attack_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"tools_available": len(tools), "changed_rows": len(diffs)},
+    )
+    db.commit()
+
+    coverage = [
+        AttackCoverageResponse.model_validate(r, from_attributes=True)
+        for r in sorted(rows.values(), key=lambda r: r.technique_code)
+    ]
+    return AttackRunAiResponse(tools_available=len(tools), changed=changes, coverage=coverage)
 
 
 @router.post(
@@ -386,14 +556,10 @@ def patch_coverage(
 def approve_assessment(
     assessment_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackAssessmentResponse:
-    a = db.get(AttackAssessment, assessment_id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assessment not found.",
-        )
+    a = require_attack_assessment_in_tenant(db, assessment_id, client.id)
     if a.status == AttackAssessmentStatus.APPROVED:
         return _serialize_assessment(db, a)
     if a.status == AttackAssessmentStatus.RELEASED:
@@ -430,14 +596,10 @@ def approve_assessment(
 def heatmap(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> AttackHeatmap:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.ATTACK_COVERAGE:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ATT&CK service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -446,9 +608,7 @@ def heatmap(
         )
     valid = attack_all_codes()
     rows = (
-        db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == a.id)
-        )
+        db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
         .scalars()
         .all()
     )
@@ -494,12 +654,16 @@ def heatmap(
 def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableResponse:
     pdf_title = None
     xlsx_title = None
+    docx_title = None
     if deliv.pdf_artifact_id:
         a = db.get(Artifact, deliv.pdf_artifact_id)
         pdf_title = a.title if a else None
     if deliv.xlsx_artifact_id:
         a = db.get(Artifact, deliv.xlsx_artifact_id)
         xlsx_title = a.title if a else None
+    if deliv.docx_artifact_id:
+        a = db.get(Artifact, deliv.docx_artifact_id)
+        docx_title = a.title if a else None
     return DeliverableResponse(
         id=deliv.id,
         service_id=deliv.service_id,
@@ -508,11 +672,12 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         version=deliv.version,
         pdf_artifact_id=deliv.pdf_artifact_id,
         xlsx_artifact_id=deliv.xlsx_artifact_id,
+        docx_artifact_id=deliv.docx_artifact_id,
         pdf_filename=pdf_title,
         xlsx_filename=xlsx_title,
+        docx_filename=docx_title,
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
-        released_to_client_at=deliv.released_to_client_at,
         superseded_by=deliv.superseded_by,
     )
 
@@ -522,6 +687,7 @@ def _write_artifact(
     *,
     storage: StorageBackend,
     user: User,
+    client_id: uuid.UUID,
     filename: str,
     mime_type: str,
     data: bytes,
@@ -531,6 +697,7 @@ def _write_artifact(
     key = f"deliverable/{user.id}/{uuid.uuid4()}/{filename}"
     storage.put(key, data, content_type=mime_type)
     art = Artifact(
+        client_id=client_id,
         title=filename,
         file_storage_key=key,
         mime_type=mime_type,
@@ -554,15 +721,11 @@ def _write_artifact(
 def finalize_attack_deliverable(
     service_id: uuid.UUID,
     user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.ATTACK_COVERAGE:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ATT&CK service not found.",
-        )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
     assessment = _latest_assessment(db, svc.id)
     if assessment is None:
         raise HTTPException(
@@ -579,9 +742,7 @@ def finalize_attack_deliverable(
         )
     valid = attack_all_codes()
     coverage = (
-        db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == assessment.id)
-        )
+        db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == assessment.id))
         .scalars()
         .all()
     )
@@ -590,15 +751,12 @@ def finalize_attack_deliverable(
     }
     rollup = compute_heatmap(coverage_map)
 
-    client = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    client_name = client.legal_name if client is not None else None
+    client_name = client.legal_name
     if client_name == "(pending intake)":
         client_name = None
 
     today = utcnow().date()
-    existing = db.execute(
-        select(Deliverable).where(Deliverable.service_id == svc.id)
-    ).all()
+    existing = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
     next_version = len(existing) + 1
 
     pdf_name = deliverable_filename(
@@ -615,6 +773,13 @@ def finalize_attack_deliverable(
         day=today,
         version=next_version,
     )
+    docx_name = deliverable_filename(
+        company=client_name,
+        service_slug=SERVICE_SLUG_ATTACK,
+        extension="docx",
+        day=today,
+        version=next_version,
+    )
 
     ctx = build_attack_context(
         client_legal_name=client_name,
@@ -625,11 +790,13 @@ def finalize_attack_deliverable(
     )
     pdf_bytes = render_attack_pdf(ctx)
     xlsx_bytes = render_attack_xlsx(ctx)
+    docx_bytes = render_attack_docx(ctx)
 
     pdf_artifact = _write_artifact(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=pdf_name,
         mime_type="application/pdf",
         data=pdf_bytes,
@@ -638,9 +805,21 @@ def finalize_attack_deliverable(
         db,
         storage=storage,
         user=user,
+        client_id=client.id,
         filename=xlsx_name,
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=xlsx_bytes,
+    )
+    from app.docx_export import DOCX_MIME
+
+    docx_artifact = _write_artifact(
+        db,
+        storage=storage,
+        user=user,
+        client_id=client.id,
+        filename=docx_name,
+        mime_type=DOCX_MIME,
+        data=docx_bytes,
     )
 
     summary_line = (
@@ -656,6 +835,7 @@ def finalize_attack_deliverable(
         version=next_version,
         pdf_artifact_id=pdf_artifact.id,
         xlsx_artifact_id=xlsx_artifact.id,
+        docx_artifact_id=docx_artifact.id,
         finalized_at=utcnow(),
         finalized_by=user.id,
     )
@@ -677,64 +857,7 @@ def finalize_attack_deliverable(
             "gap_count": rollup.gap,
         },
     )
-    db.commit()
-    db.refresh(deliv)
-    return _serialize_deliverable(db, deliv)
-
-
-@router.post(
-    "/deliverables/{deliverable_id}/release",
-    response_model=DeliverableResponse,
-    summary="Release a finalized ATT&CK deliverable to the client (admin)",
-)
-def release_attack_deliverable(
-    deliverable_id: uuid.UUID,
-    user: Annotated[User, _admin_required],
-    db: Annotated[Session, Depends(get_db)],
-) -> DeliverableResponse:
-    deliv = db.get(Deliverable, deliverable_id)
-    if deliv is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Deliverable not found.",
-        )
-    if deliv.finalized_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Deliverable must be finalized before release.",
-        )
-    if deliv.released_to_client_at is not None:
-        return _serialize_deliverable(db, deliv)
-    deliv.released_to_client_at = utcnow()
-    earlier = (
-        db.execute(
-            select(Deliverable).where(
-                Deliverable.service_id == deliv.service_id,
-                Deliverable.id != deliv.id,
-                Deliverable.superseded_by.is_(None),
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for prev in earlier:
-        prev.superseded_by = deliv.id
-    a = _latest_assessment(db, deliv.service_id)
-    if a is not None and a.status != AttackAssessmentStatus.RELEASED:
-        a.status = AttackAssessmentStatus.RELEASED
-
-    audit(
-        db,
-        action="attack.deliverable.released",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={
-            "service_id": str(deliv.service_id),
-            "version": deliv.version,
-            "superseded": [str(p.id) for p in earlier],
-        },
-    )
+    assessment.documents_stale = False  # Work Order C3
     db.commit()
     db.refresh(deliv)
     return _serialize_deliverable(db, deliv)
@@ -743,19 +866,17 @@ def release_attack_deliverable(
 @router.get(
     "/services/{service_id}/deliverables/latest",
     response_model=DeliverableResponse,
-    summary="Most recent ATT&CK deliverable for a service",
+    summary="Most recent ATT&CK deliverable for a service (admin)",
 )
 def latest_attack_deliverable(
     service_id: uuid.UUID,
-    user: Annotated[User, Depends(current_user)],
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> DeliverableResponse:
-    svc = db.get(Service, service_id)
-    if svc is None or svc.kind != ServiceKind.ATTACK_COVERAGE:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ATT&CK service not found.",
-        )
+    # Deliverables are admin-only (Work Order A1): clients never see or
+    # download them in-app.
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
     deliv = db.execute(
         select(Deliverable)
         .where(Deliverable.service_id == svc.id)
@@ -766,10 +887,5 @@ def latest_attack_deliverable(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
-        )
-    if user.role != UserRole.ADMIN and deliv.released_to_client_at is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No released deliverable yet.",
         )
     return _serialize_deliverable(db, deliv)

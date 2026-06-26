@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  AssessmentCreateRequest,
+  AssessmentResponse,
   IntakePatchRequest,
   IntakeStateResponse,
   IntakeSubmitRequest,
@@ -56,6 +58,30 @@ export async function submitIntake(
     throw new ProxyError(res.status, await safeJson(res));
   }
   return (await res.json()) as IntakeStateResponse;
+}
+
+export async function fetchAssessments(): Promise<AssessmentResponse[]> {
+  const res = await fetch("/api/proxy/intake/assessments", {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new ProxyError(res.status, await safeJson(res));
+  }
+  return (await res.json()) as AssessmentResponse[];
+}
+
+export async function createAssessment(
+  body: AssessmentCreateRequest,
+): Promise<AssessmentResponse> {
+  const res = await fetch("/api/proxy/intake/assessments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ProxyError(res.status, await safeJson(res));
+  }
+  return (await res.json()) as AssessmentResponse;
 }
 
 async function safeJson(res: Response): Promise<unknown> {

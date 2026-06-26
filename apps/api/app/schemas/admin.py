@@ -7,9 +7,32 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
+from app.models.service import ServiceKind, ServiceStatus
 from app.models.service_request import ServiceType
 from app.models.user import UserRole
 from app.schemas.intake import ClientProfileResponse
+
+
+class AdminServiceDetail(BaseModel):
+    """Minimal service lookup so a workspace can resolve its owning tenant."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: ServiceKind
+    status: ServiceStatus
+    title: str
+    client_id: uuid.UUID
+
+
+class AdminAiStatus(BaseModel):
+    """AI pipeline readiness. Never includes the API key itself."""
+
+    mode: str
+    provider: str
+    model: str
+    ready: bool
+    detail: str
 
 
 class AdminUserSummary(BaseModel):
@@ -67,3 +90,49 @@ class FulfillServiceRequestResponse(BaseModel):
     service_type: ServiceType
     title: str
     already_fulfilled: bool
+
+
+class AdminClientSummary(BaseModel):
+    """One row in the platform-wide client list (admin/reviewer view)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    legal_name: str
+    dba_name: str | None
+    industry: str | None
+    size_band: str | None
+    intake_completed_at: datetime | None
+    created_at: datetime
+
+
+class AdminClientListResponse(BaseModel):
+    clients: list[AdminClientSummary]
+
+
+class AdminClientCreateRequest(BaseModel):
+    """Minimum payload to create a new tenant. Intake fills in the rest."""
+
+    legal_name: str
+    dba_name: str | None = None
+    industry: str | None = None
+    size_band: str | None = None
+
+
+class AdminDomainRow(BaseModel):
+    """One approved email domain for a client (Work Order B2)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    client_id: uuid.UUID
+    domain: str
+    created_at: datetime
+
+
+class AdminDomainListResponse(BaseModel):
+    domains: list[AdminDomainRow]
+
+
+class AdminDomainCreateRequest(BaseModel):
+    domain: str

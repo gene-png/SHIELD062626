@@ -50,7 +50,20 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker, Path]]:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[_storage_dep] = lambda: backend
 
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c, TestSession, storage_root
 
 

@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  NumberCard,
   StatusPill,
 } from "@shield/design-system";
 
@@ -31,9 +32,11 @@ import type {
   OverlapAnalysis,
 } from "@/lib/tech_debt/types";
 
+import { AiStatusBanner } from "./AiStatusBanner";
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { DeliverableCard } from "./DeliverableCard";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
+import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
 
 export interface TechDebtWorkspaceProps {
@@ -57,6 +60,7 @@ export function TechDebtWorkspace({
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
   const [approving, setApproving] = React.useState(false);
+  const [docsReloadKey, setDocsReloadKey] = React.useState(0);
 
   const refreshOverlap = React.useCallback(async () => {
     setOverlapLoading(true);
@@ -158,8 +162,25 @@ export function TechDebtWorkspace({
     ).length ?? 0;
   const readOnly = list?.status === "released";
 
+  const dispositionCounts = (list?.items ?? []).reduce(
+    (acc, i) => {
+      if (i.disposition) acc[i.disposition] += 1;
+      return acc;
+    },
+    { keep: 0, consolidate: 0, cut: 0 },
+  );
+  const categoryCount = new Set(
+    (list?.items ?? []).map((i) => i.category).filter(Boolean),
+  ).size;
+  const costFmt = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(totalCost);
+
   return (
     <div className="flex flex-col gap-6">
+      <AiStatusBanner />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
@@ -208,6 +229,7 @@ export function TechDebtWorkspace({
           <RedactionDisclosure />
           <Dropzone
             onUploaded={(a) => {
+              setDocsReloadKey((k) => k + 1);
               void runExtraction(a.id);
             }}
             accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
@@ -225,6 +247,12 @@ export function TechDebtWorkspace({
         </CardBody>
       </Card>
 
+      <IntakeDocumentsPanel
+        onExtract={(id) => void runExtraction(id)}
+        extracting={extracting}
+        reloadKey={docsReloadKey}
+      />
+
       {loadError ? (
         <Card>
           <CardHeader>
@@ -234,6 +262,24 @@ export function TechDebtWorkspace({
             <p className="text-sm text-status-danger-fg">{loadError}</p>
           </CardBody>
         </Card>
+      ) : null}
+
+      {list ? (
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+          <NumberCard label="Capabilities" value={list.items.length} />
+          <NumberCard label="Annual cost" value={costFmt} />
+          <NumberCard label="Categories" value={categoryCount} />
+          <NumberCard
+            label="To consolidate / cut"
+            value={dispositionCounts.consolidate + dispositionCounts.cut}
+            deltaTone="negative"
+          />
+          <NumberCard
+            label="Low-confidence rows"
+            value={lowConfidence}
+            hint="AI confidence < 70%"
+          />
+        </div>
       ) : null}
 
       {list ? (

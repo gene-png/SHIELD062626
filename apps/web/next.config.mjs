@@ -12,6 +12,26 @@ const nextConfig = {
       {
         source: "/:path*",
         headers: [
+          {
+            // Self-only: the app loads no third-party CDNs/fonts/images, so a
+            // strict policy holds. 'unsafe-inline' covers Tailwind + inline
+            // style props and Next's bootstrap; 'unsafe-eval' keeps the Next
+            // runtime working. No remote origins are allowed.
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "frame-ancestors 'none'",
+              "object-src 'none'",
+              "img-src 'self' data: blob:",
+              "style-src 'self' 'unsafe-inline'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "font-src 'self'",
+              "connect-src 'self'",
+              "manifest-src 'self'",
+            ].join("; "),
+          },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

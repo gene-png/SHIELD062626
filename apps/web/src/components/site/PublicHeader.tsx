@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import Link from "next/link";
 
 import { authOptions } from "@/lib/auth/options";
+import { ClientSwitcher } from "@/components/site/ClientSwitcher";
 import { SignOutButton } from "@/components/site/SignOutButton";
 
 export async function PublicHeader(): Promise<JSX.Element> {
@@ -23,28 +24,32 @@ export async function PublicHeader(): Promise<JSX.Element> {
           {session ? (
             <>
               <Link
-                href="/intake"
+                href="/assessments"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >
-                Intake
+                My Assessments
               </Link>
               <Link
-                href="/deliverables"
+                href="/messages"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >
-                Deliverables
+                Messages
+              </Link>
+              <Link
+                href="/account"
+                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+              >
+                Account
               </Link>
               {role === "admin" ? (
                 <Link
                   href="/admin/queue"
                   className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
                 >
-                  Admin queue
+                  Admin
                 </Link>
               ) : null}
-              <span className="text-xs text-ink-tertiary">
-                {session.user?.email}
-              </span>
+              {role === "admin" ? <ClientSwitcher /> : null}
               <SignOutButton />
             </>
           ) : (

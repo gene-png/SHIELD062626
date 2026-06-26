@@ -48,6 +48,9 @@ from app.models._common import TimestampMixin, UUIDPKMixin
 
 class CsfAssessmentStatus(enum.StrEnum):
     DRAFT = "draft"
+    # Client finished their self-assessment; awaiting admin review. Admins can
+    # still edit in this state; clients cannot.
+    SUBMITTED = "submitted"
     APPROVED = "approved"
     RELEASED = "released"
 
@@ -55,19 +58,19 @@ class CsfAssessmentStatus(enum.StrEnum):
 class CsfAssessment(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "csf_assessments"
     __table_args__ = (
-        UniqueConstraint(
-            "service_id", "version", name="uq_csf_assessments_service_version"
-        ),
+        UniqueConstraint("service_id", "version", name="uq_csf_assessments_service_version"),
     )
 
     service_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("services.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Work Order C3: an AI run sets this true; finalize/export clears it.
+    documents_stale: Mapped[bool] = mapped_column(default=False, nullable=False)
     status: Mapped[CsfAssessmentStatus] = mapped_column(
         SAEnum(
             CsfAssessmentStatus,
@@ -98,8 +101,8 @@ class CsfAnswer(UUIDPKMixin, TimestampMixin, Base):
     assessment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("csf_assessments.id", ondelete="CASCADE"), nullable=False
     )
-    client_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("client.id", ondelete="RESTRICT")
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     # NIST subcategory code (e.g. "GV.OC-01"). Plain string, validated at
@@ -113,6 +116,9 @@ class CsfAnswer(UUIDPKMixin, TimestampMixin, Base):
     evidence_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("artifacts.id", ondelete="SET NULL")
     )
+
+    # Work Order C2: a locked row is never changed by a Run-AI rerun.
+    locked: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     # Bookkeeping: who last touched the row.
     answered_by: Mapped[uuid.UUID | None] = mapped_column(

@@ -8,7 +8,6 @@ invisibility checks the other services have.
 from __future__ import annotations
 
 import os
-import uuid as _uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -34,9 +33,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     command.upgrade(cfg, "head")
 
     engine = create_engine(url, future=True)
-    TestSession = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     storage = LocalFilesystemStorage(tmp_path / "storage")
 
     from app.db.session import get_db
@@ -53,7 +50,24 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[_storage_dep] = lambda: storage
-    with TestClient(app) as c:
+    # Multi-tenant (post-0013): admin/reviewer callers must name an active
+    # tenant via X-Client-Id. Seed one tenant and bake the header into the
+    # test client so single-tenant-style tests resolve to it; client-role
+    # callers are pinned to their own client and ignore this header.
+    from app.models.client import Client as _Client
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="Test Tenant")
+    _seed.add(_tenant)
+    _seed.flush()
+    from app.models.client_domain import ClientDomain as _ClientDomain
+
+    _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
+    _seed.commit()
+    _cid = str(_tenant.id)
+    _seed.close()
+
+    with TestClient(app, headers={"X-Client-Id": _cid}) as c:
         yield c
 
 
@@ -70,9 +84,9 @@ def _register(c: TestClient, email: str) -> dict:
     return r.json()
 
 
-def _seed_and_release(c: TestClient, bearer: str) -> tuple[str, str]:
+def _seed_and_finalize(c: TestClient, bearer: str) -> tuple[str, str]:
     """Open service, create assessment, mark 5 techniques covered,
-    approve, finalize, release."""
+    approve, finalize. Deliverables are admin-only (Work Order A1)."""
     sr = c.post(
         "/attack/services",
         headers={"Authorization": f"Bearer {bearer}"},
@@ -99,58 +113,52 @@ def _seed_and_release(c: TestClient, bearer: str) -> tuple[str, str]:
         f"/attack/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer}"},
     )
+    assert fin.status_code == 201, fin.text
     deliv_id = fin.json()["id"]
-    rel = c.post(
-        f"/attack/deliverables/{deliv_id}/release",
-        headers={"Authorization": f"Bearer {bearer}"},
-    )
-    assert rel.status_code == 200, rel.text
     return svc_id, deliv_id
 
 
 @pytest.mark.unit
-def test_phase5_attack_acceptance_gate(app_client) -> None:
+def test_phase5_attack_admin_only_deliverable(app_client) -> None:
+    """Work Order A1: deliverables + heatmap are admin-only."""
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
 
-    svc_id, deliv_id = _seed_and_release(c, bearer_admin)
+    svc_id, deliv_id = _seed_and_finalize(c, bearer_admin)
 
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
+    # Admin reads the latest deliverable.
+    latest = c.get(
+        f"/attack/services/{svc_id}/deliverables/latest",
+        headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-    target = next(
-        (i for i in listing.json()["items"] if i["id"] == deliv_id), None
-    )
-    assert target is not None
-    assert target["service_id"] == svc_id
+    assert latest.status_code == 200
+    target = latest.json()
+    assert target["id"] == deliv_id
     assert "MITRE_ATTACK_Coverage" in target["pdf_filename"]
-    assert target["xlsx_filename"].endswith(".xlsx")
 
-    # Client can read the released assessment.
-    a = c.get(
-        f"/attack/services/{svc_id}/assessments/latest",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    assert a.status_code == 200
-    assert a.json()["status"] == "released"
-
-    # PDF + XLSX downloads work for the client.
+    # Admin downloads work.
     pdf = c.get(
         f"/artifacts/{target['pdf_artifact_id']}/download",
-        headers={"Authorization": f"Bearer {bearer_client}"},
+        headers={"Authorization": f"Bearer {bearer_admin}"},
     )
     assert pdf.status_code == 200
     assert pdf.content.startswith(b"%PDF-")
-    xlsx = c.get(
-        f"/artifacts/{target['xlsx_artifact_id']}/download",
+
+    # Client is blocked from the deliverable endpoint and artifact download.
+    blocked = c.get(
+        f"/attack/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_client}"},
     )
-    assert xlsx.status_code == 200
-    assert xlsx.content[:2] == b"PK"
+    assert blocked.status_code == 403
+    pdf_client = c.get(
+        f"/artifacts/{target['pdf_artifact_id']}/download",
+        headers={"Authorization": f"Bearer {bearer_client}"},
+    )
+    assert pdf_client.status_code == 404
 
     # Heatmap stays admin-only.
     h = c.get(
@@ -183,89 +191,46 @@ def test_finalize_requires_approved_assessment(app_client) -> None:
 
 
 @pytest.mark.unit
-def test_re_release_supersedes_prior(app_client) -> None:
+def test_attack_latest_returns_newest_version(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
-    client = _register(c, "client@example.com")
     bearer_admin = admin["tokens"]["access_token"]
-    bearer_client = client["tokens"]["access_token"]
 
-    svc_id, v1_id = _seed_and_release(c, bearer_admin)
+    svc_id, v1_id = _seed_and_finalize(c, bearer_admin)
     fin2 = c.post(
         f"/attack/services/{svc_id}/deliverables/finalize",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
     v2_id = fin2.json()["id"]
-    c.post(
-        f"/attack/deliverables/{v2_id}/release",
+    assert v1_id != v2_id
+
+    latest = c.get(
+        f"/attack/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    items = [i for i in listing.json()["items"] if i["service_id"] == svc_id]
-    assert len(items) == 1
-    assert items[0]["id"] == v2_id
-    assert v1_id != v2_id
+    assert latest.json()["id"] == v2_id
+    assert latest.json()["version"] == 2
 
 
 @pytest.mark.unit
-def test_unreleased_invisible_to_client(app_client) -> None:
+def test_attack_deliverable_invisible_to_client(app_client) -> None:
     c = app_client
     admin = _register(c, "admin@example.com")
     client = _register(c, "client@example.com")
+    c.headers["X-Client-Id"] = client["user"]["client_id"]
     bearer_admin = admin["tokens"]["access_token"]
     bearer_client = client["tokens"]["access_token"]
 
-    sr = c.post(
-        "/attack/services",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-        json={"kind": "attack_coverage", "title": "x"},
-    )
-    svc_id = sr.json()["id"]
-    a = c.post(
-        f"/attack/services/{svc_id}/assessments",
+    svc_id, _ = _seed_and_finalize(c, bearer_admin)
+    latest = c.get(
+        f"/attack/services/{svc_id}/deliverables/latest",
         headers={"Authorization": f"Bearer {bearer_admin}"},
     )
-    for cov in a.json()["coverage"][:3]:
-        c.patch(
-            f"/attack/coverage/{cov['id']}",
-            headers={"Authorization": f"Bearer {bearer_admin}"},
-            json={"status": "covered"},
-        )
-    c.post(
-        f"/attack/assessments/{a.json()['id']}/approve",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-    )
-    fin = c.post(
-        f"/attack/services/{svc_id}/deliverables/finalize",
-        headers={"Authorization": f"Bearer {bearer_admin}"},
-    )
-    deliv_id = fin.json()["id"]
-    listing = c.get(
-        "/deliverables",
-        headers={"Authorization": f"Bearer {bearer_client}"},
-    )
-    assert all(i["id"] != deliv_id for i in listing.json()["items"])
     pdf = c.get(
-        f"/artifacts/{fin.json()['pdf_artifact_id']}/download",
+        f"/artifacts/{latest.json()['pdf_artifact_id']}/download",
         headers={"Authorization": f"Bearer {bearer_client}"},
     )
     assert pdf.status_code == 404
-
-
-@pytest.mark.unit
-def test_unknown_release_404(app_client) -> None:
-    c = app_client
-    admin = _register(c, "admin@example.com")
-    bearer = admin["tokens"]["access_token"]
-    r = c.post(
-        f"/attack/deliverables/{_uuid.uuid4()}/release",
-        headers={"Authorization": f"Bearer {bearer}"},
-    )
-    assert r.status_code == 404
 
 
 @pytest.mark.unit

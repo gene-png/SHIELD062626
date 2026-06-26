@@ -81,8 +81,7 @@ def test_dod_xlsx_renders() -> None:
     assert "Score Summary" in wb.sheetnames
     ws = wb["Score Summary"]
     # Spot-check the framework cell.
-    rows = [(ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value)
-            for r in range(1, 8)]
+    rows = [(ws.cell(row=r, column=1).value, ws.cell(row=r, column=2).value) for r in range(1, 8)]
     fw = dict(rows).get("Framework")
     assert fw == "DoD ZT Reference Architecture"
 

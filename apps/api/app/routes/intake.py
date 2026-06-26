@@ -10,9 +10,10 @@ Master Spec §15 Phase 2:
     audit row, which the queue surfaces by querying it).
   - All copy in plain English (UI concern; API returns structured data).
 
-Single-tenant deployments have exactly one `client` row (Master Spec §2).
-GET /intake/me upserts that row on first call so the wizard always has a
-target to PATCH against. Subsequent PATCH/submit operate on the same row.
+Multi-tenant (post-0013): a CLIENT-role user is bound to their own
+`client_id` at registration. Intake reads/writes that specific Client
+row. Admins/reviewers (platform-wide) can run intake on a chosen client
+by passing X-Client-Id (the current_client dependency enforces this).
 """
 
 from __future__ import annotations
@@ -25,13 +26,22 @@ from sqlalchemy.orm import Session
 
 from app.audit import audit
 from app.db.session import get_db
-from app.dependencies import current_user
+from app.dependencies import current_client, current_user
 from app.models._common import utcnow
 from app.models.client import Client
+from app.models.csf_assessment import CsfAssessment
+from app.models.service import Service, ServiceKind
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
+from app.models.zt_assessment import ZtAssessment
 from app.notifications import notify_role
+from app.provisioning import (
+    SELF_ASSESSMENT_TYPES,
+    provision_self_assessment_service,
+)
 from app.schemas.intake import (
+    EngagementCreateRequest,
+    EngagementResponse,
     IntakePatchRequest,
     IntakeStateResponse,
     IntakeSubmitRequest,
@@ -53,29 +63,14 @@ def _validate_targets(item: ServiceRequestInput) -> None:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="NIST CSF requires a target tier and profile before submitting.",
             )
-    elif item.service_type in _ZT_SERVICE_TYPES:
-        if item.zt_target_stage is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Zero Trust requires a target stage before submitting.",
-            )
+    elif item.service_type in _ZT_SERVICE_TYPES and item.zt_target_stage is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Zero Trust requires a target stage before submitting.",
+        )
+
 
 router = APIRouter(prefix="/intake", tags=["intake"])
-
-
-def _singleton_client(db: Session) -> Client:
-    """Return the deployment's singleton client row, creating it if missing.
-
-    Per Master Spec §2 (single-tenant), there is exactly one client per
-    deployment. The first call to /intake creates a placeholder so the
-    wizard's auto-save can PATCH it without a separate "create" step.
-    """
-    row = db.execute(select(Client).limit(1)).scalar_one_or_none()
-    if row is None:
-        row = Client(legal_name="(pending intake)")
-        db.add(row)
-        db.flush()
-    return row
 
 
 def _apply_patch_to_client(client: Client, patch: IntakePatchRequest) -> None:
@@ -110,15 +105,19 @@ def _apply_profile_fields(user: User, fields: dict[str, str | None]) -> None:
 )
 def read_intake(
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
-    client = _singleton_client(db)
     requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )
-    db.commit()
     return IntakeStateResponse(
         client=client,
         service_requests=list(requests),
@@ -134,9 +133,9 @@ def read_intake(
 def patch_intake(
     body: IntakePatchRequest,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
-    client = _singleton_client(db)
     if client.intake_completed_at is not None:
         # Allow edits but reset the completion stamp so the admin queue
         # can re-surface the row as updated. The spec doesn't forbid
@@ -158,7 +157,12 @@ def patch_intake(
     db.refresh(user)
 
     requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )
@@ -178,6 +182,7 @@ def patch_intake(
 def submit_intake(
     body: IntakeSubmitRequest,
     user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> IntakeStateResponse:
     if not body.client.legal_name or body.client.legal_name == "(pending intake)":
@@ -186,7 +191,6 @@ def submit_intake(
             detail="Organization legal name is required to submit intake.",
         )
 
-    client = _singleton_client(db)
     _apply_patch_to_client(
         client,
         IntakePatchRequest(client=body.client),
@@ -210,6 +214,7 @@ def submit_intake(
         _validate_targets(item)
         sr = ServiceRequest(
             service_type=item.service_type,
+            client_id=client.id,
             requested_by=user.id,
             notes=item.notes,
             deadline=item.deadline,
@@ -219,6 +224,23 @@ def submit_intake(
         )
         db.add(sr)
         created_requests.append(sr)
+
+    # Auto-provision an engagement workspace + seeded draft assessment for each
+    # questionnaire-driven service (CSF / Zero Trust) so the client can start
+    # their self-assessment straight from the "received" screen. Skip kinds
+    # already provisioned (e.g. on a re-submit) to avoid duplicate workspaces.
+    db.flush()  # assign ids to the freshly-created requests
+    existing_kinds = set(
+        db.execute(select(Service.kind).where(Service.client_id == client.id)).scalars().all()
+    )
+    for sr in created_requests:
+        if sr.service_type not in SELF_ASSESSMENT_TYPES:
+            continue
+        kind = ServiceKind(sr.service_type.value)
+        if kind in existing_kinds:
+            continue
+        provision_self_assessment_service(db, sr, org_name=client.legal_name, actor_user_id=user.id)
+        existing_kinds.add(kind)
 
     client.intake_completed_at = utcnow()
 
@@ -251,7 +273,12 @@ def submit_intake(
     db.refresh(client)
 
     all_requests = (
-        db.execute(select(ServiceRequest).where(ServiceRequest.requested_by == user.id))
+        db.execute(
+            select(ServiceRequest).where(
+                ServiceRequest.client_id == client.id,
+                ServiceRequest.requested_by == user.id,
+            )
+        )
         .scalars()
         .all()
     )
@@ -260,3 +287,140 @@ def submit_intake(
         service_requests=list(all_requests),
         intake_completed_at=client.intake_completed_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Engagements (multiple independent self-assessment projects per client)
+# ---------------------------------------------------------------------------
+
+_ZT_KINDS = (ServiceKind.ZERO_TRUST_CISA, ServiceKind.ZERO_TRUST_DOD)
+
+
+def _latest_assessment_status(db: Session, svc: Service) -> str | None:
+    """Self-assessment lifecycle status for a CSF/ZT engagement, else None."""
+    if svc.kind == ServiceKind.NIST_CSF:
+        row = db.execute(
+            select(CsfAssessment.status)
+            .where(CsfAssessment.service_id == svc.id)
+            .order_by(CsfAssessment.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    elif svc.kind in _ZT_KINDS:
+        row = db.execute(
+            select(ZtAssessment.status)
+            .where(ZtAssessment.service_id == svc.id)
+            .order_by(ZtAssessment.version.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+    else:
+        return None
+    return getattr(row, "value", row) if row is not None else None
+
+
+def _engagement_response(db: Session, svc: Service) -> EngagementResponse:
+    return EngagementResponse(
+        service_id=svc.id,
+        service_type=ServiceType(svc.kind.value),
+        title=svc.title,
+        status=getattr(svc.status, "value", svc.status),
+        assessment_status=_latest_assessment_status(db, svc),
+        created_at=svc.created_at,
+    )
+
+
+@router.get(
+    "/engagements",
+    response_model=list[EngagementResponse],
+    summary="List the client's engagements (one per Service/workspace)",
+)
+def list_engagements(
+    _user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[EngagementResponse]:
+    svcs = (
+        db.execute(
+            select(Service)
+            .where(Service.client_id == client.id)
+            .order_by(Service.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [_engagement_response(db, s) for s in svcs]
+
+
+@router.post(
+    "/engagements",
+    response_model=EngagementResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start a new self-assessment engagement (repeatable; allows multiples)",
+)
+def create_engagement(
+    body: EngagementCreateRequest,
+    user: Annotated[User, Depends(current_user)],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> EngagementResponse:
+    if body.service_type not in SELF_ASSESSMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only NIST CSF and Zero Trust can be started as a self-service engagement.",
+        )
+    if not client.legal_name or client.legal_name == "(pending intake)":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Complete your organization profile in intake before starting an engagement.",
+        )
+
+    # Reuse the submit-time target validation (CSF needs tier+profile, ZT a stage).
+    _validate_targets(
+        ServiceRequestInput(
+            service_type=body.service_type,
+            csf_target_tier=body.csf_target_tier,
+            csf_profile=body.csf_profile,
+            zt_target_stage=body.zt_target_stage,
+        )
+    )
+
+    sr = ServiceRequest(
+        service_type=body.service_type,
+        client_id=client.id,
+        requested_by=user.id,
+        csf_target_tier=body.csf_target_tier,
+        csf_profile=body.csf_profile.value if body.csf_profile else None,
+        zt_target_stage=body.zt_target_stage,
+    )
+    db.add(sr)
+    db.flush()
+
+    # Intentionally NOT guarded by "kind already exists" — multiple engagements
+    # of the same type are allowed; each is its own project/workspace.
+    svc = provision_self_assessment_service(
+        db,
+        sr,
+        org_name=client.legal_name,
+        actor_user_id=user.id,
+        title=body.name,
+    )
+
+    audit(
+        db,
+        action="engagement.created",
+        target_type="service",
+        target_id=svc.id,
+        actor_user_id=user.id,
+        details={"service_type": body.service_type.value, "title": svc.title},
+    )
+    notify_role(
+        db,
+        role=UserRole.ADMIN,
+        event_type="engagement.created",
+        title="New engagement started",
+        body=f"{client.legal_name} started: {svc.title}. Review in the admin queue.",
+        link="/admin/queue",
+    )
+
+    db.commit()
+    db.refresh(svc)
+    return _engagement_response(db, svc)

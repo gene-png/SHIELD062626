@@ -80,9 +80,7 @@ def test_mid_tier_averages_label_to_repeatable() -> None:
     ],
 )
 def test_band_cutoffs(tiers: list[int], expected_label: str) -> None:
-    answers: dict[str, int | None] = {
-        SUBCATEGORIES[i].code: tier for i, tier in enumerate(tiers)
-    }
+    answers: dict[str, int | None] = {SUBCATEGORIES[i].code: tier for i, tier in enumerate(tiers)}
     assert compute(answers).overall_maturity_label == expected_label
 
 

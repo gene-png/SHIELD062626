@@ -17,6 +17,7 @@ import {
   CsfProxyError,
   fetchCatalog,
   fetchGapAnalysis,
+  fetchInterviewQuestionnaire,
   fetchLatestAssessment,
   fetchLatestDeliverable,
   fetchScore,
@@ -28,12 +29,17 @@ import type {
   CsfAssessment,
   CsfCatalog,
   CsfDeliverable,
+  CsfInterviewQuestion,
   CsfScoreSummary,
   GapAnalysis,
 } from "@/lib/csf/types";
 
+import { MessageThread } from "@/components/messages/MessageThread";
+import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+
 import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
+import { CsfPlaybookPanel } from "./CsfPlaybookPanel";
 import { CsfQuestionnaire } from "./CsfQuestionnaire";
 import { CsfScoreCard } from "./CsfScoreCard";
 
@@ -77,6 +83,9 @@ export function CsfWorkspace({
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
   const [targetTier, setTargetTier] = React.useState(3);
+  const [interviewByCode, setInterviewByCode] = React.useState<
+    Record<string, CsfInterviewQuestion[]>
+  >({});
 
   const answersByCode = React.useMemo(() => {
     const out: Record<string, CsfAnswer> = {};
@@ -111,6 +120,20 @@ export function CsfWorkspace({
     } catch (err) {
       setLoadError(describeError(err));
       return;
+    }
+    try {
+      const q = await fetchInterviewQuestionnaire(serviceId);
+      if (q) {
+        const map: Record<string, CsfInterviewQuestion[]> = {};
+        for (const question of q.questions) {
+          for (const code of question.csf_subcategories) {
+            (map[code] ??= []).push(question);
+          }
+        }
+        setInterviewByCode(map);
+      }
+    } catch {
+      // Non-blocking: interview prompts are supplemental context.
     }
     try {
       const a = await fetchLatestAssessment(serviceId);
@@ -231,15 +254,19 @@ export function CsfWorkspace({
                 assessment.status === "approved" ||
                 assessment.status === "released"
                   ? "success"
-                  : "info"
+                  : assessment.status === "submitted"
+                    ? "warning"
+                    : "info"
               }
               withDot
             >
               {assessment.status === "draft"
                 ? `Draft v${assessment.version}`
-                : assessment.status === "approved"
-                  ? `Approved v${assessment.version}`
-                  : `Released v${assessment.version}`}
+                : assessment.status === "submitted"
+                  ? `Submitted v${assessment.version}`
+                  : assessment.status === "approved"
+                    ? `Approved v${assessment.version}`
+                    : `Released v${assessment.version}`}
             </StatusPill>
           ) : (
             <StatusPill tone="neutral" withDot>
@@ -250,7 +277,11 @@ export function CsfWorkspace({
             <button
               type="button"
               onClick={() => void onApprove()}
-              disabled={busy !== null || assessment.status !== "draft"}
+              disabled={
+                busy !== null ||
+                (assessment.status !== "draft" &&
+                  assessment.status !== "submitted")
+              }
               className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {assessment.status === "approved"
@@ -259,7 +290,9 @@ export function CsfWorkspace({
                   ? "Released"
                   : busy === "approve"
                     ? "Approving…"
-                    : "Approve"}
+                    : assessment.status === "submitted"
+                      ? "Approve client inputs"
+                      : "Approve"}
             </button>
           ) : (
             <button
@@ -273,6 +306,17 @@ export function CsfWorkspace({
           )}
         </div>
       </header>
+
+      {assessment?.status === "submitted" ? (
+        <div className="rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning-fg">
+          <span className="font-semibold">
+            Client self-assessment submitted.
+          </span>{" "}
+          Review and edit their answers below for completeness and accuracy,
+          then <span className="font-medium">Approve client inputs</span> and
+          send for evaluation in the deliverable section.
+        </div>
+      ) : null}
 
       {loadError ? (
         <Card>
@@ -299,11 +343,14 @@ export function CsfWorkspace({
       ) : (
         <>
           <CsfScoreCard score={score} />
+          <CsfPlaybookPanel serviceId={serviceId} readOnly={readOnly} />
+          <MessageThread serviceId={serviceId} />
           <CsfGapList
             analysis={gap}
             targetTier={targetTier}
             onChangeTargetTier={(t) => void onChangeTargetTier(t)}
           />
+          <StaleDocsNudge stale={assessment.documents_stale} />
           <CsfDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}
@@ -313,6 +360,7 @@ export function CsfWorkspace({
           <CsfQuestionnaire
             catalog={catalog}
             answersByCode={answersByCode}
+            questionsByCode={interviewByCode}
             readOnly={readOnly}
             onAnswerUpdate={onAnswerUpdate}
           />

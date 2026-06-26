@@ -6,7 +6,14 @@ import type {
   CsfAssessment,
   CsfCatalog,
   CsfDeliverable,
+  CsfDimensionScore,
+  CsfDimensionScorePatch,
+  CsfInterviewQuestionnaire,
+  CsfPlaybookExport,
+  CsfProfile,
+  CsfRunAiResponse,
   CsfScoreSummary,
+  EnterpriseProfile,
   GapAnalysis,
 } from "./types";
 
@@ -91,6 +98,58 @@ export async function patchAnswer(
   });
 }
 
+export async function fetchInterviewQuestionnaire(
+  serviceId: string,
+): Promise<CsfInterviewQuestionnaire | null> {
+  try {
+    return await jsonRequest<CsfInterviewQuestionnaire>(
+      `/api/proxy/csf/services/${serviceId}/questionnaire`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+// --- Client self-assessment (the client fills + submits their own draft) ---
+
+export async function fetchSelfAssessment(
+  serviceId: string,
+): Promise<CsfAssessment | null> {
+  try {
+    return await jsonRequest<CsfAssessment>(
+      `/api/proxy/csf/services/${serviceId}/self-assessment`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function patchSelfAssessmentAnswer(
+  answerId: string,
+  patch: CsfAnswerPatch,
+): Promise<CsfAnswer> {
+  return jsonRequest<CsfAnswer>(
+    `/api/proxy/csf/self-assessment/answers/${answerId}`,
+    { method: "PATCH", body: patch },
+  );
+}
+
+export async function submitSelfAssessment(
+  serviceId: string,
+  body: { target_tier?: number },
+): Promise<CsfAssessment> {
+  return jsonRequest<CsfAssessment>(
+    `/api/proxy/csf/services/${serviceId}/self-assessment/submit`,
+    { method: "POST", body },
+  );
+}
+
 export async function approveAssessment(
   assessmentId: string,
 ): Promise<CsfAssessment> {
@@ -171,4 +230,64 @@ export async function fetchGapAnalysis(
     }
     throw err;
   }
+}
+
+// --- Full-Playbook tiered Working Profile (Work Order D4) ---
+
+export async function seedProfiles(
+  serviceId: string,
+  tiers: string[] = ["high", "moderate", "low"],
+): Promise<string[]> {
+  return jsonRequest<string[]>(
+    `/api/proxy/csf/services/${serviceId}/profiles/seed`,
+    { method: "POST", body: { tiers } },
+  );
+}
+
+export async function fetchProfile(
+  serviceId: string,
+  tier: string,
+): Promise<CsfProfile> {
+  return jsonRequest<CsfProfile>(
+    `/api/proxy/csf/services/${serviceId}/profile/${tier}`,
+  );
+}
+
+export async function patchDimensionScore(
+  scoreId: string,
+  patch: CsfDimensionScorePatch,
+): Promise<CsfDimensionScore> {
+  return jsonRequest<CsfDimensionScore>(
+    `/api/proxy/csf/dimension-scores/${scoreId}`,
+    { method: "PATCH", body: patch },
+  );
+}
+
+export async function fetchEnterpriseProfile(
+  serviceId: string,
+): Promise<EnterpriseProfile | null> {
+  try {
+    return await jsonRequest<EnterpriseProfile>(
+      `/api/proxy/csf/services/${serviceId}/enterprise-profile`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function runCsfAi(serviceId: string): Promise<CsfRunAiResponse> {
+  return jsonRequest<CsfRunAiResponse>(
+    `/api/proxy/csf/services/${serviceId}/run-ai`,
+    { method: "POST" },
+  );
+}
+
+export async function exportPlaybook(
+  serviceId: string,
+): Promise<CsfPlaybookExport> {
+  return jsonRequest<CsfPlaybookExport>(
+    `/api/proxy/csf/services/${serviceId}/playbook/export`,
+    { method: "POST" },
+  );
 }

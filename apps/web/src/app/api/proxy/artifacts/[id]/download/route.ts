@@ -4,9 +4,11 @@
  * session token and streams the body + content-disposition back.
  */
 
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
+import { ACTIVE_CLIENT_COOKIE } from "@/lib/api";
 import { authOptions } from "@/lib/auth/options";
 
 const BASE_URL = process.env.API_BASE_URL ?? "http://api:8000";
@@ -23,8 +25,17 @@ export async function GET(
       { status: 401 },
     );
   }
+  // Hand-rolled binary proxy, so forward the active-client cookie as
+  // X-Client-Id ourselves (the backend download guard is tenant-scoped).
+  const reqHeaders: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+  const activeClient = cookies().get(ACTIVE_CLIENT_COOKIE)?.value;
+  if (activeClient) {
+    reqHeaders["X-Client-Id"] = activeClient;
+  }
   const upstream = await fetch(`${BASE_URL}/artifacts/${params.id}/download`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: reqHeaders,
     cache: "no-store",
   });
   if (!upstream.ok) {

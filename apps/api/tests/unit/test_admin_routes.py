@@ -41,6 +41,20 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
 
+    # Work Order B1: a client user can only self-register against a pre-approved
+    # org domain. Seed a "(pending intake)" client + the example.com domain so
+    # the second registrant in these tests auto-joins it.
+    from app.models.client import Client as _Client
+    from app.models.client_domain import ClientDomain as _ClientDomain
+
+    _seed = TestSession()
+    _tenant = _Client(legal_name="(pending intake)")
+    _seed.add(_tenant)
+    _seed.flush()
+    _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
+    _seed.commit()
+    _seed.close()
+
     with TestClient(app) as c:
         yield c
 
@@ -129,13 +143,15 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
     admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
     client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
 
+    # tech_debt is NOT auto-provisioned at intake (only CSF/ZT are), so it still
+    # goes through the manual admin publish flow.
     app_client.post(
         "/intake/submit",
         headers={"Authorization": f"Bearer {client_bearer}"},
         json={
             "client": {"legal_name": "Atlas Defense Solutions"},
             "service_requests": [
-                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+                {"service_type": "tech_debt"},
                 {"service_type": "consultation"},
             ],
         },
@@ -145,23 +161,23 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
         "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
     ).json()
     by_type = {s["service_type"]: s for s in queue["service_requests"]}
-    csf_id = by_type["nist_csf"]["id"]
+    td_id = by_type["tech_debt"]["id"]
     con_id = by_type["consultation"]["id"]
 
-    # Publishing the CSF request opens a live workspace.
+    # Publishing the tech-debt request opens a live workspace.
     r = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {admin_bearer}"},
     )
     assert r.status_code == 200, r.text
     pub = r.json()
     assert pub["already_fulfilled"] is False
-    assert pub["service_type"] == "nist_csf"
+    assert pub["service_type"] == "tech_debt"
     service_id = pub["service_id"]
 
     # Idempotent: re-publishing returns the same workspace.
     r2 = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {admin_bearer}"},
     )
     assert r2.status_code == 200
@@ -179,15 +195,93 @@ def test_admin_can_publish_service_request(app_client: TestClient) -> None:
     queue2 = app_client.get(
         "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
     ).json()
-    csf_row = next(s for s in queue2["service_requests"] if s["service_type"] == "nist_csf")
-    assert csf_row["fulfilled_service_id"] == service_id
+    td_row = next(s for s in queue2["service_requests"] if s["service_type"] == "tech_debt")
+    assert td_row["fulfilled_service_id"] == service_id
 
     # Non-admins cannot publish.
     r4 = app_client.post(
-        f"/admin/service-requests/{csf_id}/fulfill",
+        f"/admin/service-requests/{td_id}/fulfill",
         headers={"Authorization": f"Bearer {client_bearer}"},
     )
     assert r4.status_code == 403
+
+
+@pytest.mark.unit
+def test_get_service_resolves_owning_client(app_client: TestClient) -> None:
+    admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
+    client_body = _register(app_client, "client@example.com")
+    client_bearer = client_body["tokens"]["access_token"]
+    client_id = client_body["user"]["client_id"]
+
+    app_client.post(
+        "/intake/submit",
+        headers={"Authorization": f"Bearer {client_bearer}"},
+        json={
+            "client": {"legal_name": "Atlas Defense Solutions"},
+            "service_requests": [
+                {"service_type": "nist_csf", "csf_target_tier": 3, "csf_profile": "MOD"},
+            ],
+        },
+    )
+    queue = app_client.get(
+        "/admin/intake-queue", headers={"Authorization": f"Bearer {admin_bearer}"}
+    ).json()
+    csf_id = next(s["id"] for s in queue["service_requests"] if s["service_type"] == "nist_csf")
+    service_id = app_client.post(
+        f"/admin/service-requests/{csf_id}/fulfill",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    ).json()["service_id"]
+
+    # The workspace shell uses this lookup to discover the owning tenant.
+    r = app_client.get(
+        f"/admin/services/{service_id}",
+        headers={"Authorization": f"Bearer {admin_bearer}"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == service_id
+    assert body["client_id"] == client_id
+    assert body["kind"] == "nist_csf"
+
+    # Unknown service id -> 404.
+    assert (
+        app_client.get(
+            "/admin/services/00000000-0000-0000-0000-000000000000",
+            headers={"Authorization": f"Bearer {admin_bearer}"},
+        ).status_code
+        == 404
+    )
+
+    # Non-admins cannot look up services.
+    assert (
+        app_client.get(
+            f"/admin/services/{service_id}",
+            headers={"Authorization": f"Bearer {client_bearer}"},
+        ).status_code
+        == 403
+    )
+
+
+@pytest.mark.unit
+def test_ai_status_reports_fixture_mode(app_client: TestClient) -> None:
+    admin_bearer = _register(app_client, "admin@example.com")["tokens"]["access_token"]
+    client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
+
+    # Tests run in fixture mode -> AI is not live-ready, and no key leaks.
+    r = app_client.get("/admin/ai-status", headers={"Authorization": f"Bearer {admin_bearer}"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["mode"] == "fixture"
+    assert body["ready"] is False
+    assert "api_key" not in body and "anthropic_api_key" not in body
+
+    # Admin-only.
+    assert (
+        app_client.get(
+            "/admin/ai-status", headers={"Authorization": f"Bearer {client_bearer}"}
+        ).status_code
+        == 403
+    )
 
 
 @pytest.mark.unit

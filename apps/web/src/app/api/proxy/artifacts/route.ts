@@ -5,9 +5,11 @@
  * the access token.
  */
 
+import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
+import { ACTIVE_CLIENT_COOKIE } from "@/lib/api";
 import { authOptions } from "@/lib/auth/options";
 
 const BASE_URL = process.env.API_BASE_URL ?? "http://api:8000";
@@ -22,6 +24,24 @@ async function bearerOrUnauthorized(): Promise<string | NextResponse> {
     );
   }
   return token;
+}
+
+/**
+ * Bearer + tenant headers for the upstream call. This route hand-rolls the
+ * proxy (multipart can't go through `lib/api.ts`), so we forward the active
+ * client cookie as X-Client-Id ourselves - otherwise admin/reviewer uploads
+ * hit the backend's `current_client` guard and 400. Don't set Content-Type:
+ * `fetch` derives the multipart boundary from the FormData body.
+ */
+function upstreamHeaders(bearer: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${bearer}`,
+  };
+  const activeClient = cookies().get(ACTIVE_CLIENT_COOKIE)?.value;
+  if (activeClient) {
+    headers["X-Client-Id"] = activeClient;
+  }
+  return headers;
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -42,7 +62,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const upstream = await fetch(`${BASE_URL}/artifacts`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${bearer}` },
+    headers: upstreamHeaders(bearer),
     body: form,
   });
   const body = await upstream.text();
@@ -66,7 +86,7 @@ export async function GET(): Promise<NextResponse> {
   const bearer = await bearerOrUnauthorized();
   if (bearer instanceof NextResponse) return bearer;
   const upstream = await fetch(`${BASE_URL}/artifacts`, {
-    headers: { Authorization: `Bearer ${bearer}` },
+    headers: upstreamHeaders(bearer),
     cache: "no-store",
   });
   const body = await upstream.text();
