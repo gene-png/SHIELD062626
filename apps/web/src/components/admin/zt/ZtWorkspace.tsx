@@ -39,6 +39,7 @@ import { MessageThread } from "@/components/messages/MessageThread";
 
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
+import { ZtRoadmapCard } from "./ZtRoadmapCard";
 import { ZtQuestionnaire } from "./ZtQuestionnaire";
 import { ZtScoreCard } from "./ZtScoreCard";
 
@@ -395,6 +396,7 @@ export function ZtWorkspace({
             onChangeTargetStage={(s) => void onChangeTargetStage(s)}
             stages={catalog.stages}
           />
+          <ZtRoadmapCard analysis={gap} />
           <ZtDeliverableCard
             serviceId={serviceId}
             assessmentStatus={assessment.status}
