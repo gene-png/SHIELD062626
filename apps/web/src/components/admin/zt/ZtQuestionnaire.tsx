@@ -123,15 +123,40 @@ export function ZtQuestionnaire({
                         {cap.outcome}
                       </p>
                     </div>
-                    <ZtStagePicker
-                      value={ans.maturity_stage}
-                      stages={catalog.stages}
-                      disabled={readOnly}
-                      ariaLabel={`Maturity stage for ${cap.code}`}
-                      onChange={(next) => {
-                        void onAnswerUpdate(ans.id, { maturity_stage: next });
-                      }}
-                    />
+                    <div className="flex flex-col items-end gap-2">
+                      <ZtStagePicker
+                        value={ans.maturity_stage}
+                        stages={catalog.stages}
+                        disabled={readOnly}
+                        ariaLabel={`Maturity stage for ${cap.code}`}
+                        onChange={(next) => {
+                          void onAnswerUpdate(ans.id, { maturity_stage: next });
+                        }}
+                      />
+                      <label className="flex items-center gap-1 text-xs text-ink-tertiary">
+                        Target
+                        <select
+                          value={ans.target_stage ?? ""}
+                          disabled={readOnly}
+                          aria-label={`Target stage for ${cap.code}`}
+                          onChange={(e) =>
+                            void onAnswerUpdate(ans.id, {
+                              target_stage: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            })
+                          }
+                          className="rounded-md border border-border bg-surface-card px-1.5 py-1 text-xs text-ink-primary"
+                        >
+                          <option value="">—</option>
+                          {catalog.stages.map((s) => (
+                            <option key={s.stage} value={s.stage}>
+                              L{s.stage}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                   </div>
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-medium text-ink-tertiary hover:text-ink-secondary">
