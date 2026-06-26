@@ -39,6 +39,8 @@ export interface ZtAnswer {
   assessment_id: string;
   capability_code: string;
   maturity_stage: number | null;
+  target_stage?: number | null;
+  locked?: boolean;
   notes: string | null;
   evidence_artifact_id: string | null;
   answered_by: string | null;
@@ -59,8 +61,25 @@ export interface ZtAssessment {
 
 export interface ZtAnswerPatch {
   maturity_stage?: number | null;
+  target_stage?: number | null;
+  locked?: boolean;
   notes?: string;
   evidence_artifact_id?: string | null;
+}
+
+export interface ZtCapabilityChange {
+  capability_code: string;
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface ZtRunAiResponse {
+  changed: ZtCapabilityChange[];
+  answers: ZtAnswer[];
+  pillar_narratives: Record<string, string>;
+  executive_summary: string | null;
+  roadmap_summary: string | null;
 }
 
 export interface PillarScore {
@@ -108,6 +127,18 @@ export interface GapAnalysis {
   unscored_count: number;
   gap_count_by_pillar: Record<string, number>;
   gaps: GapItem[];
+  roadmap?: RoadmapEntry[];
+}
+
+export interface RoadmapEntry {
+  month: number;
+  code: string;
+  pillar_code: string;
+  pillar_name: string;
+  name: string;
+  current_stage: number;
+  target_stage: number;
+  priority_score: number;
 }
 
 export interface ZtDeliverable {

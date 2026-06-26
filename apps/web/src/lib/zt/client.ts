@@ -8,6 +8,7 @@ import type {
   ZtCatalog,
   ZtDeliverable,
   ZtFramework,
+  ZtRunAiResponse,
   ZtScoreSummary,
 } from "./types";
 
@@ -126,6 +127,13 @@ export async function submitSelfAssessment(
   return jsonRequest<ZtAssessment>(
     `/api/proxy/zt/services/${serviceId}/self-assessment/submit`,
     { method: "POST", body },
+  );
+}
+
+export async function runZtAi(serviceId: string): Promise<ZtRunAiResponse> {
+  return jsonRequest<ZtRunAiResponse>(
+    `/api/proxy/zt/services/${serviceId}/run-ai`,
+    { method: "POST" },
   );
 }
 
