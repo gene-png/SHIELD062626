@@ -24,29 +24,32 @@ export async function PublicHeader(): Promise<JSX.Element> {
           {session ? (
             <>
               <Link
-                href="/intake"
-                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
-              >
-                Intake
-              </Link>
-              <Link
                 href="/assessments"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >
-                Assessments
+                My Assessments
+              </Link>
+              <Link
+                href="/messages"
+                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+              >
+                Messages
+              </Link>
+              <Link
+                href="/account"
+                className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+              >
+                Account
               </Link>
               {role === "admin" ? (
                 <Link
                   href="/admin/queue"
                   className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
                 >
-                  Admin queue
+                  Admin
                 </Link>
               ) : null}
               {role === "admin" ? <ClientSwitcher /> : null}
-              <span className="text-xs text-ink-tertiary">
-                {session.user?.email}
-              </span>
               <SignOutButton />
             </>
           ) : (
