@@ -82,7 +82,13 @@ def test_playbook_export_produces_downloadable_xlsx(app_client) -> None:
     assert ex.status_code == 200, ex.text
     body = ex.json()
     assert body["xlsx_filename"].endswith(".xlsx")
+    assert body["pdf_filename"].endswith(".pdf")
+    assert body["docx_filename"].endswith(".docx")
 
-    dl = c.get(f"/artifacts/{body['xlsx_artifact_id']}/download", headers={**h, "X-Client-Id": cid})
-    assert dl.status_code == 200
-    assert dl.content[:2] == b"PK"  # a real xlsx (zip) file
+    dh = {**h, "X-Client-Id": cid}
+    xlsx = c.get(f"/artifacts/{body['xlsx_artifact_id']}/download", headers=dh)
+    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+    pdf = c.get(f"/artifacts/{body['pdf_artifact_id']}/download", headers=dh)
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+    docx = c.get(f"/artifacts/{body['docx_artifact_id']}/download", headers=dh)
+    assert docx.status_code == 200 and docx.content[:2] == b"PK"

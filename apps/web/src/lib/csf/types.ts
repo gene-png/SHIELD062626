@@ -224,4 +224,8 @@ export interface CsfRunAiResponse {
 export interface CsfPlaybookExport {
   xlsx_artifact_id: string;
   xlsx_filename: string;
+  pdf_artifact_id: string;
+  pdf_filename: string;
+  docx_artifact_id: string;
+  docx_filename: string;
 }

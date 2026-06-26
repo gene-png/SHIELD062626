@@ -1185,23 +1185,34 @@ def export_playbook(
         if trows:
             tier_profiles[tier] = [_score_response(r) for r in trows]
 
+    from app.docx_export import DOCX_MIME
+
     org = None if client.legal_name == "(pending intake)" else client.legal_name
-    data = csf_playbook_export.render_xlsx(
-        client_name=org or "Client",
-        version=a.version,
-        enterprise_rows=enterprise_rows,
-        tier_profiles=tier_profiles,
-    )
-    art = _write_artifact(
-        db,
-        storage=storage,
-        user=user,
-        client_id=client.id,
-        filename=f"CSF_Playbook_v{a.version}.xlsx",
-        mime_type=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    name = org or "Client"
+    base = f"CSF_Playbook_v{a.version}"
+
+    xlsx = _write_artifact(
+        db, storage=storage, user=user, client_id=client.id,
+        filename=f"{base}.xlsx",
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        data=csf_playbook_export.render_xlsx(
+            client_name=name, version=a.version,
+            enterprise_rows=enterprise_rows, tier_profiles=tier_profiles,
         ),
-        data=data,
+    )
+    pdf = _write_artifact(
+        db, storage=storage, user=user, client_id=client.id,
+        filename=f"{base}.pdf", mime_type="application/pdf",
+        data=csf_playbook_export.render_pdf(
+            client_name=name, version=a.version, enterprise_rows=enterprise_rows,
+        ),
+    )
+    docx = _write_artifact(
+        db, storage=storage, user=user, client_id=client.id,
+        filename=f"{base}.docx", mime_type=DOCX_MIME,
+        data=csf_playbook_export.render_docx(
+            client_name=name, version=a.version, enterprise_rows=enterprise_rows,
+        ),
     )
     audit(
         db,
@@ -1212,7 +1223,11 @@ def export_playbook(
         details={"version": a.version},
     )
     db.commit()
-    return CsfPlaybookExportResponse(xlsx_artifact_id=art.id, xlsx_filename=art.title)
+    return CsfPlaybookExportResponse(
+        xlsx_artifact_id=xlsx.id, xlsx_filename=xlsx.title,
+        pdf_artifact_id=pdf.id, pdf_filename=pdf.title,
+        docx_artifact_id=docx.id, docx_filename=docx.title,
+    )
 
 
 # ---------------------------------------------------------------------------

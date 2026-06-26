@@ -305,7 +305,11 @@ class CsfRunAiResponse(BaseModel):
 
 
 class CsfPlaybookExportResponse(BaseModel):
-    """The stored CSF Playbook workbook artifact (Work Order D4)."""
+    """The stored CSF Playbook artifacts — XLSX workbook + PDF/Word report (D4)."""
 
     xlsx_artifact_id: uuid.UUID
     xlsx_filename: str
+    pdf_artifact_id: uuid.UUID
+    pdf_filename: str
+    docx_artifact_id: uuid.UUID
+    docx_filename: str
