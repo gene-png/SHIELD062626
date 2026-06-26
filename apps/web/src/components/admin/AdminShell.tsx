@@ -20,6 +20,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "Intake Queue", href: "/admin/queue" },
   { label: "Active Work", href: "/admin/active" },
+  { label: "Risk Register", href: "/admin/risk-register" },
   { label: "Messages", href: "/admin/messages" },
   { label: "Management", href: "/admin/management" },
 ];
