@@ -180,6 +180,42 @@ def test_other_client_cannot_read_thread(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_inbox_summarizes_threads_and_unread(app_client: TestClient) -> None:
+    c = app_client
+    admin_bearer, client_bearer, cid, svc_id = _setup(c)
+    ah = {"Authorization": f"Bearer {admin_bearer}", "X-Client-Id": cid}
+    ch = {"Authorization": f"Bearer {client_bearer}"}
+
+    c.post(f"/services/{svc_id}/messages", headers=ah, json={"body": "First"})
+    c.post(f"/services/{svc_id}/messages", headers=ah, json={"body": "Second"})
+
+    inbox = c.get("/messages/inbox", headers=ch)
+    assert inbox.status_code == 200, inbox.text
+    body = inbox.json()
+    assert body["unread_total"] == 2
+    thread = next(t for t in body["threads"] if t["service_id"] == svc_id)
+    assert thread["total"] == 2
+    assert thread["unread"] == 2
+    assert thread["last_preview"] == "Second"
+
+    # Reading the thread marks the counterparty messages read -> 0 unread.
+    c.get(f"/services/{svc_id}/messages", headers=ch)
+    assert c.get("/messages/inbox", headers=ch).json()["unread_total"] == 0
+
+
+@pytest.mark.unit
+def test_inbox_empty_when_no_messages(app_client: TestClient) -> None:
+    c = app_client
+    admin_bearer, _, cid, _ = _setup(c)
+    r = c.get(
+        "/messages/inbox",
+        headers={"Authorization": f"Bearer {admin_bearer}", "X-Client-Id": cid},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"threads": [], "unread_total": 0}
+
+
+@pytest.mark.unit
 def test_unknown_service_404(app_client: TestClient) -> None:
     c = app_client
     admin_bearer, _, cid, _ = _setup(c)

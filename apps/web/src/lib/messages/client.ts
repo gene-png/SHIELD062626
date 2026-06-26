@@ -14,6 +14,21 @@ export interface MessageList {
   messages: MessageRow[];
 }
 
+export interface InboxThread {
+  service_id: string;
+  service_title: string;
+  service_kind: string;
+  total: number;
+  unread: number;
+  last_preview: string | null;
+  last_at: string | null;
+}
+
+export interface InboxResponse {
+  threads: InboxThread[];
+  unread_total: number;
+}
+
 export class MessagesProxyError extends Error {
   constructor(
     public readonly status: number,
@@ -60,6 +75,10 @@ export async function postMessage(
     method: "POST",
     body: { body },
   });
+}
+
+export async function fetchInbox(): Promise<InboxResponse> {
+  return jsonRequest<InboxResponse>("/api/proxy/messages/inbox");
 }
 
 export function describeMessagesError(err: unknown): string {

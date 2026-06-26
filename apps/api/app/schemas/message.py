@@ -26,3 +26,20 @@ class MessageListResponse(BaseModel):
 
 class MessageCreateRequest(BaseModel):
     body: str
+
+
+class InboxThread(BaseModel):
+    """One service's thread summary for the active client (Work Order C7)."""
+
+    service_id: uuid.UUID
+    service_title: str
+    service_kind: str
+    total: int
+    unread: int
+    last_preview: str | None
+    last_at: datetime | None
+
+
+class InboxResponse(BaseModel):
+    threads: list[InboxThread]
+    unread_total: int
