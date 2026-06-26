@@ -27,6 +27,36 @@ const ALL_STATUSES: CoverageStatus[] = [
   "not_applicable",
 ];
 
+function ToolRow({
+  label,
+  tools,
+}: {
+  label: string;
+  tools: string[] | null | undefined;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium uppercase tracking-wide text-ink-tertiary">
+        {label}
+      </span>
+      {tools && tools.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {tools.map((t) => (
+            <span
+              key={t}
+              className="rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-ink-secondary"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-ink-tertiary">—</span>
+      )}
+    </div>
+  );
+}
+
 export interface AttackTechniquePanelProps {
   technique: CatalogTechnique | null;
   coverage: AttackCoverageRow | null;
@@ -122,6 +152,30 @@ export function AttackTechniquePanel({
             }}
             className="w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-none"
           />
+        </label>
+
+        <div className="grid grid-cols-1 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-3">
+          <ToolRow label="Detection" tools={coverage?.detection_tools} />
+          <ToolRow label="Prevention" tools={coverage?.prevention_tools} />
+          <ToolRow label="Response" tools={coverage?.response_tools} />
+        </div>
+        {coverage?.rationale ? (
+          <p className="text-sm text-ink-secondary">
+            <span className="font-medium text-ink-primary">Rationale: </span>
+            {coverage.rationale}
+          </p>
+        ) : null}
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={coverage?.locked ?? false}
+            disabled={readOnly || !coverage}
+            onChange={(e) => void onPatch({ locked: e.currentTarget.checked })}
+          />
+          <span className="text-ink-secondary">
+            Lock this technique against AI reruns
+          </span>
         </label>
       </CardBody>
     </Card>
