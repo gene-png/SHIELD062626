@@ -34,6 +34,8 @@ import type {
   TacticHeatmapEntry,
 } from "@/lib/attack/types";
 
+import { MessageThread } from "@/components/messages/MessageThread";
+
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
 import { AttackMatrix } from "./AttackMatrix";
@@ -373,6 +375,7 @@ export function AttackWorkspace({
             deliverable={deliverable}
             onChange={setDeliverable}
           />
+          <MessageThread serviceId={serviceId} />
           <AttackTechniquePanel
             technique={selectedTechnique}
             coverage={selectedCoverage}

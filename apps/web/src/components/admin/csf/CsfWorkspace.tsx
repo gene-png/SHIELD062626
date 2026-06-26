@@ -34,6 +34,8 @@ import type {
   GapAnalysis,
 } from "@/lib/csf/types";
 
+import { MessageThread } from "@/components/messages/MessageThread";
+
 import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
 import { CsfPlaybookPanel } from "./CsfPlaybookPanel";
@@ -341,6 +343,7 @@ export function CsfWorkspace({
         <>
           <CsfScoreCard score={score} />
           <CsfPlaybookPanel serviceId={serviceId} readOnly={readOnly} />
+          <MessageThread serviceId={serviceId} />
           <CsfGapList
             analysis={gap}
             targetTier={targetTier}

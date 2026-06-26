@@ -35,6 +35,8 @@ import type {
   ZtScoreSummary,
 } from "@/lib/zt/types";
 
+import { MessageThread } from "@/components/messages/MessageThread";
+
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
 import { ZtQuestionnaire } from "./ZtQuestionnaire";
@@ -386,6 +388,7 @@ export function ZtWorkspace({
             </CardBody>
           </Card>
           <ZtScoreCard score={score} />
+          <MessageThread serviceId={serviceId} />
           <ZtGapList
             analysis={gap}
             targetStage={targetStage}

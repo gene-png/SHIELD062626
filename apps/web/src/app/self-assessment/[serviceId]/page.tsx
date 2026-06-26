@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
+import { MessageThread } from "@/components/messages/MessageThread";
 import { CsfSelfAssessment } from "@/components/self-assessment/CsfSelfAssessment";
 import { ZtSelfAssessment } from "@/components/self-assessment/ZtSelfAssessment";
 import { PublicFooter } from "@/components/site/PublicFooter";
@@ -86,6 +87,12 @@ export default async function SelfAssessmentPage({
             </CardBody>
           </Card>
         )}
+
+        {copy ? (
+          <div className="mt-8">
+            <MessageThread serviceId={params.serviceId} />
+          </div>
+        ) : null}
       </main>
       <PublicFooter />
     </>
