@@ -16,7 +16,9 @@ export interface ZtRoadmapCardProps {
   analysis: GapAnalysis | null;
 }
 
-export function ZtRoadmapCard({ analysis }: ZtRoadmapCardProps): JSX.Element | null {
+export function ZtRoadmapCard({
+  analysis,
+}: ZtRoadmapCardProps): JSX.Element | null {
   const byMonth = React.useMemo(() => {
     const map = new Map<number, RoadmapEntry[]>();
     for (const r of analysis?.roadmap ?? []) {

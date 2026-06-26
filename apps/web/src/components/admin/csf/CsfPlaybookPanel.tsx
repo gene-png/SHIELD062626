@@ -190,116 +190,120 @@ export function CsfPlaybookPanel({
 
   return (
     <div className="flex flex-col gap-6">
-    <Card>
-      <CardHeader>
-        <CardTitle>Full Playbook — Working Profiles</CardTitle>
-        <CardDescription>
-          Tiered (HIGH / MODERATE / LOW) five-dimension scoring rolled up to one
-          Enterprise level per subcategory via the weighted-floor rules. AI
-          suggests the dimensions; code computes every level, the cap, and the
-          roll-up.
-        </CardDescription>
-      </CardHeader>
-      <CardBody className="flex flex-col gap-4">
-        {error ? (
-          <p className="text-sm text-status-danger-fg" role="alert">
-            {error}
-          </p>
-        ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Full Playbook — Working Profiles</CardTitle>
+          <CardDescription>
+            Tiered (HIGH / MODERATE / LOW) five-dimension scoring rolled up to
+            one Enterprise level per subcategory via the weighted-floor rules.
+            AI suggests the dimensions; code computes every level, the cap, and
+            the roll-up.
+          </CardDescription>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-4">
+          {error ? (
+            <p className="text-sm text-status-danger-fg" role="alert">
+              {error}
+            </p>
+          ) : null}
 
-        <div className="flex flex-wrap items-center gap-2">
-          {!seeded ? (
-            <button
-              type="button"
-              onClick={() => void onSeed()}
-              disabled={busy !== null || readOnly}
-              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy === "seed" ? "Seeding…" : "Seed Working Profiles"}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!seeded ? (
+              <button
+                type="button"
+                onClick={() => void onSeed()}
+                disabled={busy !== null || readOnly}
+                className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {busy === "seed" ? "Seeding…" : "Seed Working Profiles"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void onRunAi()}
+                disabled={busy !== null || readOnly}
+                className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {busy === "run" ? "Running…" : "Run AI (csf_score)"}
+              </button>
+            )}
+            {seeded ? (
+              <button
+                type="button"
+                onClick={() => void onExport()}
+                disabled={busy !== null}
+                className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {busy === "export" ? "Exporting…" : "Export XLSX"}
+              </button>
+            ) : null}
+            {exportResult ? (
+              <span className="flex flex-wrap items-center gap-3 text-sm font-medium">
+                {exportResult.artifacts.map((a) => (
+                  <a
+                    key={a.kind}
+                    href={`/api/proxy/artifacts/${a.artifact_id}/download`}
+                    className="text-brand-500 hover:underline"
+                    title={a.filename}
+                  >
+                    {a.label}
+                  </a>
+                ))}
+              </span>
+            ) : null}
+            {seeded ? (
+              <span className="text-sm text-ink-secondary">
+                {enterprise?.tiers_in_use.length ?? 0} tier(s) in use ·{" "}
+                <span className="font-semibold text-ink-primary">
+                  {gapCount}
+                </span>{" "}
+                subcategor{gapCount === 1 ? "y" : "ies"} with a gap
+              </span>
+            ) : null}
+          </div>
+
+          {runResult ? (
+            <p className="text-sm text-ink-secondary" aria-live="polite">
+              AI updated{" "}
+              <span className="font-semibold text-ink-primary">
+                {runResult.changed.length}
+              </span>{" "}
+              field
+              {runResult.changed.length === 1 ? "" : "s"} across{" "}
+              {new Set(runResult.changed.map((c) => c.subcategory_code)).size}{" "}
+              subcategor
+              {new Set(runResult.changed.map((c) => c.subcategory_code))
+                .size === 1
+                ? "y"
+                : "ies"}
+              .
+            </p>
+          ) : null}
+
+          {loading ? (
+            <p className="text-sm text-ink-tertiary">Loading…</p>
+          ) : seeded ? (
+            <DataTable
+              columns={COLUMNS}
+              rows={enterprise?.subcategories ?? []}
+              rowKey={(r) => r.subcategory_code}
+            />
           ) : (
-            <button
-              type="button"
-              onClick={() => void onRunAi()}
-              disabled={busy !== null || readOnly}
-              className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy === "run" ? "Running…" : "Run AI (csf_score)"}
-            </button>
+            <p className="text-sm text-ink-secondary">
+              Seed the Working Profiles to score the ~106 subcategories across
+              the tiers your client uses, then Run AI to draft the dimension
+              scores.
+            </p>
           )}
-          {seeded ? (
-            <button
-              type="button"
-              onClick={() => void onExport()}
-              disabled={busy !== null}
-              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy === "export" ? "Exporting…" : "Export XLSX"}
-            </button>
-          ) : null}
-          {exportResult ? (
-            <span className="flex flex-wrap items-center gap-3 text-sm font-medium">
-              {exportResult.artifacts.map((a) => (
-                <a
-                  key={a.kind}
-                  href={`/api/proxy/artifacts/${a.artifact_id}/download`}
-                  className="text-brand-500 hover:underline"
-                  title={a.filename}
-                >
-                  {a.label}
-                </a>
-              ))}
-            </span>
-          ) : null}
-          {seeded ? (
-            <span className="text-sm text-ink-secondary">
-              {enterprise?.tiers_in_use.length ?? 0} tier(s) in use ·{" "}
-              <span className="font-semibold text-ink-primary">{gapCount}</span>{" "}
-              subcategor{gapCount === 1 ? "y" : "ies"} with a gap
-            </span>
-          ) : null}
-        </div>
-
-        {runResult ? (
-          <p className="text-sm text-ink-secondary" aria-live="polite">
-            AI updated{" "}
-            <span className="font-semibold text-ink-primary">
-              {runResult.changed.length}
-            </span>{" "}
-            field
-            {runResult.changed.length === 1 ? "" : "s"} across{" "}
-            {new Set(runResult.changed.map((c) => c.subcategory_code)).size}{" "}
-            subcategor
-            {new Set(runResult.changed.map((c) => c.subcategory_code)).size === 1
-              ? "y"
-              : "ies"}
-            .
-          </p>
-        ) : null}
-
-        {loading ? (
-          <p className="text-sm text-ink-tertiary">Loading…</p>
-        ) : seeded ? (
-          <DataTable
-            columns={COLUMNS}
-            rows={enterprise?.subcategories ?? []}
-            rowKey={(r) => r.subcategory_code}
-          />
-        ) : (
-          <p className="text-sm text-ink-secondary">
-            Seed the Working Profiles to score the ~106 subcategories across the
-            tiers your client uses, then Run AI to draft the dimension scores.
-          </p>
-        )}
-      </CardBody>
-    </Card>
-    {seeded ? (
-      <CsfDimensionEditor
-        serviceId={serviceId}
-        readOnly={readOnly}
-        onChanged={() => void reload()}
-      />
-    ) : null}
+        </CardBody>
+      </Card>
+      {seeded ? (
+        <CsfDimensionEditor
+          serviceId={serviceId}
+          readOnly={readOnly}
+          onChanged={() => void reload()}
+        />
+      ) : null}
     </div>
   );
 }

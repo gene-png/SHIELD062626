@@ -47,7 +47,9 @@ async function jsonRequest<T>(
     cache: "no-store",
     headers: {
       Accept: "application/json",
-      ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(init.body !== undefined
+        ? { "Content-Type": "application/json" }
+        : {}),
     },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });

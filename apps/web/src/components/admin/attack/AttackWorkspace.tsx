@@ -354,9 +354,7 @@ export function AttackWorkspace({
                   </span>{" "}
                   field
                   {runResult.changed.length === 1 ? "" : "s"} across{" "}
-                  {
-                    new Set(runResult.changed.map((c) => c.technique_code)).size
-                  }{" "}
+                  {new Set(runResult.changed.map((c) => c.technique_code)).size}{" "}
                   technique
                   {new Set(runResult.changed.map((c) => c.technique_code))
                     .size === 1

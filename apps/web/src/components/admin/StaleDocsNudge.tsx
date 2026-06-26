@@ -13,7 +13,11 @@ export function StaleDocsNudge({
     <div
       role="status"
       className="rounded-md border px-3 py-2 text-sm"
-      style={{ backgroundColor: "#fffbeb", color: "#92400e", borderColor: "#fde68a" }}
+      style={{
+        backgroundColor: "#fffbeb",
+        color: "#92400e",
+        borderColor: "#fde68a",
+      }}
     >
       The AI has updated scores since the documents were last generated.
       Regenerate the deliverable / export to refresh them.

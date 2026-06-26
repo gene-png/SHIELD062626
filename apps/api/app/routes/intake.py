@@ -69,6 +69,7 @@ def _validate_targets(item: ServiceRequestInput) -> None:
             detail="Zero Trust requires a target stage before submitting.",
         )
 
+
 router = APIRouter(prefix="/intake", tags=["intake"])
 
 
@@ -230,9 +231,7 @@ def submit_intake(
     # already provisioned (e.g. on a re-submit) to avoid duplicate workspaces.
     db.flush()  # assign ids to the freshly-created requests
     existing_kinds = set(
-        db.execute(select(Service.kind).where(Service.client_id == client.id))
-        .scalars()
-        .all()
+        db.execute(select(Service.kind).where(Service.client_id == client.id)).scalars().all()
     )
     for sr in created_requests:
         if sr.service_type not in SELF_ASSESSMENT_TYPES:
@@ -240,9 +239,7 @@ def submit_intake(
         kind = ServiceKind(sr.service_type.value)
         if kind in existing_kinds:
             continue
-        provision_self_assessment_service(
-            db, sr, org_name=client.legal_name, actor_user_id=user.id
-        )
+        provision_self_assessment_service(db, sr, org_name=client.legal_name, actor_user_id=user.id)
         existing_kinds.add(kind)
 
     client.intake_completed_at = utcnow()

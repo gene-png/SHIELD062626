@@ -31,7 +31,6 @@ from app.models._common import utcnow
 from app.models.client import Client
 from app.models.client_domain import ClientDomain
 from app.models.user import User, UserRole
-from app.security.email_domains import domain_of, is_generic_provider
 from app.schemas.auth import (
     LoginRequest,
     RefreshRequest,
@@ -40,6 +39,7 @@ from app.schemas.auth import (
     TokenPairResponse,
     UserResponse,
 )
+from app.security.email_domains import domain_of, is_generic_provider
 from app.security.jwt import TokenError, issue_token, verify_token
 from app.security.password import (
     PasswordPolicyError,

@@ -134,9 +134,7 @@ def inbox(
     the counterparty's messages this user hasn't opened yet."""
     rows = (
         db.execute(
-            select(Message)
-            .where(Message.client_id == client.id)
-            .order_by(Message.created_at.asc())
+            select(Message).where(Message.client_id == client.id).order_by(Message.created_at.asc())
         )
         .scalars()
         .all()
@@ -152,9 +150,7 @@ def inbox(
         svc = db.get(Service, service_id)
         if svc is None or svc.client_id != client.id:
             continue
-        unread = sum(
-            1 for m in msgs if m.read_at is None and m.author_user_id != user.id
-        )
+        unread = sum(1 for m in msgs if m.read_at is None and m.author_user_id != user.id)
         unread_total += unread
         last = msgs[-1]
         threads.append(

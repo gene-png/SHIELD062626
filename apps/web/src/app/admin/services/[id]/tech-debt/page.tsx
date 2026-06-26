@@ -17,7 +17,10 @@ export default function TechDebtServicePage({
   // placeholder until a service-detail fetch wires it through.
   return (
     <EnsureActiveClient serviceId={params.id}>
-      <TechDebtWorkspace serviceId={params.id} serviceTitle="Tech Debt Review" />
+      <TechDebtWorkspace
+        serviceId={params.id}
+        serviceTitle="Tech Debt Review"
+      />
     </EnsureActiveClient>
   );
 }

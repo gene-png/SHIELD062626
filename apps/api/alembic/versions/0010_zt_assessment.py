@@ -60,9 +60,7 @@ def upgrade() -> None:
             name="fk_zt_assessments_approved_by_users",
             ondelete="SET NULL",
         ),
-        sa.UniqueConstraint(
-            "service_id", "version", name="uq_zt_assessments_service_version"
-        ),
+        sa.UniqueConstraint("service_id", "version", name="uq_zt_assessments_service_version"),
     )
     op.create_index("ix_zt_assessments_service_id", "zt_assessments", ["service_id"])
     op.create_index("ix_zt_assessments_status", "zt_assessments", ["status"])

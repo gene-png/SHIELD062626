@@ -20,8 +20,8 @@ export function SelfAssessmentSubmitted(): JSX.Element {
       <CardBody className="flex flex-col gap-4">
         <p className="text-sm text-ink-secondary">
           Thanks — your consultant will review your responses for completeness
-          and accuracy, then run the analysis. We&apos;ll reach out directly with
-          the results and message you here if we need anything else.
+          and accuracy, then run the analysis. We&apos;ll reach out directly
+          with the results and message you here if we need anything else.
         </p>
         <div className="flex flex-wrap gap-3">
           <Link

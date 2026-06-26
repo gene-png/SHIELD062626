@@ -31,9 +31,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     command.upgrade(cfg, "head")
 
     engine = create_engine(url, future=True)
-    TestSession = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
     from app.db.session import get_db
     from app.main import create_app

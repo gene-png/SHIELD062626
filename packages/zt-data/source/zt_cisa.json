@@ -18,7 +18,12 @@
         "Are sign-in decisions context-aware (location, device, behavior)?",
         "How do you handle external collaborators (contractors, federated partners)?"
       ],
-      "framework_activities": ["Authentication", "Identity Stores", "Access Management", "Identity Risk Assessments"]
+      "framework_activities": [
+        "Authentication",
+        "Identity Stores",
+        "Access Management",
+        "Identity Risk Assessments"
+      ]
     },
     {
       "external_id": "Z-Q2",
@@ -33,7 +38,11 @@
         "Are admin sessions recorded for audit?",
         "How are non-person identities (service accounts, application identities) governed?"
       ],
-      "framework_activities": ["Authentication", "Identity Risk Assessments", "Access Management"]
+      "framework_activities": [
+        "Authentication",
+        "Identity Risk Assessments",
+        "Access Management"
+      ]
     },
     {
       "external_id": "Z-Q3",
@@ -48,7 +57,11 @@
         "How are BYOD, mobile, IoT, OT handled?",
         "Is device posture re-evaluated continuously, or only at sign-in?"
       ],
-      "framework_activities": ["Policy Enforcement & Compliance Monitoring", "Asset & Supply Chain Risk Management", "Resource Access"]
+      "framework_activities": [
+        "Policy Enforcement & Compliance Monitoring",
+        "Asset & Supply Chain Risk Management",
+        "Resource Access"
+      ]
     },
     {
       "external_id": "Z-Q4",
@@ -78,7 +91,11 @@
         "Do you inspect encrypted traffic (TLS decryption)?",
         "Are there air-gapped or physically isolated segments?"
       ],
-      "framework_activities": ["Network Segmentation", "Network Traffic Management", "Traffic Encryption"]
+      "framework_activities": [
+        "Network Segmentation",
+        "Network Traffic Management",
+        "Traffic Encryption"
+      ]
     },
     {
       "external_id": "Z-Q6",
@@ -108,7 +125,10 @@
         "How are SaaS and shadow-IT applications handled?",
         "Are access decisions audited at the application level?"
       ],
-      "framework_activities": ["Application Access", "Application Threat Protection"]
+      "framework_activities": [
+        "Application Access",
+        "Application Threat Protection"
+      ]
     },
     {
       "external_id": "Z-Q8",
@@ -123,7 +143,11 @@
         "How are production vulnerabilities patched, and on what cadence?",
         "Is an SBOM tracked?"
       ],
-      "framework_activities": ["Accessible Applications", "Secure Application Development & Deployment", "Application Security Testing"]
+      "framework_activities": [
+        "Accessible Applications",
+        "Secure Application Development & Deployment",
+        "Application Security Testing"
+      ]
     },
     {
       "external_id": "Z-Q9",
@@ -138,7 +162,11 @@
         "What is your data retention and disposal practice?",
         "Where does sensitive data physically reside (on-prem, cloud, mission partners)?"
       ],
-      "framework_activities": ["Data Inventory Management", "Data Categorization", "Data Availability"]
+      "framework_activities": [
+        "Data Inventory Management",
+        "Data Categorization",
+        "Data Availability"
+      ]
     },
     {
       "external_id": "Z-Q10",
@@ -153,7 +181,11 @@
         "Do you monitor for unusual data access (bulk exports, off-hours, unexpected locations)?",
         "Are there data-rights-management tools that follow the data outside the perimeter?"
       ],
-      "framework_activities": ["Data Access", "Data Encryption", "Visibility & Analytics"]
+      "framework_activities": [
+        "Data Access",
+        "Data Encryption",
+        "Visibility & Analytics"
+      ]
     },
     {
       "external_id": "Z-Q11",

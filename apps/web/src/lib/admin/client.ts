@@ -91,7 +91,10 @@ export async function listDomains(cid: string): Promise<DomainRow[]> {
   return ((await res.json()) as { domains: DomainRow[] }).domains;
 }
 
-export async function addDomain(cid: string, domain: string): Promise<DomainRow> {
+export async function addDomain(
+  cid: string,
+  domain: string,
+): Promise<DomainRow> {
   const res = await fetch(`/api/proxy/admin/clients/${cid}/domains`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

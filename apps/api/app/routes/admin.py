@@ -147,11 +147,7 @@ def list_clients(
     _admin: Annotated[User, _admin_required],
     db: Annotated[Session, Depends(get_db)],
 ) -> AdminClientListResponse:
-    rows = (
-        db.execute(select(Client).order_by(Client.created_at.desc()))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(Client).order_by(Client.created_at.desc())).scalars().all()
     return AdminClientListResponse(
         clients=[AdminClientSummary.model_validate(r, from_attributes=True) for r in rows]
     )
@@ -225,14 +221,10 @@ def list_client_domains(
     db: Annotated[Session, Depends(get_db)],
 ) -> AdminDomainListResponse:
     if db.get(Client, cid) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found.")
     rows = (
         db.execute(
-            select(ClientDomain)
-            .where(ClientDomain.client_id == cid)
-            .order_by(ClientDomain.domain)
+            select(ClientDomain).where(ClientDomain.client_id == cid).order_by(ClientDomain.domain)
         )
         .scalars()
         .all()
@@ -255,9 +247,7 @@ def add_client_domain(
     db: Annotated[Session, Depends(get_db)],
 ) -> AdminDomainRow:
     if db.get(Client, cid) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found.")
     # Accept either a bare domain or a full email; normalize to the domain.
     raw = body.domain.strip().lower()
     domain = domain_of(raw) if "@" in raw else raw
@@ -308,9 +298,7 @@ def remove_client_domain(
 ) -> None:
     row = db.get(ClientDomain, domain_id)
     if row is None or row.client_id != cid:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Domain not found.")
     db.delete(row)
     audit(
         db,
@@ -337,9 +325,7 @@ def archive_service(
     the workspace drops out of active lists."""
     svc = db.get(Service, service_id)
     if svc is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Service not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found.")
     svc.status = ServiceStatus.ARCHIVED
     audit(
         db,

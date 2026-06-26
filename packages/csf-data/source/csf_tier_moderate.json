@@ -109,11 +109,7 @@
         "GV.OV-02",
         "GV.OV-03"
       ],
-      "implementation_groups": [
-        "1",
-        "2",
-        "3"
-      ]
+      "implementation_groups": ["1", "2", "3"]
     },
     {
       "external_id": "CSF-2-1",
@@ -149,13 +145,7 @@
         "ID.RA-07",
         "ID.RA-08"
       ],
-      "implementation_groups": [
-        "2",
-        "11",
-        "12",
-        "14",
-        "15"
-      ]
+      "implementation_groups": ["2", "11", "12", "14", "15"]
     },
     {
       "external_id": "CSF-3-1",
@@ -187,9 +177,7 @@
         "ID.RA-09",
         "ID.RA-10"
       ],
-      "implementation_groups": [
-        "5"
-      ]
+      "implementation_groups": ["5"]
     },
     {
       "external_id": "CSF-4-1",
@@ -215,12 +203,7 @@
         "ID.AM-07",
         "ID.AM-08"
       ],
-      "implementation_groups": [
-        "7",
-        "8",
-        "9",
-        "10"
-      ]
+      "implementation_groups": ["7", "8", "9", "10"]
     },
     {
       "external_id": "CSF-5-1",
@@ -245,11 +228,7 @@
         "PR.AA-05",
         "PR.AA-06"
       ],
-      "implementation_groups": [
-        "17",
-        "18",
-        "19"
-      ]
+      "implementation_groups": ["17", "18", "19"]
     },
     {
       "external_id": "CSF-6-1",
@@ -265,17 +244,8 @@
         "▸ Are backups performed regularly? Are they tested, and where are they stored?"
       ],
       "dimensions": "Policy & Process → Implementation",
-      "csf_subcategories": [
-        "PR.DS-01",
-        "PR.DS-02",
-        "PR.DS-10",
-        "PR.DS-11"
-      ],
-      "implementation_groups": [
-        "21",
-        "22",
-        "33"
-      ]
+      "csf_subcategories": ["PR.DS-01", "PR.DS-02", "PR.DS-10", "PR.DS-11"],
+      "implementation_groups": ["21", "22", "33"]
     },
     {
       "external_id": "CSF-7-1",
@@ -305,11 +275,7 @@
         "PR.IR-03",
         "PR.IR-04"
       ],
-      "implementation_groups": [
-        "14",
-        "15",
-        "33"
-      ]
+      "implementation_groups": ["14", "15", "33"]
     },
     {
       "external_id": "CSF-8-1",
@@ -324,14 +290,8 @@
         "▸ How often is training updated? Is effectiveness measured in any way?"
       ],
       "dimensions": "Policy & Process → Implementation",
-      "csf_subcategories": [
-        "PR.AT-01",
-        "PR.AT-02",
-        "GV.RR-04"
-      ],
-      "implementation_groups": [
-        "24"
-      ]
+      "csf_subcategories": ["PR.AT-01", "PR.AT-02", "GV.RR-04"],
+      "implementation_groups": ["24"]
     },
     {
       "external_id": "CSF-9-1",
@@ -363,12 +323,7 @@
         "DE.AE-07",
         "DE.AE-08"
       ],
-      "implementation_groups": [
-        "26",
-        "27",
-        "28",
-        "30"
-      ]
+      "implementation_groups": ["26", "27", "28", "30"]
     },
     {
       "external_id": "CSF-10-1",
@@ -401,10 +356,7 @@
         "RS.MI-01",
         "RS.MI-02"
       ],
-      "implementation_groups": [
-        "30",
-        "31"
-      ]
+      "implementation_groups": ["30", "31"]
     },
     {
       "external_id": "CSF-11-1",
@@ -431,10 +383,7 @@
         "RC.CO-03",
         "RC.CO-04"
       ],
-      "implementation_groups": [
-        "33",
-        "34"
-      ]
+      "implementation_groups": ["33", "34"]
     },
     {
       "external_id": "CSF-12-1",
@@ -450,20 +399,8 @@
         "▸ Is there a way to track improvement actions to completion?"
       ],
       "dimensions": "Monitoring → Continuous Improvement",
-      "csf_subcategories": [
-        "ID.IM-01",
-        "ID.IM-02",
-        "ID.IM-03",
-        "ID.IM-04"
-      ],
-      "implementation_groups": [
-        "1",
-        "12",
-        "26",
-        "30",
-        "31",
-        "34"
-      ]
+      "csf_subcategories": ["ID.IM-01", "ID.IM-02", "ID.IM-03", "ID.IM-04"],
+      "implementation_groups": ["1", "12", "26", "30", "31", "34"]
     }
   ]
 }

@@ -49,9 +49,7 @@ class CatalogResponse(BaseModel):
 
 
 class ZtServiceCreateRequest(BaseModel):
-    kind: ServiceKind = Field(
-        description="One of zero_trust_cisa | zero_trust_dod."
-    )
+    kind: ServiceKind = Field(description="One of zero_trust_cisa | zero_trust_dod.")
     title: str = Field(min_length=1, max_length=255)
     source_request_id: uuid.UUID | None = None
 

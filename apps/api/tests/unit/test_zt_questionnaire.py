@@ -96,7 +96,11 @@ def _seed_question(TestSession: sessionmaker, framework_key: str, ext_id: str, p
 def _admin_service(c: TestClient, kind: str) -> tuple[str, str]:
     admin = c.post(
         "/auth/register",
-        json={"email": "admin@kentro.example", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@kentro.example",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = admin.json()["tokens"]["access_token"]
     cid = c.post(
@@ -115,9 +119,9 @@ def test_questionnaire_endpoint_serves_cisa_questions(app_client) -> None:
     _seed_question(TestSession, "zt-cisa", "Z-Q1", "Identity")
     _seed_question(TestSession, "zt-dod", "D-Q1", "User")  # other framework, must not leak
     bearer, svc_id = _admin_service(c, "zero_trust_cisa")
-    cid = c.get(
-        f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}
-    ).json()["client_id"]
+    cid = c.get(f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}).json()[
+        "client_id"
+    ]
     r = c.get(
         f"/zt/services/{svc_id}/questionnaire",
         headers={"Authorization": f"Bearer {bearer}", "X-Client-Id": cid},
@@ -136,9 +140,9 @@ def test_questionnaire_endpoint_serves_dod_questions(app_client) -> None:
     c, TestSession = app_client
     _seed_question(TestSession, "zt-dod", "D-Q1", "User")
     bearer, svc_id = _admin_service(c, "zero_trust_dod")
-    cid = c.get(
-        f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}
-    ).json()["client_id"]
+    cid = c.get(f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}).json()[
+        "client_id"
+    ]
     r = c.get(
         f"/zt/services/{svc_id}/questionnaire",
         headers={"Authorization": f"Bearer {bearer}", "X-Client-Id": cid},

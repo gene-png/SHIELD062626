@@ -59,10 +59,16 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, FixtureProvider]]:
 def _bootstrap(c: TestClient) -> tuple[dict, str]:
     r = c.post(
         "/auth/register",
-        json={"email": "admin@example.com", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     h = {"Authorization": f"Bearer {r.json()['tokens']['access_token']}"}
-    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()["id"]
+    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()[
+        "id"
+    ]
     c.post(f"/csf/services/{svc_id}/assessments", headers=h)
     c.post(f"/csf/services/{svc_id}/profiles/seed", headers=h, json={"tiers": ["high"]})
     return h, svc_id
@@ -104,7 +110,9 @@ def test_csf_run_ai_skips_locked(app_client) -> None:
     c.patch(f"/csf/dimension-scores/{sid}", headers=h, json={"locked": True})
     provider.register_static(
         "csf_score",
-        LLMResponse('{"scores": [{"tier": "high", "subcategory_code": "' + code + '", "governance": 2}]}'),
+        LLMResponse(
+            '{"scores": [{"tier": "high", "subcategory_code": "' + code + '", "governance": 2}]}'
+        ),
     )
     r = c.post(f"/csf/services/{svc_id}/run-ai", headers=h)
     row = next(x for x in r.json()["rows"] if x["subcategory_code"] == code and x["tier"] == "high")
@@ -117,10 +125,16 @@ def test_csf_run_ai_requires_seeded_profile(app_client) -> None:
     c, provider = app_client
     r = c.post(
         "/auth/register",
-        json={"email": "admin@example.com", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     h = {"Authorization": f"Bearer {r.json()['tokens']['access_token']}"}
-    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()["id"]
+    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()[
+        "id"
+    ]
     c.post(f"/csf/services/{svc_id}/assessments", headers=h)
     provider.register_static("csf_score", LLMResponse('{"scores": []}'))
     # No profile seeded -> 409.

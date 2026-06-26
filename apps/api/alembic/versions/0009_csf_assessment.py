@@ -59,9 +59,7 @@ def upgrade() -> None:
             name="fk_csf_assessments_approved_by_users",
             ondelete="SET NULL",
         ),
-        sa.UniqueConstraint(
-            "service_id", "version", name="uq_csf_assessments_service_version"
-        ),
+        sa.UniqueConstraint("service_id", "version", name="uq_csf_assessments_service_version"),
     )
     op.create_index("ix_csf_assessments_service_id", "csf_assessments", ["service_id"])
     op.create_index("ix_csf_assessments_status", "csf_assessments", ["status"])
@@ -109,12 +107,8 @@ def upgrade() -> None:
             name="uq_csf_answers_assessment_subcategory",
         ),
     )
-    op.create_index(
-        "ix_csf_answers_assessment_id", "csf_answers", ["assessment_id"]
-    )
-    op.create_index(
-        "ix_csf_answers_subcategory_code", "csf_answers", ["subcategory_code"]
-    )
+    op.create_index("ix_csf_answers_assessment_id", "csf_answers", ["assessment_id"])
+    op.create_index("ix_csf_answers_subcategory_code", "csf_answers", ["subcategory_code"])
 
 
 def downgrade() -> None:

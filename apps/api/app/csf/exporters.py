@@ -111,9 +111,7 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
     ws.append(["Assessment version", ctx.assessment.version])
     ws.append(["Overall maturity", ctx.score.overall_maturity_label])
     ws.append(["Average tier", _fmt_tier(ctx.score.average_tier)])
-    ws.append(
-        ["Coverage", f"{ctx.score.answered_subcategories}/{ctx.score.total_subcategories}"]
-    )
+    ws.append(["Coverage", f"{ctx.score.answered_subcategories}/{ctx.score.total_subcategories}"])
     for row in ws.iter_rows(min_row=1, max_row=6, min_col=1, max_col=1):
         for cell in row:
             cell.font = bold
@@ -282,10 +280,7 @@ def render_docx(ctx: CsfDeliverableContext) -> bytes:
     if not ctx.gap.gaps:
         add_paragraphs(
             doc,
-            [
-                f"No gaps at target tier {ctx.gap.target_tier} "
-                f"({ctx.gap.target_label})."
-            ],
+            [f"No gaps at target tier {ctx.gap.target_tier} " f"({ctx.gap.target_label})."],
         )
     else:
         add_table(
@@ -352,9 +347,7 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
     )
 
     story.append(Paragraph("Per-function rollup", h2))
-    fn_table_data: list[list] = [
-        ["Function", "Name", "Average tier", "Coverage"]
-    ]
+    fn_table_data: list[list] = [["Function", "Name", "Average tier", "Coverage"]]
     for fs in ctx.score.by_function:
         fn_table_data.append(
             [
@@ -378,8 +371,7 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
     if not ctx.gap.gaps:
         story.append(
             Paragraph(
-                f"No gaps at target tier {ctx.gap.target_tier} "
-                f"({ctx.gap.target_label}).",
+                f"No gaps at target tier {ctx.gap.target_tier} " f"({ctx.gap.target_label}).",
                 body,
             )
         )

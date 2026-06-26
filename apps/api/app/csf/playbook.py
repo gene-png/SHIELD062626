@@ -36,7 +36,7 @@ class DimensionScores:
     monitoring: int = 0  # Monitoring and Measurement
     improvement: int = 0  # Continuous Improvement
 
-    def clamped(self) -> "DimensionScores":
+    def clamped(self) -> DimensionScores:
         def _c(v: int) -> int:
             return max(0, min(2, int(v)))
 
@@ -159,9 +159,7 @@ def weighted_floor_rollup(
 
     # Rule 5: only LOW is the lowest, and the subcategory is Supporting/Supplemental.
     only_low_lowest = (
-        low is not None
-        and low == lo
-        and all(s > lo for t, s in scores.items() if t != Tier.LOW)
+        low is not None and low == lo and all(s > lo for t, s in scores.items() if t != Tier.LOW)
     )
     if only_low_lowest and is_supporting_or_supplemental:
         higher = max(s for t, s in scores.items() if t != Tier.LOW)

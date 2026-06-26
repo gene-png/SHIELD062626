@@ -192,9 +192,7 @@ def test_admin_reviews_edits_and_approves_submitted_csf(
             ],
         },
     )
-    state = app_client.get(
-        "/intake", headers={"Authorization": f"Bearer {client_bearer}"}
-    ).json()
+    state = app_client.get("/intake", headers={"Authorization": f"Bearer {client_bearer}"}).json()
     svc_id = _service_id(state, "nist_csf")
 
     # Client fills one answer + submits.
@@ -204,37 +202,27 @@ def test_admin_reviews_edits_and_approves_submitted_csf(
     app_client.patch(
         f"/csf/self-assessment/answers/{answer_id}", headers=ch, json={"maturity_tier": 1}
     )
-    app_client.post(
-        f"/csf/services/{svc_id}/self-assessment/submit", headers=ch, json={}
-    )
+    app_client.post(f"/csf/services/{svc_id}/self-assessment/submit", headers=ch, json={})
 
     # Admin acts within the client's tenant.
     ah = {"Authorization": f"Bearer {admin_bearer}", "X-Client-Id": client_id}
-    latest = app_client.get(
-        f"/csf/services/{svc_id}/assessments/latest", headers=ah
-    )
+    latest = app_client.get(f"/csf/services/{svc_id}/assessments/latest", headers=ah)
     assert latest.status_code == 200, latest.text
     assessment = latest.json()
     assert assessment["status"] == "submitted"
 
     # Admin can edit a submitted assessment (review/correct client inputs).
-    r = app_client.patch(
-        f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 2}
-    )
+    r = app_client.patch(f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 2})
     assert r.status_code == 200, r.text
     assert r.json()["maturity_tier"] == 2
 
     # Admin approves the client's submission (submitted -> approved).
-    r = app_client.post(
-        f"/csf/assessments/{assessment['id']}/approve", headers=ah
-    )
+    r = app_client.post(f"/csf/assessments/{assessment['id']}/approve", headers=ah)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "approved"
 
     # Now locked for further edits.
-    r = app_client.patch(
-        f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 3}
-    )
+    r = app_client.patch(f"/csf/answers/{answer_id}", headers=ah, json={"maturity_tier": 3})
     assert r.status_code == 409
 
 

@@ -86,9 +86,7 @@ export function ClientSwitcher(): JSX.Element | null {
     );
   }
   if (clients.length === 0) {
-    return (
-      <span className="text-xs text-ink-tertiary">No clients yet</span>
-    );
+    return <span className="text-xs text-ink-tertiary">No clients yet</span>;
   }
 
   return (

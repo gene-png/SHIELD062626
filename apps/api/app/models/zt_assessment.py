@@ -51,9 +51,7 @@ class ZtFramework(enum.StrEnum):
 class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "zt_assessments"
     __table_args__ = (
-        UniqueConstraint(
-            "service_id", "version", name="uq_zt_assessments_service_version"
-        ),
+        UniqueConstraint("service_id", "version", name="uq_zt_assessments_service_version"),
     )
 
     service_id: Mapped[uuid.UUID] = mapped_column(

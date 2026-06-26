@@ -55,7 +55,11 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 def _bootstrap(c: TestClient) -> tuple[dict, str]:
     r = c.post(
         "/auth/register",
-        json={"email": "admin@example.com", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = r.json()["tokens"]["access_token"]
     h = {"Authorization": f"Bearer {bearer}"}
@@ -84,8 +88,14 @@ def test_seed_and_evidence_cap(app_client) -> None:
     r = c.patch(
         f"/csf/dimension-scores/{sid}",
         headers=h,
-        json={"governance": 2, "policy": 2, "implementation": 2, "monitoring": 2,
-              "improvement": 2, "has_evidence": False},
+        json={
+            "governance": 2,
+            "policy": 2,
+            "implementation": 2,
+            "monitoring": 2,
+            "improvement": 2,
+            "has_evidence": False,
+        },
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -102,18 +112,43 @@ def test_seed_and_evidence_cap(app_client) -> None:
 def test_enterprise_rollup_high_lowest_rule3(app_client) -> None:
     c = app_client
     h, svc_id = _bootstrap(c)
-    c.post(f"/csf/services/{svc_id}/profiles/seed", headers=h, json={"tiers": ["high", "moderate", "low"]})
+    c.post(
+        f"/csf/services/{svc_id}/profiles/seed",
+        headers=h,
+        json={"tiers": ["high", "moderate", "low"]},
+    )
     code = SUBCATEGORIES[0].code
 
     # high -> level 1 (total 0); moderate -> level 3 (total 7); low -> level 4 (total 9).
-    c.patch(f"/csf/dimension-scores/{_row(c, h, svc_id, 'high', code)['id']}", headers=h,
-            json={"has_evidence": True, "target_level": 4})
-    c.patch(f"/csf/dimension-scores/{_row(c, h, svc_id, 'moderate', code)['id']}", headers=h,
-            json={"governance": 2, "policy": 2, "implementation": 2, "monitoring": 1,
-                  "improvement": 0, "has_evidence": True})
-    c.patch(f"/csf/dimension-scores/{_row(c, h, svc_id, 'low', code)['id']}", headers=h,
-            json={"governance": 2, "policy": 2, "implementation": 2, "monitoring": 2,
-                  "improvement": 1, "has_evidence": True})
+    c.patch(
+        f"/csf/dimension-scores/{_row(c, h, svc_id, 'high', code)['id']}",
+        headers=h,
+        json={"has_evidence": True, "target_level": 4},
+    )
+    c.patch(
+        f"/csf/dimension-scores/{_row(c, h, svc_id, 'moderate', code)['id']}",
+        headers=h,
+        json={
+            "governance": 2,
+            "policy": 2,
+            "implementation": 2,
+            "monitoring": 1,
+            "improvement": 0,
+            "has_evidence": True,
+        },
+    )
+    c.patch(
+        f"/csf/dimension-scores/{_row(c, h, svc_id, 'low', code)['id']}",
+        headers=h,
+        json={
+            "governance": 2,
+            "policy": 2,
+            "implementation": 2,
+            "monitoring": 2,
+            "improvement": 1,
+            "has_evidence": True,
+        },
+    )
 
     ent = c.get(f"/csf/services/{svc_id}/enterprise-profile", headers=h)
     assert ent.status_code == 200, ent.text
@@ -135,7 +170,10 @@ def test_out_of_scope_rows_excluded_from_rollup(app_client) -> None:
     h, svc_id = _bootstrap(c)
     c.post(f"/csf/services/{svc_id}/profiles/seed", headers=h, json={"tiers": ["high"]})
     code = SUBCATEGORIES[0].code
-    c.patch(f"/csf/dimension-scores/{_row(c, h, svc_id, 'high', code)['id']}", headers=h,
-            json={"in_scope": False})
+    c.patch(
+        f"/csf/dimension-scores/{_row(c, h, svc_id, 'high', code)['id']}",
+        headers=h,
+        json={"in_scope": False},
+    )
     body = c.get(f"/csf/services/{svc_id}/enterprise-profile", headers=h).json()
     assert all(s["subcategory_code"] != code for s in body["subcategories"])

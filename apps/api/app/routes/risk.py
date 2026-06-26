@@ -33,8 +33,6 @@ from app.models.risk_register import RiskEntry, RiskRegister
 from app.models.user import User, UserRole
 from app.models.zt_assessment import ZtAnswer, ZtAssessment
 from app.risk import exporters as risk_exporters
-from app.routes.artifacts import _storage_dep
-from app.storage import StorageBackend
 from app.risk.engine import (
     Impact,
     Likelihood,
@@ -45,11 +43,13 @@ from app.risk.engine import (
     tier_counts,
     tier_for,
 )
+from app.routes.artifacts import _storage_dep
 from app.schemas.risk import (
     RiskEntryResponse,
     RiskGateStatus,
     RiskRegisterResponse,
 )
+from app.storage import StorageBackend
 
 router = APIRouter(prefix="/risk", tags=["risk-register"])
 
@@ -91,9 +91,7 @@ def _gate(db: Session, client_id: uuid.UUID) -> RiskGateStatus:
 def _require_client(db: Session, cid: uuid.UUID) -> Client:
     client = db.get(Client, cid)
     if client is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found.")
     return client
 
 
@@ -111,9 +109,7 @@ def gate(
     return _gate(db, cid)
 
 
-def _gather_findings(
-    db: Session, client_id: uuid.UUID
-) -> tuple[list[dict], set[str], set[str]]:
+def _gather_findings(db: Session, client_id: uuid.UUID) -> tuple[list[dict], set[str], set[str]]:
     """Findings (one per gap) + the valid technique/control link universes.
 
     valid_techniques = every technique in the client's ATT&CK assessment.
@@ -125,9 +121,11 @@ def _gather_findings(
 
     attack = _latest(db, AttackAssessment, client_id)
     if attack is not None:
-        rows = db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == attack.id)
-        ).scalars().all()
+        rows = (
+            db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == attack.id))
+            .scalars()
+            .all()
+        )
         valid_techniques = {r.technique_code for r in rows} or set(attack_all_codes())
         for r in rows:
             if r.status in ("gap", "partial"):
@@ -142,9 +140,9 @@ def _gather_findings(
 
     csf = _latest(db, CsfAssessment, client_id)
     if csf is not None:
-        for r in db.execute(
-            select(CsfAnswer).where(CsfAnswer.assessment_id == csf.id)
-        ).scalars().all():
+        for r in (
+            db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == csf.id)).scalars().all()
+        ):
             valid_controls.add(r.subcategory_code)
             if r.maturity_tier is not None and r.maturity_tier < 3:
                 findings.append(
@@ -158,9 +156,9 @@ def _gather_findings(
 
     zt = _latest(db, ZtAssessment, client_id)
     if zt is not None:
-        for r in db.execute(
-            select(ZtAnswer).where(ZtAnswer.assessment_id == zt.id)
-        ).scalars().all():
+        for r in (
+            db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == zt.id)).scalars().all()
+        ):
             valid_controls.add(r.capability_code)
             tgt = r.target_stage if r.target_stage is not None else 3
             if r.maturity_stage is not None and r.maturity_stage < tgt:
@@ -324,32 +322,39 @@ def export(
         )
     entries = (
         db.execute(
-            select(RiskEntry)
-            .where(RiskEntry.register_id == reg.id)
-            .order_by(RiskEntry.created_at)
+            select(RiskEntry).where(RiskEntry.register_id == reg.id).order_by(RiskEntry.created_at)
         )
         .scalars()
         .all()
     )
     org = None if client.legal_name == "(pending intake)" else client.legal_name
-    ctx = risk_exporters.build_context(
-        client_legal_name=org, version=reg.version, entries=entries
-    )
+    ctx = risk_exporters.build_context(client_legal_name=org, version=reg.version, entries=entries)
     base = f"Risk_Register_v{reg.version}"
     xlsx = _write_artifact(
-        db, storage=storage, user=admin, client_id=cid,
+        db,
+        storage=storage,
+        user=admin,
+        client_id=cid,
         filename=f"{base}.xlsx",
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=risk_exporters.render_xlsx(ctx),
     )
     pdf = _write_artifact(
-        db, storage=storage, user=admin, client_id=cid,
-        filename=f"{base}.pdf", mime_type="application/pdf",
+        db,
+        storage=storage,
+        user=admin,
+        client_id=cid,
+        filename=f"{base}.pdf",
+        mime_type="application/pdf",
         data=risk_exporters.render_pdf(ctx),
     )
     docx = _write_artifact(
-        db, storage=storage, user=admin, client_id=cid,
-        filename=f"{base}.docx", mime_type=DOCX_MIME,
+        db,
+        storage=storage,
+        user=admin,
+        client_id=cid,
+        filename=f"{base}.docx",
+        mime_type=DOCX_MIME,
         data=risk_exporters.render_docx(ctx),
     )
     reg.xlsx_artifact_id = xlsx.id

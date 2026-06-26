@@ -2,12 +2,7 @@
 
 import * as React from "react";
 
-import {
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-} from "@shield/design-system";
+import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
 import {
   addDomain,
@@ -60,7 +55,10 @@ export function ManagementView(): JSX.Element {
           <CardTitle>Create a client</CardTitle>
         </CardHeader>
         <CardBody>
-          <form onSubmit={(e) => void onCreate(e)} className="flex flex-wrap gap-3">
+          <form
+            onSubmit={(e) => void onCreate(e)}
+            className="flex flex-wrap gap-3"
+          >
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}

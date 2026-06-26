@@ -18,7 +18,12 @@
         "What is your MFA story beyond the smart card factor?",
         "Are sign-in decisions context-aware (location, device, behavior)?"
       ],
-      "framework_activities": ["User Inventory", "Conditional User Access", "MFA", "PAM"]
+      "framework_activities": [
+        "User Inventory",
+        "Conditional User Access",
+        "MFA",
+        "PAM"
+      ]
     },
     {
       "external_id": "D-Q2",
@@ -33,7 +38,10 @@
         "How do you handle break-glass / emergency credentials?",
         "What is the audit trail for every privileged action?"
       ],
-      "framework_activities": ["PAM (Advanced)", "Behavioral/Contextual ID/Biometrics"]
+      "framework_activities": [
+        "PAM (Advanced)",
+        "Behavioral/Contextual ID/Biometrics"
+      ]
     },
     {
       "external_id": "D-Q3",
@@ -48,7 +56,11 @@
         "What about IoT, OT, and embedded devices in mission contexts?",
         "Is your CMDB integrated with your access policies?"
       ],
-      "framework_activities": ["Device Inventory", "Device Detection & Compliance", "Device Authorization"]
+      "framework_activities": [
+        "Device Inventory",
+        "Device Detection & Compliance",
+        "Device Authorization"
+      ]
     },
     {
       "external_id": "D-Q4",
@@ -62,7 +74,11 @@
         "Are you detecting unusual device behavior in real time?",
         "How do you handle remote and disconnected operations?"
       ],
-      "framework_activities": ["Remote Access", "Device Authentication", "Real-Time Inspection"]
+      "framework_activities": [
+        "Remote Access",
+        "Device Authentication",
+        "Real-Time Inspection"
+      ]
     },
     {
       "external_id": "D-Q5",
@@ -77,7 +93,12 @@
         "Do you inspect TLS-encrypted traffic; how do you handle the visibility-vs-privacy tradeoff?",
         "For classified environments, what is the segregation between security domains?"
       ],
-      "framework_activities": ["Data Flow Mapping", "Software Defined Networking", "Macro-Segmentation", "Micro-Segmentation"]
+      "framework_activities": [
+        "Data Flow Mapping",
+        "Software Defined Networking",
+        "Macro-Segmentation",
+        "Micro-Segmentation"
+      ]
     },
     {
       "external_id": "D-Q6",
@@ -105,7 +126,12 @@
         "For container and Kubernetes workloads, what runtime protections are in place?",
         "How are application threats detected and blocked?"
       ],
-      "framework_activities": ["Application Inventory", "Secure Software Development", "Software Risk Management", "Resource Authorization"]
+      "framework_activities": [
+        "Application Inventory",
+        "Secure Software Development",
+        "Software Risk Management",
+        "Resource Authorization"
+      ]
     },
     {
       "external_id": "D-Q8",
@@ -120,7 +146,10 @@
         "What runtime monitoring is in place (RASP, eBPF observability)?",
         "How do you handle third-party and supply-chain risk in software?"
       ],
-      "framework_activities": ["DevSecOps", "Software Risk Management (Advanced)"]
+      "framework_activities": [
+        "DevSecOps",
+        "Software Risk Management (Advanced)"
+      ]
     },
     {
       "external_id": "D-Q9",
@@ -135,7 +164,12 @@
         "How is encryption applied at rest, in transit, in use?",
         "Who manages encryption keys; are they rotated automatically?"
       ],
-      "framework_activities": ["Data Catalog Risk Alignment", "Data Tagging", "Data Classification", "Data Encryption & Rights Management"]
+      "framework_activities": [
+        "Data Catalog Risk Alignment",
+        "Data Tagging",
+        "Data Classification",
+        "Data Encryption & Rights Management"
+      ]
     },
     {
       "external_id": "D-Q10",
@@ -150,7 +184,11 @@
         "What is your data egress story (approved destinations, blocked exfiltration)?",
         "For mission-partner sharing, how is need-to-know enforced?"
       ],
-      "framework_activities": ["Data Loss Prevention", "Data Access Control", "Data Monitoring & Sensing"]
+      "framework_activities": [
+        "Data Loss Prevention",
+        "Data Access Control",
+        "Data Monitoring & Sensing"
+      ]
     },
     {
       "external_id": "D-Q11",
@@ -165,7 +203,12 @@
         "What is your detection development lifecycle (building, tuning, retiring)?",
         "How are AI/ML models used for anomaly detection; monitored for drift?"
       ],
-      "framework_activities": ["Log All Traffic", "SIEM", "UEBA", "Threat Intelligence Integration"]
+      "framework_activities": [
+        "Log All Traffic",
+        "SIEM",
+        "UEBA",
+        "Threat Intelligence Integration"
+      ]
     },
     {
       "external_id": "D-Q12",
@@ -180,7 +223,13 @@
         "How do you monitor the automation itself for correct behavior?",
         "For DoD operational tempo, what role does automation play in incident response time?"
       ],
-      "framework_activities": ["Policy Decision Point", "Threat Alerting", "Security Orchestration", "AI/ML", "SOC"]
+      "framework_activities": [
+        "Policy Decision Point",
+        "Threat Alerting",
+        "Security Orchestration",
+        "AI/ML",
+        "SOC"
+      ]
     }
   ]
 }

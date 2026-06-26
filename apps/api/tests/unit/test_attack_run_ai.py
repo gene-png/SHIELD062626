@@ -51,7 +51,11 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker, FixtureProv
 def _admin(c: TestClient) -> tuple[str, str]:
     admin = c.post(
         "/auth/register",
-        json={"email": "admin@kentro.example", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@kentro.example",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = admin.json()["tokens"]["access_token"]
     cid = c.post(
@@ -92,7 +96,9 @@ def test_run_ai_applies_validated_dpr_and_reports_changes(app_client) -> None:
     _seed_tech_debt_tools(TestSession, cid, me["id"], ["CrowdStrike Falcon", "Splunk"])
 
     h = {"Authorization": f"Bearer {bearer}", "X-Client-Id": cid}
-    svc = c.post("/attack/services", headers=h, json={"kind": "attack_coverage", "title": "Acme ATT&CK"})
+    svc = c.post(
+        "/attack/services", headers=h, json={"kind": "attack_coverage", "title": "Acme ATT&CK"}
+    )
     svc_id = svc.json()["id"]
     a = c.post(f"/attack/services/{svc_id}/assessments", headers=h)
     code = a.json()["coverage"][0]["technique_code"]

@@ -38,7 +38,10 @@ function clientTarget(
     const profile = CSF_PROFILES.find((p) => p.value === s.csf_profile)?.label;
     return [tier, profile].filter(Boolean).join(" · ") || null;
   }
-  if (s.service_type === "zero_trust_cisa" || s.service_type === "zero_trust_dod") {
+  if (
+    s.service_type === "zero_trust_cisa" ||
+    s.service_type === "zero_trust_dod"
+  ) {
     return (
       ZT_TARGET_STAGES[s.service_type].find(
         (x) => x.value === s.zt_target_stage,
@@ -138,7 +141,9 @@ function ServiceRequestCard({
       await fulfillServiceRequest(s.id);
       onPublished();
     } catch (err) {
-      setPublishError(err instanceof Error ? err.message : "Failed to publish.");
+      setPublishError(
+        err instanceof Error ? err.message : "Failed to publish.",
+      );
     } finally {
       setPublishing(false);
     }
@@ -286,7 +291,9 @@ export function IntakeQueue(): JSX.Element {
     ? new Date(state.intake_completed_at).toLocaleString()
     : null;
   const hasIntake = c !== null && c.legal_name !== "(pending intake)";
-  const hasContext = Boolean(c?.prompting_context && c.prompting_context.trim());
+  const hasContext = Boolean(
+    c?.prompting_context && c.prompting_context.trim(),
+  );
   const hasDocuments = state.artifacts.length > 0;
 
   return (

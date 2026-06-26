@@ -292,11 +292,7 @@ def render_docx(ctx: DeliverableContext) -> bytes:
     add_heading(doc, "Capability list")
     rows = []
     for item in ctx.items:
-        cost = (
-            f"${float(item.annual_cost_usd):,.0f}"
-            if item.annual_cost_usd is not None
-            else "—"
-        )
+        cost = f"${float(item.annual_cost_usd):,.0f}" if item.annual_cost_usd is not None else "—"
         rows.append(
             [
                 item.name,

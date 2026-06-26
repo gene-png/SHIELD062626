@@ -86,9 +86,7 @@ def test_subcategory_function_matches_code_prefix() -> None:
         (FunctionCode.RC, 7),
     ],
 )
-def test_subcategory_counts_per_function(
-    function_code: FunctionCode, expected: int
-) -> None:
+def test_subcategory_counts_per_function(function_code: FunctionCode, expected: int) -> None:
     assert len(subcategories_for_function(function_code)) == expected
 
 

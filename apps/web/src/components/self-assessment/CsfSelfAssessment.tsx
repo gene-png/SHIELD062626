@@ -2,7 +2,13 @@
 
 import * as React from "react";
 
-import { Card, CardBody, CardHeader, CardTitle, cn } from "@shield/design-system";
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  cn,
+} from "@shield/design-system";
 
 import { CsfQuestionnaire } from "@/components/admin/csf/CsfQuestionnaire";
 import { SelfAssessmentSubmitted } from "@/components/self-assessment/SelfAssessmentSubmitted";
@@ -65,7 +71,9 @@ export function CsfSelfAssessment({
   serviceId: string;
 }): JSX.Element {
   const [catalog, setCatalog] = React.useState<CsfCatalog | null>(null);
-  const [assessment, setAssessment] = React.useState<CsfAssessment | null>(null);
+  const [assessment, setAssessment] = React.useState<CsfAssessment | null>(
+    null,
+  );
   const [target, setTarget] = React.useState<number>(3);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -141,7 +149,9 @@ export function CsfSelfAssessment({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const next = await submitSelfAssessment(serviceId, { target_tier: target });
+      const next = await submitSelfAssessment(serviceId, {
+        target_tier: target,
+      });
       setAssessment(next);
       setSubmitted(true);
     } catch (err) {
@@ -183,7 +193,7 @@ export function CsfSelfAssessment({
   ).length;
   const total = inScopeCodes.size;
   const profileLabel = assessment.client_profile
-    ? PROFILE_LABEL[assessment.client_profile] ?? null
+    ? (PROFILE_LABEL[assessment.client_profile] ?? null)
     : null;
   const targetTiers = catalog.tiers.filter((t) => t.tier >= 2);
 

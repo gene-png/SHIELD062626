@@ -72,7 +72,11 @@ def provision_self_assessment_service(
     svc = Service(
         kind=kind,
         status=ServiceStatus.IN_PROGRESS,
-        title=title.strip() if title and title.strip() else f"{org_name} — {_SERVICE_TITLES[sr.service_type]}",
+        title=(
+            title.strip()
+            if title and title.strip()
+            else f"{org_name} — {_SERVICE_TITLES[sr.service_type]}"
+        ),
         client_id=sr.client_id,
         source_request_id=sr.id,
         opened_by=actor_user_id,

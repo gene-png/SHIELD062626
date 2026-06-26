@@ -136,7 +136,9 @@ function DownloadLink({
       className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-muted"
     >
       {label}
-      {filename ? <span className="ml-1 text-ink-tertiary">({filename})</span> : null}
+      {filename ? (
+        <span className="ml-1 text-ink-tertiary">({filename})</span>
+      ) : null}
     </a>
   );
 }
@@ -249,7 +251,9 @@ export function RiskRegisterDashboard(): JSX.Element {
           </h1>
           <p className="mt-1 text-sm text-ink-secondary">
             {clientName}
-            {register ? ` · version ${register.version}` : " · not yet generated"}
+            {register
+              ? ` · version ${register.version}`
+              : " · not yet generated"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

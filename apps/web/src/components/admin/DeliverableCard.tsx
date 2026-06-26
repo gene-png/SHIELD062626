@@ -11,7 +11,10 @@ import {
   StatusPill,
 } from "@shield/design-system";
 
-import { finalizeDeliverable, TechDebtProxyError } from "@/lib/tech_debt/client";
+import {
+  finalizeDeliverable,
+  TechDebtProxyError,
+} from "@/lib/tech_debt/client";
 import type { CapabilityListStatus, Deliverable } from "@/lib/tech_debt/types";
 
 export interface DeliverableCardProps {

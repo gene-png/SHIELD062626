@@ -95,9 +95,7 @@ def render_xlsx(ctx: ZtDeliverableContext) -> bytes:
     ws.append(["Assessment version", ctx.assessment.version])
     ws.append(["Overall stage", ctx.score.overall_stage_label])
     ws.append(["Average stage", _fmt(ctx.score.average_stage)])
-    ws.append(
-        ["Coverage", f"{ctx.score.answered_capabilities}/{ctx.score.total_capabilities}"]
-    )
+    ws.append(["Coverage", f"{ctx.score.answered_capabilities}/{ctx.score.total_capabilities}"])
     for row in ws.iter_rows(min_row=1, max_row=7, min_col=1, max_col=1):
         for cell in row:
             cell.font = bold
@@ -246,10 +244,7 @@ def render_docx(ctx: ZtDeliverableContext) -> bytes:
     if not ctx.gap.gaps:
         add_paragraphs(
             doc,
-            [
-                f"No gaps at target stage {ctx.gap.target_stage} "
-                f"({ctx.gap.target_label})."
-            ],
+            [f"No gaps at target stage {ctx.gap.target_stage} " f"({ctx.gap.target_label})."],
         )
     else:
         add_table(
@@ -340,8 +335,7 @@ def render_pdf(ctx: ZtDeliverableContext) -> bytes:
     if not ctx.gap.gaps:
         story.append(
             Paragraph(
-                f"No gaps at target stage {ctx.gap.target_stage} "
-                f"({ctx.gap.target_label}).",
+                f"No gaps at target stage {ctx.gap.target_stage} " f"({ctx.gap.target_label}).",
                 body,
             )
         )

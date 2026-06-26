@@ -28,9 +28,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     command.upgrade(cfg, "head")
 
     engine = create_engine(url, future=True)
-    TestSession = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     storage = LocalFilesystemStorage(tmp_path / "storage")
 
     from app.db.session import get_db
@@ -58,6 +56,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     _seed.add(_tenant)
     _seed.flush()
     from app.models.client_domain import ClientDomain as _ClientDomain
+
     _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
     _seed.commit()
     _cid = str(_tenant.id)

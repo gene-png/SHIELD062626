@@ -32,11 +32,6 @@ from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
-from app.tenant import (
-    require_artifact_in_tenant,
-    require_deliverable_in_tenant,
-    require_service_in_tenant,
-)
 from app.schemas.tech_debt import (
     CapabilityItemPatch,
     CapabilityItemResponse,
@@ -63,6 +58,10 @@ from app.tech_debt.filename import (
 )
 from app.tech_debt.overlap import analyze_overlap
 from app.tech_debt.parsers import SUPPORTED_MIME, UnsupportedInventoryFormat
+from app.tenant import (
+    require_artifact_in_tenant,
+    require_service_in_tenant,
+)
 
 router = APIRouter(prefix="/tech-debt", tags=["tech-debt"])
 

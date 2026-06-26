@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import io
 from collections.abc import Mapping, Sequence
+from html import escape
 from typing import Any
-from xml.sax.saxutils import escape
 
 # ---------------------------------------------------------------------------
 # XLSX workbook
@@ -57,8 +57,17 @@ def render_xlsx(
     _header(
         ws,
         [
-            "Subcategory", "Function", "Outcome", "High", "Mod", "Low",
-            "Enterprise", "Rule", "Target", "Gap", "Priority",
+            "Subcategory",
+            "Function",
+            "Outcome",
+            "High",
+            "Mod",
+            "Low",
+            "Enterprise",
+            "Rule",
+            "Target",
+            "Gap",
+            "Priority",
         ],
     )
     for r in enterprise_rows:
@@ -88,9 +97,17 @@ def render_xlsx(
         _header(
             ts,
             [
-                "Subcategory", "Governance", "Policy & Process", "Implementation",
-                "Monitoring & Measurement", "Continuous Improvement", "Total",
-                "Level", "Evidence capped", "In scope", "Target",
+                "Subcategory",
+                "Governance",
+                "Policy & Process",
+                "Implementation",
+                "Monitoring & Measurement",
+                "Continuous Improvement",
+                "Total",
+                "Level",
+                "Evidence capped",
+                "In scope",
+                "Target",
             ],
         )
         for row in rows:
@@ -116,11 +133,13 @@ def render_xlsx(
     cover.append([f"Client: {client_name}"])
     cover.append([f"Working profile version: {version}"])
     cover.append([])
-    cover.append([
-        "Levels are code-computed: total = sum of the five dimensions (0-10); "
-        "L1 0-2, L2 3-5, L3 6-7, L4 8-9, L5 10. Enterprise = weighted-floor "
-        "roll-up across the tiers in use."
-    ])
+    cover.append(
+        [
+            "Levels are code-computed: total = sum of the five dimensions (0-10); "
+            "L1 0-2, L2 3-5, L3 6-7, L4 8-9, L5 10. Enterprise = weighted-floor "
+            "roll-up across the tiers in use."
+        ]
+    )
     cover["A1"].font = Font(bold=True, size=14)
 
     out = io.BytesIO()
@@ -252,7 +271,9 @@ def _next_steps(rows: Sequence[Any]) -> list[str]:
     if pc["P3"]:
         steps.append(f"Track the {pc['P3']} Priority 3 gap(s) for continuous improvement.")
     if not steps:
-        steps.append("No gaps were identified — maintain current controls and re-assess on the next cycle.")
+        steps.append(
+            "No gaps were identified — maintain current controls and re-assess on the next cycle."
+        )
     return steps
 
 
@@ -312,7 +333,15 @@ def _pdf_table(
     return t
 
 
-def _cover(story: list[Any], styles: dict[str, Any], *, subtitle: str, client_name: str, version: int, generated_on: str | None) -> None:
+def _cover(
+    story: list[Any],
+    styles: dict[str, Any],
+    *,
+    subtitle: str,
+    client_name: str,
+    version: int,
+    generated_on: str | None,
+) -> None:
     from reportlab.lib.units import inch
     from reportlab.platypus import Paragraph, Spacer
 
@@ -342,7 +371,13 @@ def _scorecard(story: list[Any], styles: dict[str, Any], rows: Sequence[Any]) ->
     story.append(Paragraph("Maturity scorecard", styles["h2"]))
     fns = _function_summary(rows)
     body = [
-        [f["name"], str(f["count"]), f"L{f['avg']}", f"L{f['target']}" if f["target"] else "—", str(f["gaps"])]
+        [
+            f["name"],
+            str(f["count"]),
+            f"L{f['avg']}",
+            f"L{f['target']}" if f["target"] else "—",
+            str(f["gaps"]),
+        ]
         for f in fns
     ]
     levels = [f["avg"] for f in fns]
@@ -362,7 +397,9 @@ def _gap_table(story: list[Any], styles: dict[str, Any], gaps: Sequence[Any]) ->
     from reportlab.platypus import Paragraph
 
     if not gaps:
-        story.append(Paragraph("No gaps — every in-scope subcategory meets its target.", styles["body"]))
+        story.append(
+            Paragraph("No gaps — every in-scope subcategory meets its target.", styles["body"])
+        )
         return
     body = [
         [
@@ -392,14 +429,23 @@ def _new_pdf(out: io.BytesIO, title: str, client_name: str) -> Any:
     from reportlab.platypus import SimpleDocTemplate
 
     return SimpleDocTemplate(
-        out, pagesize=letter, leftMargin=0.7 * inch, rightMargin=0.7 * inch,
-        topMargin=0.7 * inch, bottomMargin=0.7 * inch,
-        title=f"{title} — {client_name}", author="SHIELD by Kentro",
+        out,
+        pagesize=letter,
+        leftMargin=0.7 * inch,
+        rightMargin=0.7 * inch,
+        topMargin=0.7 * inch,
+        bottomMargin=0.7 * inch,
+        title=f"{title} — {client_name}",
+        author="SHIELD by Kentro",
     )
 
 
 def render_exec_pdf(
-    *, client_name: str, version: int, enterprise_rows: Sequence[Any], generated_on: str | None = None
+    *,
+    client_name: str,
+    version: int,
+    enterprise_rows: Sequence[Any],
+    generated_on: str | None = None,
 ) -> bytes:
     from reportlab.platypus import PageBreak, Paragraph
 
@@ -407,7 +453,14 @@ def render_exec_pdf(
     doc = _new_pdf(out, "CSF 2.0 Executive Briefing", client_name)
     styles = _pdf_styles()
     story: list[Any] = []
-    _cover(story, styles, subtitle="Executive Briefing", client_name=client_name, version=version, generated_on=generated_on)
+    _cover(
+        story,
+        styles,
+        subtitle="Executive Briefing",
+        client_name=client_name,
+        version=version,
+        generated_on=generated_on,
+    )
     story.append(PageBreak())
 
     story.append(Paragraph("Executive summary", styles["h2"]))
@@ -424,7 +477,11 @@ def render_exec_pdf(
 
 
 def render_full_pdf(
-    *, client_name: str, version: int, enterprise_rows: Sequence[Any], generated_on: str | None = None
+    *,
+    client_name: str,
+    version: int,
+    enterprise_rows: Sequence[Any],
+    generated_on: str | None = None,
 ) -> bytes:
     from reportlab.lib.units import inch
     from reportlab.platypus import PageBreak, Paragraph
@@ -433,12 +490,26 @@ def render_full_pdf(
     doc = _new_pdf(out, "CSF 2.0 Full Playbook", client_name)
     styles = _pdf_styles()
     story: list[Any] = []
-    _cover(story, styles, subtitle="Full Playbook", client_name=client_name, version=version, generated_on=generated_on)
+    _cover(
+        story,
+        styles,
+        subtitle="Full Playbook",
+        client_name=client_name,
+        version=version,
+        generated_on=generated_on,
+    )
     story.append(PageBreak())
 
     story.append(Paragraph("Contents", styles["h2"]))
     for n, sec in enumerate(
-        ["Executive summary", "Methodology", "Maturity scorecard", "Function detail", "Prioritized roadmap", "Appendix — all subcategories"],
+        [
+            "Executive summary",
+            "Methodology",
+            "Maturity scorecard",
+            "Function detail",
+            "Prioritized roadmap",
+            "Appendix — all subcategories",
+        ],
         start=1,
     ):
         story.append(Paragraph(f"{n}. {sec}", styles["body"]))
@@ -460,7 +531,9 @@ def render_full_pdf(
     by_fn: dict[str, list[Any]] = {}
     for r in enterprise_rows:
         by_fn.setdefault(_fn_code(r.function), []).append(r)
-    ordered = [c for c in FUNCTION_ORDER if c in by_fn] + [c for c in by_fn if c not in FUNCTION_ORDER]
+    ordered = [c for c in FUNCTION_ORDER if c in by_fn] + [
+        c for c in by_fn if c not in FUNCTION_ORDER
+    ]
     for code in ordered:
         frows = sorted(by_fn[code], key=lambda r: r.subcategory_code)
         name = FUNCTION_NAMES.get(code, code)
@@ -517,9 +590,21 @@ def render_full_pdf(
         _pdf_table(
             ["Subcat", "Function", "H", "M", "L", "Ent.", "Rule", "Gap"],
             appx,
-            [0.9 * inch, 1.2 * inch, 0.5 * inch, 0.5 * inch, 0.5 * inch, 0.6 * inch, 0.5 * inch, 0.5 * inch],
+            [
+                0.9 * inch,
+                1.2 * inch,
+                0.5 * inch,
+                0.5 * inch,
+                0.5 * inch,
+                0.6 * inch,
+                0.5 * inch,
+                0.5 * inch,
+            ],
             color_col=5,
-            color_levels=[r.enterprise_level for r in sorted(enterprise_rows, key=lambda r: r.subcategory_code)],
+            color_levels=[
+                r.enterprise_level
+                for r in sorted(enterprise_rows, key=lambda r: r.subcategory_code)
+            ],
         )
     )
     doc.build(story)
@@ -539,7 +624,9 @@ def _shade_col(table: Any, col: int, levels: Sequence[int | None]) -> None:
             shade_cell(table.rows[i + 1].cells[col], LEVEL_HEX[lvl])
 
 
-def _docx_cover(doc: Any, *, subtitle: str, client_name: str, version: int, generated_on: str | None) -> None:
+def _docx_cover(
+    doc: Any, *, subtitle: str, client_name: str, version: int, generated_on: str | None
+) -> None:
     from app.docx_export import add_paragraphs, add_title
 
     add_title(doc, "NIST CSF 2.0", subtitle)
@@ -563,7 +650,13 @@ def _docx_scorecard(doc: Any, rows: Sequence[Any]) -> None:
         doc,
         ["Function", "Subcategories", "Maturity", "Target", "Gaps"],
         [
-            [f["name"], f["count"], f"L{f['avg']}", f"L{f['target']}" if f["target"] else "—", f["gaps"]]
+            [
+                f["name"],
+                f["count"],
+                f"L{f['avg']}",
+                f"L{f['target']}" if f["target"] else "—",
+                f["gaps"],
+            ]
             for f in fns
         ],
     )
@@ -571,12 +664,22 @@ def _docx_scorecard(doc: Any, rows: Sequence[Any]) -> None:
 
 
 def render_exec_docx(
-    *, client_name: str, version: int, enterprise_rows: Sequence[Any], generated_on: str | None = None
+    *,
+    client_name: str,
+    version: int,
+    enterprise_rows: Sequence[Any],
+    generated_on: str | None = None,
 ) -> bytes:
     from app.docx_export import add_heading, add_paragraphs, add_table, new_document, to_bytes
 
     doc = new_document(f"CSF 2.0 Executive Briefing — {client_name}")
-    _docx_cover(doc, subtitle="Executive Briefing", client_name=client_name, version=version, generated_on=generated_on)
+    _docx_cover(
+        doc,
+        subtitle="Executive Briefing",
+        client_name=client_name,
+        version=version,
+        generated_on=generated_on,
+    )
 
     add_heading(doc, "Executive summary")
     add_paragraphs(doc, _overview_sentences(enterprise_rows))
@@ -588,7 +691,16 @@ def render_exec_docx(
         table = add_table(
             doc,
             ["Subcategory", "Outcome", "Current", "Target", "Priority"],
-            [[g.subcategory_code, g.name, f"L{g.enterprise_level}", f"L{g.target_level}" if g.target_level else "—", g.priority or ""] for g in gaps],
+            [
+                [
+                    g.subcategory_code,
+                    g.name,
+                    f"L{g.enterprise_level}",
+                    f"L{g.target_level}" if g.target_level else "—",
+                    g.priority or "",
+                ]
+                for g in gaps
+            ],
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:
@@ -600,7 +712,11 @@ def render_exec_docx(
 
 
 def render_full_docx(
-    *, client_name: str, version: int, enterprise_rows: Sequence[Any], generated_on: str | None = None
+    *,
+    client_name: str,
+    version: int,
+    enterprise_rows: Sequence[Any],
+    generated_on: str | None = None,
 ) -> bytes:
     from app.docx_export import (
         add_heading,
@@ -612,7 +728,13 @@ def render_full_docx(
     )
 
     doc = new_document(f"CSF 2.0 Full Playbook — {client_name}")
-    _docx_cover(doc, subtitle="Full Playbook", client_name=client_name, version=version, generated_on=generated_on)
+    _docx_cover(
+        doc,
+        subtitle="Full Playbook",
+        client_name=client_name,
+        version=version,
+        generated_on=generated_on,
+    )
     add_page_break(doc)
 
     add_heading(doc, "1. Executive summary")
@@ -629,7 +751,9 @@ def render_full_docx(
     by_fn: dict[str, list[Any]] = {}
     for r in enterprise_rows:
         by_fn.setdefault(_fn_code(r.function), []).append(r)
-    ordered = [c for c in FUNCTION_ORDER if c in by_fn] + [c for c in by_fn if c not in FUNCTION_ORDER]
+    ordered = [c for c in FUNCTION_ORDER if c in by_fn] + [
+        c for c in by_fn if c not in FUNCTION_ORDER
+    ]
     for code in ordered:
         frows = sorted(by_fn[code], key=lambda r: r.subcategory_code)
         name = FUNCTION_NAMES.get(code, code)
@@ -641,7 +765,14 @@ def render_full_docx(
             doc,
             ["Subcategory", "Outcome", "Maturity", "Target", "Gap", "Priority"],
             [
-                [r.subcategory_code, r.name, f"L{r.enterprise_level}", f"L{r.target_level}" if r.target_level else "—", ("Yes" if r.gap else ""), r.priority or ""]
+                [
+                    r.subcategory_code,
+                    r.name,
+                    f"L{r.enterprise_level}",
+                    f"L{r.target_level}" if r.target_level else "—",
+                    ("Yes" if r.gap else ""),
+                    r.priority or "",
+                ]
                 for r in frows
             ],
         )
@@ -654,7 +785,16 @@ def render_full_docx(
         table = add_table(
             doc,
             ["Subcategory", "Outcome", "Current", "Target", "Priority"],
-            [[g.subcategory_code, g.name, f"L{g.enterprise_level}", f"L{g.target_level}" if g.target_level else "—", g.priority or ""] for g in gaps],
+            [
+                [
+                    g.subcategory_code,
+                    g.name,
+                    f"L{g.enterprise_level}",
+                    f"L{g.target_level}" if g.target_level else "—",
+                    g.priority or "",
+                ]
+                for g in gaps
+            ],
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:

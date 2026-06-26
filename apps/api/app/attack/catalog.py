@@ -23,50 +23,87 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Tactic:
-    id: str          # e.g. "TA0043"
-    shortname: str   # e.g. "reconnaissance"
+    id: str  # e.g. "TA0043"
+    shortname: str  # e.g. "reconnaissance"
     name: str
     description: str
 
 
 @dataclass(frozen=True)
 class Technique:
-    id: str                       # e.g. "T1003" or "T1003.001"
+    id: str  # e.g. "T1003" or "T1003.001"
     name: str
-    tactics: tuple[str, ...]      # tactic ids the technique maps to
-    parent_id: str | None         # set only for sub-techniques
+    tactics: tuple[str, ...]  # tactic ids the technique maps to
+    parent_id: str | None  # set only for sub-techniques
     is_sub_technique: bool
 
 
 TACTICS: tuple[Tactic, ...] = (
-    Tactic("TA0043", "reconnaissance", "Reconnaissance",
-           "Adversary is trying to gather information they can use to plan future operations."),
-    Tactic("TA0042", "resource-development", "Resource Development",
-           "Adversary is trying to establish resources they can use to support operations."),
-    Tactic("TA0001", "initial-access", "Initial Access",
-           "Adversary is trying to get into the network."),
-    Tactic("TA0002", "execution", "Execution",
-           "Adversary is trying to run malicious code."),
-    Tactic("TA0003", "persistence", "Persistence",
-           "Adversary is trying to maintain their foothold."),
-    Tactic("TA0004", "privilege-escalation", "Privilege Escalation",
-           "Adversary is trying to gain higher-level permissions."),
-    Tactic("TA0005", "defense-evasion", "Defense Evasion",
-           "Adversary is trying to avoid being detected."),
-    Tactic("TA0006", "credential-access", "Credential Access",
-           "Adversary is trying to steal account names and passwords."),
-    Tactic("TA0007", "discovery", "Discovery",
-           "Adversary is trying to figure out the environment."),
-    Tactic("TA0008", "lateral-movement", "Lateral Movement",
-           "Adversary is trying to move through the environment."),
-    Tactic("TA0009", "collection", "Collection",
-           "Adversary is trying to gather data of interest to their goal."),
-    Tactic("TA0011", "command-and-control", "Command and Control",
-           "Adversary is trying to communicate with compromised systems."),
-    Tactic("TA0010", "exfiltration", "Exfiltration",
-           "Adversary is trying to steal data."),
-    Tactic("TA0040", "impact", "Impact",
-           "Adversary is trying to manipulate, interrupt, or destroy systems and data."),
+    Tactic(
+        "TA0043",
+        "reconnaissance",
+        "Reconnaissance",
+        "Adversary is trying to gather information they can use to plan future operations.",
+    ),
+    Tactic(
+        "TA0042",
+        "resource-development",
+        "Resource Development",
+        "Adversary is trying to establish resources they can use to support operations.",
+    ),
+    Tactic(
+        "TA0001", "initial-access", "Initial Access", "Adversary is trying to get into the network."
+    ),
+    Tactic("TA0002", "execution", "Execution", "Adversary is trying to run malicious code."),
+    Tactic(
+        "TA0003", "persistence", "Persistence", "Adversary is trying to maintain their foothold."
+    ),
+    Tactic(
+        "TA0004",
+        "privilege-escalation",
+        "Privilege Escalation",
+        "Adversary is trying to gain higher-level permissions.",
+    ),
+    Tactic(
+        "TA0005",
+        "defense-evasion",
+        "Defense Evasion",
+        "Adversary is trying to avoid being detected.",
+    ),
+    Tactic(
+        "TA0006",
+        "credential-access",
+        "Credential Access",
+        "Adversary is trying to steal account names and passwords.",
+    ),
+    Tactic(
+        "TA0007", "discovery", "Discovery", "Adversary is trying to figure out the environment."
+    ),
+    Tactic(
+        "TA0008",
+        "lateral-movement",
+        "Lateral Movement",
+        "Adversary is trying to move through the environment.",
+    ),
+    Tactic(
+        "TA0009",
+        "collection",
+        "Collection",
+        "Adversary is trying to gather data of interest to their goal.",
+    ),
+    Tactic(
+        "TA0011",
+        "command-and-control",
+        "Command and Control",
+        "Adversary is trying to communicate with compromised systems.",
+    ),
+    Tactic("TA0010", "exfiltration", "Exfiltration", "Adversary is trying to steal data."),
+    Tactic(
+        "TA0040",
+        "impact",
+        "Impact",
+        "Adversary is trying to manipulate, interrupt, or destroy systems and data.",
+    ),
 )
 
 
@@ -128,7 +165,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1593.002", "Search Engines"),
     _s("T1593.003", "Code Repositories"),
     _t("T1594", "Search Victim-Owned Websites", "TA0043"),
-
     # ============================================================
     # Resource Development (TA0042)
     # ============================================================
@@ -179,7 +215,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1608.004", "Drive-by Target"),
     _s("T1608.005", "Link Target"),
     _s("T1608.006", "SEO Poisoning"),
-
     # ============================================================
     # Initial Access (TA0001)
     # ============================================================
@@ -203,7 +238,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1078.002", "Domain Accounts"),
     _s("T1078.003", "Local Accounts"),
     _s("T1078.004", "Cloud Accounts"),
-
     # ============================================================
     # Execution (TA0002)
     # ============================================================
@@ -246,7 +280,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1204.002", "Malicious File"),
     _s("T1204.003", "Malicious Image"),
     _t("T1047", "Windows Management Instrumentation", "TA0002"),
-
     # ============================================================
     # Persistence (TA0003)
     # ============================================================
@@ -356,7 +389,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _t("T1205", "Traffic Signaling", "TA0003", "TA0005", "TA0011"),
     _s("T1205.001", "Port Knocking"),
     _s("T1205.002", "Socket Filters"),
-
     # ============================================================
     # Privilege Escalation (TA0004)
     # ============================================================
@@ -391,7 +423,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1055.013", "Process Doppelgänging"),
     _s("T1055.014", "VDSO Hijacking"),
     _s("T1055.015", "ListPlanting"),
-
     # ============================================================
     # Defense Evasion (TA0005)
     # ============================================================
@@ -476,7 +507,9 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1027.012", "LNK Icon Smuggling"),
     _s("T1027.013", "Encrypted/Encoded File"),
     _s("T1027.014", "Polymorphic Code"),
-    _t("T1542", "Pre-OS Boot (alias listed under Persistence)", "TA0005"),  # already listed; tactic mapping covers
+    _t(
+        "T1542", "Pre-OS Boot (alias listed under Persistence)", "TA0005"
+    ),  # already listed; tactic mapping covers
     _t("T1207", "Rogue Domain Controller", "TA0005"),
     _t("T1014", "Rootkit", "TA0005"),
     _t("T1218", "System Binary Proxy Execution", "TA0005"),
@@ -514,7 +547,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1600.001", "Reduce Key Space"),
     _s("T1600.002", "Disable Crypto Hardware"),
     _t("T1220", "XSL Script Processing", "TA0005"),
-
     # ============================================================
     # Credential Access (TA0006)
     # ============================================================
@@ -574,7 +606,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1552.006", "Group Policy Preferences"),
     _s("T1552.007", "Container API"),
     _s("T1552.008", "Chat Messages"),
-
     # ============================================================
     # Discovery (TA0007)
     # ============================================================
@@ -617,7 +648,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _t("T1007", "System Service Discovery", "TA0007"),
     _t("T1124", "System Time Discovery", "TA0007"),
     _t("T1497", "Virtualization/Sandbox Evasion (also DE)", "TA0007"),
-
     # ============================================================
     # Lateral Movement (TA0008)
     # ============================================================
@@ -637,7 +667,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1021.007", "Cloud Services"),
     _s("T1021.008", "Direct Cloud VM Connections"),
     _t("T1080", "Taint Shared Content", "TA0008"),
-
     # ============================================================
     # Collection (TA0009)
     # ============================================================
@@ -671,7 +700,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1114.003", "Email Forwarding Rule"),
     _t("T1113", "Screen Capture", "TA0009"),
     _t("T1125", "Video Capture", "TA0009"),
-
     # ============================================================
     # Command and Control (TA0011)
     # ============================================================
@@ -713,7 +741,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1102.001", "Dead Drop Resolver"),
     _s("T1102.002", "Bidirectional Communication"),
     _s("T1102.003", "One-Way Communication"),
-
     # ============================================================
     # Exfiltration (TA0010)
     # ============================================================
@@ -736,7 +763,6 @@ _RAW_TECHNIQUES: tuple[Technique, ...] = (
     _s("T1567.004", "Exfiltration Over Webhook"),
     _t("T1029", "Scheduled Transfer", "TA0010"),
     _t("T1537", "Transfer Data to Cloud Account", "TA0010"),
-
     # ============================================================
     # Impact (TA0040)
     # ============================================================

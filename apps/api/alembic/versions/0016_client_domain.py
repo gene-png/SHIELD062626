@@ -42,12 +42,8 @@ def upgrade() -> None:
         _uuid_col("created_by", nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["client_id"], ["client.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["created_by"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["client_id"], ["client.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
         sa.UniqueConstraint("domain", name="uq_client_domain_domain"),
     )
     op.create_index("ix_client_domain_client_id", "client_domain", ["client_id"])

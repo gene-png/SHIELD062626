@@ -53,7 +53,11 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, FixtureProvider]]:
 def _admin(c: TestClient) -> tuple[str, str]:
     admin = c.post(
         "/auth/register",
-        json={"email": "admin@kentro.example", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@kentro.example",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = admin.json()["tokens"]["access_token"]
     cid = c.post(
@@ -67,7 +71,9 @@ def _admin(c: TestClient) -> tuple[str, str]:
 def _seed_attack_and_zt(c: TestClient, bearer: str, cid: str) -> tuple[str, str]:
     """Returns (a gap technique_code, a ZT capability_code)."""
     h = {"Authorization": f"Bearer {bearer}", "X-Client-Id": cid}
-    asvc = c.post("/attack/services", headers=h, json={"kind": "attack_coverage", "title": "ATT&CK"})
+    asvc = c.post(
+        "/attack/services", headers=h, json={"kind": "attack_coverage", "title": "ATT&CK"}
+    )
     a = c.post(f"/attack/services/{asvc.json()['id']}/assessments", headers=h)
     cov = a.json()["coverage"][0]
     technique = cov["technique_code"]

@@ -128,7 +128,10 @@ def test_duplicate_domain_rejected(app_client: TestClient) -> None:
     h = {"Authorization": f"Bearer {bearer}"}
     cid1 = _make_client(c, bearer, "Acme")
     cid2 = _make_client(c, bearer, "Beta")
-    assert c.post(f"/admin/clients/{cid1}/domains", headers=h, json={"domain": "acme.com"}).status_code == 201
+    assert (
+        c.post(f"/admin/clients/{cid1}/domains", headers=h, json={"domain": "acme.com"}).status_code
+        == 201
+    )
     dup = c.post(f"/admin/clients/{cid2}/domains", headers=h, json={"domain": "acme.com"})
     assert dup.status_code == 409
 
@@ -163,13 +166,9 @@ def test_archive_service(app_client: TestClient) -> None:
     svc = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "x"})
     assert svc.status_code == 201, svc.text
     svc_id = svc.json()["id"]
-    arch = c.delete(
-        f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}
-    )
+    arch = c.delete(f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"})
     assert arch.status_code == 204
-    detail = c.get(
-        f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"}
-    )
+    detail = c.get(f"/admin/services/{svc_id}", headers={"Authorization": f"Bearer {bearer}"})
     assert detail.status_code == 200
     assert detail.json()["status"] == "archived"
 

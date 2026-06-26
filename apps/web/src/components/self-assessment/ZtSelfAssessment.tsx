@@ -2,7 +2,13 @@
 
 import * as React from "react";
 
-import { Card, CardBody, CardHeader, CardTitle, cn } from "@shield/design-system";
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  cn,
+} from "@shield/design-system";
 
 import { SelfAssessmentSubmitted } from "@/components/self-assessment/SelfAssessmentSubmitted";
 import { ZtStagePicker } from "@/components/admin/zt/ZtStagePicker";
@@ -334,7 +340,9 @@ export function ZtSelfAssessment({
                           stages={catalog.stages}
                           ariaLabel={`Maturity stage for ${cap.code}`}
                           onChange={(next) => {
-                            void onAnswerUpdate(ans.id, { maturity_stage: next });
+                            void onAnswerUpdate(ans.id, {
+                              maturity_stage: next,
+                            });
                           }}
                         />
                       </div>

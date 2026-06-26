@@ -47,7 +47,11 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 def _register(c: TestClient, email: str) -> dict:
     r = c.post(
         "/auth/register",
-        json={"email": email, "password": "correct horse battery staple!", "display_name": email.split("@")[0]},
+        json={
+            "email": email,
+            "password": "correct horse battery staple!",
+            "display_name": email.split("@")[0],
+        },
     )
     assert r.status_code == 201, r.text
     return r.json()

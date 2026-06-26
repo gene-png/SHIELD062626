@@ -76,8 +76,8 @@ export function CsfDeliverableCard({
         <CardDescription>
           Once you&apos;ve reviewed and approved the inputs, send for evaluation
           to run the gap analysis and produce the PDF + XLSX report. Reports are
-          admin-only — download and share them outside the app. Re-running on the
-          same day appends <code>_v2</code> to the filename.
+          admin-only — download and share them outside the app. Re-running on
+          the same day appends <code>_v2</code> to the filename.
         </CardDescription>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">

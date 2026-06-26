@@ -18,7 +18,11 @@ from app.ai.engine import AIJob, parse_json, register_job
 # llm_calls history stay stable.
 from app.tech_debt.extract import (  # noqa: E402  (import after engine to avoid a cycle)
     PROMPT as _TECH_DEBT_PROMPT,
+)
+from app.tech_debt.extract import (
     PROMPT_VERSION as _TECH_DEBT_PROMPT_VERSION,
+)
+from app.tech_debt.extract import (
     _parse_response as _parse_tech_debt,
 )
 
@@ -49,9 +53,7 @@ calculated by code. Return strictly JSON of the form:
 "what_we_found": "..."}], "executive_summary": "..."}
 """
 
-register_job(
-    AIJob(name="csf_score", prompt=_CSF_SCORE_PROMPT, parser=parse_json)
-)
+register_job(AIJob(name="csf_score", prompt=_CSF_SCORE_PROMPT, parser=parse_json))
 
 
 # --- Zero Trust current/target suggestions ---------------------------------
@@ -68,9 +70,7 @@ or the roadmap — code does that. Return strictly JSON:
 "roadmap_summary": "..."}
 """
 
-register_job(
-    AIJob(name="zt_score", prompt=_ZT_SCORE_PROMPT, parser=parse_json)
-)
+register_job(AIJob(name="zt_score", prompt=_ZT_SCORE_PROMPT, parser=parse_json))
 
 
 # --- MITRE ATT&CK coverage suggestions -------------------------------------
@@ -88,9 +88,7 @@ Return strictly JSON:
 "rationale": "..."}], "executive_summary": "...", "top_blind_spots": [...]}
 """
 
-register_job(
-    AIJob(name="mitre_map", prompt=_MITRE_MAP_PROMPT, parser=parse_json)
-)
+register_job(AIJob(name="mitre_map", prompt=_MITRE_MAP_PROMPT, parser=parse_json))
 
 
 # --- Risk Register synthesis -----------------------------------------------
@@ -109,10 +107,8 @@ strictly JSON:
 {"entries": [{"title": "...", "description": "...", "axis": "detection|prevention|response",
 "linked_techniques": [...], "linked_controls": [...], "likelihood": "...",
 "impact": "...", "compensating_controls": "...", "residual_risk": "...",
-"recommended_action": "...", "rationale": "...", "source": "coverage_finding|questionnaire_response",
-"source_id": "..."}]}
+"recommended_action": "...", "rationale": "...",
+"source": "coverage_finding|questionnaire_response", "source_id": "..."}]}
 """
 
-register_job(
-    AIJob(name="risk_synthesize", prompt=_RISK_SYNTHESIZE_PROMPT, parser=parse_json)
-)
+register_job(AIJob(name="risk_synthesize", prompt=_RISK_SYNTHESIZE_PROMPT, parser=parse_json))

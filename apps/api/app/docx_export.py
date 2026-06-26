@@ -7,6 +7,7 @@ lazily inside `new_document` so importing the exporter module stays cheap.
 
 from __future__ import annotations
 
+import contextlib
 import io
 from collections.abc import Iterable, Sequence
 from typing import Any
@@ -57,11 +58,9 @@ def add_paragraphs(doc: Any, lines: Iterable[str]) -> None:
 def add_table(doc: Any, headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> Any:
     """Add a styled table. Returns the table so callers can shade cells."""
     table = doc.add_table(rows=1, cols=len(headers))
-    try:
+    # Fall back to the default style if the template lacks the named one.
+    with contextlib.suppress(KeyError):
         table.style = "Light Grid Accent 1"
-    except KeyError:
-        # Fall back to the default style if the template lacks the named one.
-        pass
     hdr = table.rows[0].cells
     for i, h in enumerate(headers):
         hdr[i].text = str(h)

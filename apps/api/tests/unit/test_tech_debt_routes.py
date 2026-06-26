@@ -70,6 +70,7 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, sessionmaker, FixtureProv
     _seed.add(_tenant)
     _seed.flush()
     from app.models.client_domain import ClientDomain as _ClientDomain
+
     _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
     _seed.commit()
     _cid = str(_tenant.id)

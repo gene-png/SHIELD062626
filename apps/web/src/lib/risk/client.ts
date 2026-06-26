@@ -67,9 +67,7 @@ export async function fetchRiskRegisterLatest(
   }
 }
 
-export async function generateRiskRegister(
-  cid: string,
-): Promise<RiskRegister> {
+export async function generateRiskRegister(cid: string): Promise<RiskRegister> {
   return jsonRequest<RiskRegister>(
     `/api/proxy/risk/clients/${cid}/register/generate`,
     { method: "POST" },

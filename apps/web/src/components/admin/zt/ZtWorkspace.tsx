@@ -90,7 +90,9 @@ export function ZtWorkspace({
   const [busy, setBusy] = React.useState<"create" | "approve" | "run" | null>(
     null,
   );
-  const [runResult, setRunResult] = React.useState<ZtRunAiResponse | null>(null);
+  const [runResult, setRunResult] = React.useState<ZtRunAiResponse | null>(
+    null,
+  );
   const [targetStage, setTargetStage] = React.useState(3);
 
   const answersByCode = React.useMemo(() => {
@@ -377,7 +379,8 @@ export function ZtWorkspace({
                   field
                   {runResult.changed.length === 1 ? "" : "s"} across{" "}
                   {
-                    new Set(runResult.changed.map((c) => c.capability_code)).size
+                    new Set(runResult.changed.map((c) => c.capability_code))
+                      .size
                   }{" "}
                   capabilit
                   {new Set(runResult.changed.map((c) => c.capability_code))

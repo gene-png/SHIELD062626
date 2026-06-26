@@ -81,8 +81,8 @@ export default async function SelfAssessmentPage({
             </CardHeader>
             <CardBody>
               <p className="text-sm text-ink-secondary">
-                We couldn&apos;t tell which assessment to load. Head back to your
-                intake confirmation and pick a self-assessment to start.
+                We couldn&apos;t tell which assessment to load. Head back to
+                your intake confirmation and pick a self-assessment to start.
               </p>
             </CardBody>
           </Card>

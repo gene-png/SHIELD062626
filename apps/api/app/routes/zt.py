@@ -27,6 +27,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.audit import audit
 from app.db.session import get_db
 from app.dependencies import current_client, current_user, require_role
@@ -34,9 +37,6 @@ from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
 from app.models.deliverable import Deliverable
-from app.ai.diff import diff_keyed_rows
-from app.ai.engine import run_job
-from app.ai.llm import LLMClient
 from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest
@@ -77,7 +77,6 @@ from app.tech_debt.filename import (
     deliverable_filename,
 )
 from app.tenant import (
-    require_deliverable_in_tenant,
     require_service_in_tenant,
     require_zt_assessment_in_tenant,
 )
@@ -151,11 +150,7 @@ def _client_target_stage(db: Session, service_id: uuid.UUID) -> int | None:
 
 
 def _serialize_assessment(db: Session, a: ZtAssessment) -> ZtAssessmentResponse:
-    rows = (
-        db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
     return ZtAssessmentResponse(
         id=a.id,
         service_id=a.service_id,
@@ -372,11 +367,7 @@ def run_ai(
     valid = all_codes(cat_fw)
     rows = {
         r.capability_code: r
-        for r in db.execute(
-            select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)
-        )
-        .scalars()
-        .all()
+        for r in db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
         if r.capability_code in valid
     }
     locked_keys = frozenset(code for code, r in rows.items() if r.locked)
@@ -405,8 +396,7 @@ def run_ai(
             "framework": a.framework.value,
             "capabilities": sorted(rows),
             "answers": {
-                code: {"notes": r.notes, "current": r.maturity_stage}
-                for code, r in rows.items()
+                code: {"notes": r.notes, "current": r.maturity_stage} for code, r in rows.items()
             },
         },
         requested_by=user.id,
@@ -839,15 +829,9 @@ def score_latest(
         )
     cat_fw = _to_catalog_framework(a.framework)
     valid = all_codes(cat_fw)
-    rows = (
-        db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
     answers: dict[str, int | None] = {
-        r.capability_code: r.maturity_stage
-        for r in rows
-        if r.capability_code in valid
+        r.capability_code: r.maturity_stage for r in rows if r.capability_code in valid
     }
     score = compute_score(cat_fw, answers)
     return ZtScoreSummary(
@@ -903,15 +887,9 @@ def gap_analysis(
         )
     cat_fw = _to_catalog_framework(a.framework)
     valid = all_codes(cat_fw)
-    rows = (
-        db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
     answers: dict[str, int | None] = {
-        r.capability_code: r.maturity_stage
-        for r in rows
-        if r.capability_code in valid
+        r.capability_code: r.maturity_stage for r in rows if r.capability_code in valid
     }
     notes: dict[str, str | None] = {
         r.capability_code: r.notes for r in rows if r.capability_code in valid
@@ -1076,14 +1054,10 @@ def finalize_zt_deliverable(
     cat_fw = _to_catalog_framework(assessment.framework)
     valid = all_codes(cat_fw)
     answers = (
-        db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == assessment.id))
-        .scalars()
-        .all()
+        db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == assessment.id)).scalars().all()
     )
     stage_map: dict[str, int | None] = {
-        r.capability_code: r.maturity_stage
-        for r in answers
-        if r.capability_code in valid
+        r.capability_code: r.maturity_stage for r in answers if r.capability_code in valid
     }
     notes_map: dict[str, str | None] = {
         r.capability_code: r.notes for r in answers if r.capability_code in valid
@@ -1096,9 +1070,7 @@ def finalize_zt_deliverable(
         client_name = None
 
     today = utcnow().date()
-    existing = db.execute(
-        select(Deliverable).where(Deliverable.service_id == svc.id)
-    ).all()
+    existing = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
     next_version = len(existing) + 1
 
     service_slug = _SERVICE_SLUG_BY_FRAMEWORK[assessment.framework]

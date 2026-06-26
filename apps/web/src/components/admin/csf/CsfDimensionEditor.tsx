@@ -169,7 +169,11 @@ export function CsfDimensionEditor({
                 className="flex flex-wrap items-center justify-between gap-2"
               >
                 <span className="text-sm text-ink-secondary">{d.label}</span>
-                <div className="flex gap-1" role="radiogroup" aria-label={d.label}>
+                <div
+                  className="flex gap-1"
+                  role="radiogroup"
+                  aria-label={d.label}
+                >
                   {[0, 1, 2].map((v) => {
                     const active = row[d.key] === v;
                     return (

@@ -65,7 +65,9 @@ class RiskEntry(UUIDPKMixin, TimestampMixin, Base):
     axis: Mapped[str | None] = mapped_column(String(16))  # detection/prevention/response
 
     # Where this entry came from (traceability — required, no orphan risks).
-    source: Mapped[str | None] = mapped_column(String(32))  # coverage_finding | questionnaire_response
+    source: Mapped[str | None] = mapped_column(
+        String(32)
+    )  # coverage_finding | questionnaire_response
     source_id: Mapped[str | None] = mapped_column(String(64))
 
     # Links the AI may only draw from the client's assessments (validated).

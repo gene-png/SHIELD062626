@@ -43,9 +43,7 @@ class AttackAssessmentStatus(enum.StrEnum):
 class AttackAssessment(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "attack_assessments"
     __table_args__ = (
-        UniqueConstraint(
-            "service_id", "version", name="uq_attack_assessments_service_version"
-        ),
+        UniqueConstraint("service_id", "version", name="uq_attack_assessments_service_version"),
     )
 
     service_id: Mapped[uuid.UUID] = mapped_column(

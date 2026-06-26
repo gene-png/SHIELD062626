@@ -20,9 +20,9 @@ export default function ActiveWorkPage(): JSX.Element {
       <Card>
         <CardBody className="flex flex-col items-start gap-3">
           <p className="text-sm text-ink-secondary">
-            Open a workspace from the intake queue once you publish a request for
-            processing. A consolidated active-work list lands with the service
-            dashboards.
+            Open a workspace from the intake queue once you publish a request
+            for processing. A consolidated active-work list lands with the
+            service dashboards.
           </p>
           <Link
             href="/admin/queue"

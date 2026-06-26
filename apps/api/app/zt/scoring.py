@@ -152,9 +152,7 @@ def _pillar_name_lookup(framework: ZtFrameworkCode) -> dict[str, str]:
     return {p.code: p.name for p in pillars(framework)}
 
 
-def compute(
-    framework: ZtFrameworkCode, answers: Mapping[str, int | None]
-) -> ScoreResult:
+def compute(framework: ZtFrameworkCode, answers: Mapping[str, int | None]) -> ScoreResult:
     names = _pillar_name_lookup(framework)
     pillar_results: list[PillarScoreResult] = []
     overall_values: list[int] = []
@@ -265,9 +263,7 @@ def analyze_gaps(
         if s >= cap_target:
             continue
         pillar_name = names.get(cap.pillar_code, cap.pillar_code)
-        rows.append(
-            _row_for(cap, s, cap_target, notes.get(cap.code), pillar_name)
-        )
+        rows.append(_row_for(cap, s, cap_target, notes.get(cap.code), pillar_name))
 
     rows.sort(key=lambda g: (-g.priority_score, g.code))
 
@@ -298,9 +294,7 @@ class RoadmapItem:
     priority_score: float
 
 
-def build_roadmap(
-    gaps: Sequence[Gap], *, horizon_months: int = 12
-) -> tuple[RoadmapItem, ...]:
+def build_roadmap(gaps: Sequence[Gap], *, horizon_months: int = 12) -> tuple[RoadmapItem, ...]:
     """Sequence prioritized gaps across a fixed horizon (Work Order D3).
 
     `gaps` are assumed already ordered by descending priority (as analyze_gaps

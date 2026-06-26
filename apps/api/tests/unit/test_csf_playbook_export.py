@@ -43,9 +43,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 
     app = create_app()
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[_storage_dep] = lambda: LocalFilesystemStorage(
-        tmp_path / "storage"
-    )
+    app.dependency_overrides[_storage_dep] = lambda: LocalFilesystemStorage(tmp_path / "storage")
     _seed = TestSession()
     tenant = _Client(legal_name="Test Tenant")
     _seed.add(tenant)
@@ -62,10 +60,16 @@ def test_playbook_export_produces_downloadable_xlsx(app_client) -> None:
     c, cid = app_client
     r = c.post(
         "/auth/register",
-        json={"email": "admin@example.com", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@example.com",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     h = {"Authorization": f"Bearer {r.json()['tokens']['access_token']}"}
-    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()["id"]
+    svc_id = c.post("/csf/services", headers=h, json={"kind": "nist_csf", "title": "CSF"}).json()[
+        "id"
+    ]
     c.post(f"/csf/services/{svc_id}/assessments", headers=h)
 
     # Locked before seeding.
@@ -76,7 +80,11 @@ def test_playbook_export_produces_downloadable_xlsx(app_client) -> None:
     code = SUBCATEGORIES[0].code
     rows = c.get(f"/csf/services/{svc_id}/profile/high", headers=h).json()["rows"]
     sid = next(x["id"] for x in rows if x["subcategory_code"] == code)
-    c.patch(f"/csf/dimension-scores/{sid}", headers=h, json={"governance": 2, "policy": 2, "has_evidence": True, "target_level": 4})
+    c.patch(
+        f"/csf/dimension-scores/{sid}",
+        headers=h,
+        json={"governance": 2, "policy": 2, "has_evidence": True, "target_level": 4},
+    )
 
     ex = c.post(f"/csf/services/{svc_id}/playbook/export", headers=h)
     assert ex.status_code == 200, ex.text
@@ -86,8 +94,11 @@ def test_playbook_export_produces_downloadable_xlsx(app_client) -> None:
 
     dh = {**h, "X-Client-Id": cid}
     magic = {
-        "xlsx": b"PK", "exec_pdf": b"%PDF-", "exec_docx": b"PK",
-        "full_pdf": b"%PDF-", "full_docx": b"PK",
+        "xlsx": b"PK",
+        "exec_pdf": b"%PDF-",
+        "exec_docx": b"PK",
+        "full_pdf": b"%PDF-",
+        "full_docx": b"PK",
     }
     for kind, art in arts.items():
         dl = c.get(f"/artifacts/{art['artifact_id']}/download", headers=dh)

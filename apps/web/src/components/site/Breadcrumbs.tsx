@@ -26,7 +26,9 @@ export function Breadcrumbs({ items }: { items: Crumb[] }): JSX.Element {
                 </Link>
               ) : (
                 <span
-                  className={last ? "font-medium text-ink-secondary" : undefined}
+                  className={
+                    last ? "font-medium text-ink-secondary" : undefined
+                  }
                   aria-current={last ? "page" : undefined}
                 >
                   {c.label}

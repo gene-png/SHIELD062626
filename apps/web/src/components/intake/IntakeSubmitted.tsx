@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 
-import { Card, CardBody, CardHeader, CardTitle, StatusPill } from "@shield/design-system";
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  StatusPill,
+} from "@shield/design-system";
 
 import {
   SERVICE_LABELS,

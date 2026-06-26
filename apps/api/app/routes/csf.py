@@ -27,13 +27,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.audit import audit
+from app.csf import playbook_export as csf_playbook_export
 from app.csf.catalog import (
     CATEGORIES,
     FUNCTIONS,
     SUBCATEGORIES,
     all_codes,
     min_profile_for_category,
+    subcategory_by_code,
 )
 from app.csf.exporters import build_context as build_csf_context
 from app.csf.exporters import render_docx as render_csf_docx
@@ -41,17 +46,6 @@ from app.csf.exporters import render_pdf as render_csf_pdf
 from app.csf.exporters import render_xlsx as render_csf_xlsx
 from app.csf.gap import analyze as analyze_gaps
 from app.csf.maturity import TIER_DEFINITIONS
-from app.csf.scoring import compute as compute_score
-from app.db.session import get_db
-from app.dependencies import current_client, current_user, require_role
-from app.models._common import utcnow
-from app.models.artifact import Artifact, ArtifactOrigin
-from app.models.client import Client
-from app.ai.diff import diff_keyed_rows
-from app.ai.engine import run_job
-from app.ai.llm import LLMClient
-from app.csf import playbook_export as csf_playbook_export
-from app.csf.catalog import subcategory_by_code
 from app.csf.playbook import (
     DimensionScores,
     Tier,
@@ -60,6 +54,12 @@ from app.csf.playbook import (
     score_tier,
     weighted_floor_rollup,
 )
+from app.csf.scoring import compute as compute_score
+from app.db.session import get_db
+from app.dependencies import current_client, current_user, require_role
+from app.models._common import utcnow
+from app.models.artifact import Artifact, ArtifactOrigin
+from app.models.client import Client
 from app.models.csf_assessment import (
     CsfAnswer,
     CsfAssessment,
@@ -85,16 +85,16 @@ from app.schemas.csf import (
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
     CsfPlaybookExportResponse,
-    ExportedArtifact,
     CsfProfileResponse,
+    CsfQuestionnaireResponse,
     CsfRunAiResponse,
     CsfScoreSummary,
     CsfSelfAssessmentSubmit,
-    CsfQuestionnaireResponse,
     CsfServiceCreateRequest,
     CsfServiceResponse,
     EnterpriseProfileResponse,
     EnterpriseSubcategory,
+    ExportedArtifact,
     FunctionScore,
     GapAnalysisResponse,
     GapItem,
@@ -109,7 +109,6 @@ from app.tech_debt.filename import (
 )
 from app.tenant import (
     require_csf_assessment_in_tenant,
-    require_deliverable_in_tenant,
     require_service_in_tenant,
 )
 
@@ -152,11 +151,7 @@ def _client_profile(db: Session, service_id: uuid.UUID) -> str | None:
 
 
 def _serialize_assessment(db: Session, a: CsfAssessment) -> CsfAssessmentResponse:
-    rows = (
-        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     return CsfAssessmentResponse(
         id=a.id,
         service_id=a.service_id,
@@ -210,9 +205,7 @@ def get_interview_questionnaire(
     """
     require_service_in_tenant(db, service_id, client.id)
     profile = _client_profile(db, service_id)
-    framework_key = _PROFILE_TO_TIER_KEY.get(
-        (profile or "").upper(), _DEFAULT_TIER_KEY
-    )
+    framework_key = _PROFILE_TO_TIER_KEY.get((profile or "").upper(), _DEFAULT_TIER_KEY)
     rows = (
         db.execute(
             select(Question)
@@ -681,9 +674,7 @@ def score_latest(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No assessment yet.",
         )
-    rows = db.execute(
-        select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)
-    ).scalars().all()
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     answers: dict[str, int | None] = {r.subcategory_code: r.maturity_tier for r in rows}
     # Defensive: ignore unknown codes.
     valid = all_codes()
@@ -737,11 +728,7 @@ def gap_analysis(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No assessment yet.",
         )
-    rows = (
-        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id))
-        .scalars()
-        .all()
-    )
+    rows = db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     valid = all_codes()
     answers: dict[str, int | None] = {
         r.subcategory_code: r.maturity_tier for r in rows if r.subcategory_code in valid
@@ -749,9 +736,7 @@ def gap_analysis(
     notes: dict[str, str | None] = {
         r.subcategory_code: r.notes for r in rows if r.subcategory_code in valid
     }
-    analysis = analyze_gaps(
-        answers, notes=notes, target_tier=target_tier, top_n=top_n
-    )
+    analysis = analyze_gaps(answers, notes=notes, target_tier=target_tier, top_n=top_n)
     return GapAnalysisResponse(
         assessment_id=a.id,
         version=a.version,
@@ -890,15 +875,11 @@ def get_profile(
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfProfileResponse:
     if tier not in _VALID_TIERS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Unknown tier."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown tier.")
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
     rows = (
         db.execute(
             select(CsfDimensionScore)
@@ -928,13 +909,19 @@ def patch_dimension_score(
 ) -> CsfDimensionScoreResponse:
     row = db.get(CsfDimensionScore, score_id)
     if row is None or row.client_id != client.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Score row not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Score row not found.")
     data = body.model_dump(exclude_unset=True)
     for f in (
-        "governance", "policy", "implementation", "monitoring", "improvement",
-        "in_scope", "rationale", "what_we_found", "has_evidence", "target_level",
+        "governance",
+        "policy",
+        "implementation",
+        "monitoring",
+        "improvement",
+        "in_scope",
+        "rationale",
+        "what_we_found",
+        "has_evidence",
+        "target_level",
         "locked",
     ):
         if f in data and data[f] is not None:
@@ -959,13 +946,9 @@ def enterprise_profile(
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
     out, tiers_in_use = _enterprise_subcategories(db, a)
-    return EnterpriseProfileResponse(
-        tiers_in_use=sorted(tiers_in_use), subcategories=out
-    )
+    return EnterpriseProfileResponse(tiers_in_use=sorted(tiers_in_use), subcategories=out)
 
 
 def _enterprise_subcategories(
@@ -973,9 +956,7 @@ def _enterprise_subcategories(
 ) -> tuple[list[EnterpriseSubcategory], set[str]]:
     """The weighted-floor Enterprise roll-up per in-scope subcategory."""
     rows = (
-        db.execute(
-            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
-        )
+        db.execute(select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id))
         .scalars()
         .all()
     )
@@ -1163,13 +1144,9 @@ def export_playbook(
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     a = _latest_assessment(db, svc.id)
     if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
     all_rows = (
-        db.execute(
-            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
-        )
+        db.execute(select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id))
         .scalars()
         .all()
     )
@@ -1198,32 +1175,77 @@ def export_playbook(
     pdf_mime = "application/pdf"
 
     specs = [
-        ("xlsx", "Data workbook (XLSX)", f"{base}.xlsx", xlsx_mime,
-         csf_playbook_export.render_xlsx(
-             client_name=name, version=a.version,
-             enterprise_rows=enterprise_rows, tier_profiles=tier_profiles)),
-        ("exec_pdf", "Executive briefing (PDF)", f"{base}_Executive.pdf", pdf_mime,
-         csf_playbook_export.render_exec_pdf(
-             client_name=name, version=a.version,
-             enterprise_rows=enterprise_rows, generated_on=on)),
-        ("exec_docx", "Executive briefing (Word)", f"{base}_Executive.docx", DOCX_MIME,
-         csf_playbook_export.render_exec_docx(
-             client_name=name, version=a.version,
-             enterprise_rows=enterprise_rows, generated_on=on)),
-        ("full_pdf", "Full playbook (PDF)", f"{base}_Full.pdf", pdf_mime,
-         csf_playbook_export.render_full_pdf(
-             client_name=name, version=a.version,
-             enterprise_rows=enterprise_rows, generated_on=on)),
-        ("full_docx", "Full playbook (Word)", f"{base}_Full.docx", DOCX_MIME,
-         csf_playbook_export.render_full_docx(
-             client_name=name, version=a.version,
-             enterprise_rows=enterprise_rows, generated_on=on)),
+        (
+            "xlsx",
+            "Data workbook (XLSX)",
+            f"{base}.xlsx",
+            xlsx_mime,
+            csf_playbook_export.render_xlsx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                tier_profiles=tier_profiles,
+            ),
+        ),
+        (
+            "exec_pdf",
+            "Executive briefing (PDF)",
+            f"{base}_Executive.pdf",
+            pdf_mime,
+            csf_playbook_export.render_exec_pdf(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "exec_docx",
+            "Executive briefing (Word)",
+            f"{base}_Executive.docx",
+            DOCX_MIME,
+            csf_playbook_export.render_exec_docx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "full_pdf",
+            "Full playbook (PDF)",
+            f"{base}_Full.pdf",
+            pdf_mime,
+            csf_playbook_export.render_full_pdf(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
+        (
+            "full_docx",
+            "Full playbook (Word)",
+            f"{base}_Full.docx",
+            DOCX_MIME,
+            csf_playbook_export.render_full_docx(
+                client_name=name,
+                version=a.version,
+                enterprise_rows=enterprise_rows,
+                generated_on=on,
+            ),
+        ),
     ]
     artifacts: list[ExportedArtifact] = []
     for kind, label, filename, mime, data in specs:
         art = _write_artifact(
-            db, storage=storage, user=user, client_id=client.id,
-            filename=filename, mime_type=mime, data=data,
+            db,
+            storage=storage,
+            user=user,
+            client_id=client.id,
+            filename=filename,
+            mime_type=mime,
+            data=data,
         )
         artifacts.append(
             ExportedArtifact(kind=kind, label=label, artifact_id=art.id, filename=art.title)
@@ -1343,9 +1365,7 @@ def finalize_csf_deliverable(
     )
     valid = all_codes()
     tier_map: dict[str, int | None] = {
-        r.subcategory_code: r.maturity_tier
-        for r in answers
-        if r.subcategory_code in valid
+        r.subcategory_code: r.maturity_tier for r in answers if r.subcategory_code in valid
     }
     notes_map: dict[str, str | None] = {
         r.subcategory_code: r.notes for r in answers if r.subcategory_code in valid
@@ -1359,9 +1379,7 @@ def finalize_csf_deliverable(
 
     # Filename version: same-day re-finalize -> v2, v3, ...
     today = utcnow().date()
-    existing_count = db.execute(
-        select(Deliverable).where(Deliverable.service_id == svc.id)
-    ).all()
+    existing_count = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
     next_version = len(existing_count) + 1
 
     pdf_name = deliverable_filename(

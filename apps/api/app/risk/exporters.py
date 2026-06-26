@@ -58,7 +58,9 @@ def _enum_list(values, enum_cls):
     return out
 
 
-def build_context(*, client_legal_name: str | None, version: int, entries: Sequence[Any]) -> RiskExportContext:
+def build_context(
+    *, client_legal_name: str | None, version: int, entries: Sequence[Any]
+) -> RiskExportContext:
     return RiskExportContext(
         client_legal_name=client_legal_name or "Client",
         version=version,
@@ -98,9 +100,22 @@ def render_xlsx(ctx: RiskExportContext) -> bytes:
     ws.title = "Risk Register"
 
     header = [
-        "ID", "Weakness", "Description", "Axis", "Source", "Linked Techniques",
-        "Linked Controls", "Likelihood", "Impact", "Tier", "Compensating Controls",
-        "Residual Risk", "Recommended Action", "Rationale", "Origin", "Trust",
+        "ID",
+        "Weakness",
+        "Description",
+        "Axis",
+        "Source",
+        "Linked Techniques",
+        "Linked Controls",
+        "Likelihood",
+        "Impact",
+        "Tier",
+        "Compensating Controls",
+        "Residual Risk",
+        "Recommended Action",
+        "Rationale",
+        "Origin",
+        "Trust",
         *_GOVERNANCE_COLUMNS,
     ]
     ws.append(header)
@@ -155,9 +170,9 @@ def _summary_lines(ctx: RiskExportContext) -> list[str]:
     return [
         f"Total entries: {len(ctx.entries)}",
         f"Critical + High: {crit_high}",
-        f"By axis — detection {ac['detection']}, prevention {ac['prevention']}, response {ac['response']}",
-        "By recommended action — "
-        + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
+        f"By axis — detection {ac['detection']}, prevention "
+        f"{ac['prevention']}, response {ac['response']}",
+        "By recommended action — " + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
     ]
 
 
@@ -186,9 +201,14 @@ def render_pdf(ctx: RiskExportContext) -> bytes:
 
     out = io.BytesIO()
     doc = SimpleDocTemplate(
-        out, pagesize=letter, leftMargin=0.6 * inch, rightMargin=0.6 * inch,
-        topMargin=0.7 * inch, bottomMargin=0.7 * inch,
-        title=f"Risk Register — {ctx.client_legal_name}", author="SHIELD by Kentro",
+        out,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.7 * inch,
+        bottomMargin=0.7 * inch,
+        title=f"Risk Register — {ctx.client_legal_name}",
+        author="SHIELD by Kentro",
     )
     styles = getSampleStyleSheet()
     h1 = styles["Title"]
@@ -257,7 +277,10 @@ def render_pdf(ctx: RiskExportContext) -> bytes:
             ]
         )
     story.append(
-        _grid(table, [0.4 * inch, 2.0 * inch, 0.8 * inch, 1.1 * inch, 0.8 * inch, 1.0 * inch, 1.2 * inch])
+        _grid(
+            table,
+            [0.4 * inch, 2.0 * inch, 0.8 * inch, 1.1 * inch, 0.8 * inch, 1.0 * inch, 1.2 * inch],
+        )
     )
     doc.build(story)
     return out.getvalue()
@@ -300,6 +323,8 @@ def render_docx(ctx: RiskExportContext) -> bytes:
         ]
         for i, e in enumerate(ctx.entries, start=1)
     ]
-    add_table(doc, ["ID", "Weakness", "Axis", "L x I", "Tier", "Recommended", "Linked Source"], rows)
+    add_table(
+        doc, ["ID", "Weakness", "Axis", "L x I", "Tier", "Recommended", "Linked Source"], rows
+    )
 
     return to_bytes(doc)

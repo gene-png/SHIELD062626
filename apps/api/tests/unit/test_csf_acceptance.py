@@ -40,9 +40,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     command.upgrade(cfg, "head")
 
     engine = create_engine(url, future=True)
-    TestSession = sessionmaker(
-        bind=engine, autoflush=False, autocommit=False, future=True
-    )
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
     storage = LocalFilesystemStorage(tmp_path / "storage")
 
     from app.db.session import get_db
@@ -70,6 +68,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     _seed.add(_tenant)
     _seed.flush()
     from app.models.client_domain import ClientDomain as _ClientDomain
+
     _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
     _seed.commit()
     _cid = str(_tenant.id)
@@ -92,9 +91,7 @@ def _register(c: TestClient, email: str) -> dict:
     return r.json()
 
 
-def _seed_and_finalize(
-    c: TestClient, bearer: str, *, score_tier: int = 3
-) -> tuple[str, str]:
+def _seed_and_finalize(c: TestClient, bearer: str, *, score_tier: int = 3) -> tuple[str, str]:
     """Open service, create assessment, score every subcategory at
     `score_tier`, approve, finalize. Returns (service_id, deliverable_id).
     Deliverables are admin-only (Work Order A1) so there is no release step.

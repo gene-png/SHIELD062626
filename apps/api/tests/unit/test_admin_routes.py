@@ -268,9 +268,7 @@ def test_ai_status_reports_fixture_mode(app_client: TestClient) -> None:
     client_bearer = _register(app_client, "client@example.com")["tokens"]["access_token"]
 
     # Tests run in fixture mode -> AI is not live-ready, and no key leaks.
-    r = app_client.get(
-        "/admin/ai-status", headers={"Authorization": f"Bearer {admin_bearer}"}
-    )
+    r = app_client.get("/admin/ai-status", headers={"Authorization": f"Bearer {admin_bearer}"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["mode"] == "fixture"

@@ -12,7 +12,8 @@ import { NextResponse } from "next/server";
 
 import { ACTIVE_CLIENT_COOKIE } from "@/lib/api";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const UUID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export async function GET(): Promise<NextResponse> {
   const value = cookies().get(ACTIVE_CLIENT_COOKIE)?.value ?? null;

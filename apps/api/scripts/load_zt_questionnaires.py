@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select
-
 from app.db.session import SessionLocal
 from app.models.questionnaire import Question
+from sqlalchemy import select
+
 from scripts._common import PACKAGES, print_progress
 
 LOADER = "zt_questionnaires"

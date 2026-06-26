@@ -14,7 +14,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-
 # --- pure diff helpers ------------------------------------------------------
 
 
@@ -74,7 +73,11 @@ def app_client(tmp_path) -> Iterator[TestClient]:
 def _admin_and_service(c: TestClient) -> tuple[str, str]:
     admin = c.post(
         "/auth/register",
-        json={"email": "admin@kentro.example", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@kentro.example",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = admin.json()["tokens"]["access_token"]
     cid = c.post(

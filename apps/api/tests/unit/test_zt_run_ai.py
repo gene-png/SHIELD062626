@@ -49,7 +49,11 @@ def app_client(tmp_path) -> Iterator[tuple[TestClient, FixtureProvider]]:
 def _admin_service(c: TestClient, kind: str) -> tuple[dict, str, str]:
     admin = c.post(
         "/auth/register",
-        json={"email": "admin@kentro.example", "password": "correct horse battery staple!", "display_name": "A"},
+        json={
+            "email": "admin@kentro.example",
+            "password": "correct horse battery staple!",
+            "display_name": "A",
+        },
     )
     bearer = admin.json()["tokens"]["access_token"]
     cid = c.post(
@@ -112,9 +116,16 @@ def test_build_roadmap_front_loads_priority() -> None:
 
     def _gap(code: str, prio: float) -> Gap:
         return Gap(
-            code=code, pillar_code="ID", pillar_name="Identity", name=code,
-            outcome="o", current_stage=1, target_stage=3, gap_size=2,
-            priority_score=prio, notes=None,
+            code=code,
+            pillar_code="ID",
+            pillar_name="Identity",
+            name=code,
+            outcome="o",
+            current_stage=1,
+            target_stage=3,
+            gap_size=2,
+            priority_score=prio,
+            notes=None,
         )
 
     gaps = [_gap(f"C{i:02d}", 100 - i) for i in range(24)]  # priority-descending

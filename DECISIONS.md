@@ -120,7 +120,7 @@ Platform now supports many `client` rows per deployment instead of exactly one. 
 2. `User.client_id` stays nullable for platform admins/reviewers; everyone else's is set on registration.
 3. The frontend forwards the cookie-driven `shield_active_client_id` as `X-Client-Id` through `lib/api.ts`; admin-only cross-tenant routes (e.g. `GET /admin/clients`, `POST /admin/clients`) pass `clientId: ""` to suppress that header.
 4. Backwards compatibility: migration `0013` backfills all existing rows to the deployment's existing singleton `client` row (or creates a `"(legacy backfill)"` placeholder if business data exists but no `client` row does).
-5. D-005 ("reviewer attachment is deployment-wide") still holds *within a tenant*; a reviewer can see every service for the active client they're scoped to.
+5. D-005 ("reviewer attachment is deployment-wide") still holds _within a tenant_; a reviewer can see every service for the active client they're scoped to.
 
 **Ref:** Master Spec §11.1 (denormalized client_id), §2 (single-tenant — now superseded for this platform), §4.5 (auth), DECISIONS D-004 (self-registration extends to per-tenant client creation).
 

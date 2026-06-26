@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 from docx import Document
 from docx.table import Table, _Cell
@@ -183,7 +183,9 @@ def _walk_question_tables(tables: Iterable[Table]) -> list[CsfQuestion]:
                 if cell.text.strip() == texts[1]:
                     stem_cell = cell
                     break
-            stem, cues = _split_stem_and_cues(stem_cell) if stem_cell is not None else (texts[1], [])
+            stem, cues = (
+                _split_stem_and_cues(stem_cell) if stem_cell is not None else (texts[1], [])
+            )
             cues, dimensions = _split_dimensions(cues)
             subcat_text = texts[2] if len(texts) > 2 else ""
             subcats, igs = _parse_subcategories(subcat_text)

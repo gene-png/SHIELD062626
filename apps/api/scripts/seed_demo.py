@@ -35,9 +35,6 @@ _ensure_db_url()
 
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
-
 from app.attack.analytics import compute as compute_attack  # noqa: E402
 from app.attack.catalog import TECHNIQUES, parent_techniques  # noqa: E402
 from app.attack.coverage import CoverageStatus  # noqa: E402
@@ -81,8 +78,8 @@ from app.models import (  # noqa: E402  -- triggers metadata registration
     ZtAssessmentStatus,
     ZtFramework,
 )
-from app.models.capability import CapabilityDisposition  # noqa: E402
 from app.models._common import utcnow  # noqa: E402
+from app.models.capability import CapabilityDisposition  # noqa: E402
 from app.security.password import hash_password  # noqa: E402
 from app.storage.local import LocalFilesystemStorage  # noqa: E402
 from app.tech_debt.exporters import (  # noqa: E402
@@ -109,6 +106,8 @@ from app.zt.exporters import render_xlsx as render_zt_xlsx  # noqa: E402
 from app.zt.maturity import ZtFrameworkCode  # noqa: E402
 from app.zt.scoring import analyze_gaps as analyze_zt_gap  # noqa: E402
 from app.zt.scoring import compute as compute_zt  # noqa: E402
+from sqlalchemy import create_engine, select  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
 
 ADMIN_EMAIL = "admin@kentro.example"
 CLIENT_EMAIL = "client@atlas.example"
@@ -134,9 +133,7 @@ def _bootstrap_org(db: Session) -> tuple[User, User, Client]:
     """Create admin + client users + the singleton Client row."""
     admin = db.execute(select(User).where(User.email == ADMIN_EMAIL)).scalar_one_or_none()
     if admin is not None:
-        client_user = db.execute(
-            select(User).where(User.email == CLIENT_EMAIL)
-        ).scalar_one()
+        client_user = db.execute(select(User).where(User.email == CLIENT_EMAIL)).scalar_one()
         client_org = db.execute(select(Client).limit(1)).scalar_one()
         return admin, client_user, client_org
 
@@ -236,15 +233,22 @@ def _release(
     stage: str,
 ) -> Deliverable:
     pdf_art = _write_artifact(
-        db, storage,
-        user=user, filename=pdf_name, mime_type="application/pdf",
-        data=pdf_bytes, stage=stage,
+        db,
+        storage,
+        user=user,
+        filename=pdf_name,
+        mime_type="application/pdf",
+        data=pdf_bytes,
+        stage=stage,
     )
     xlsx_art = _write_artifact(
-        db, storage,
-        user=user, filename=xlsx_name,
+        db,
+        storage,
+        user=user,
+        filename=xlsx_name,
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        data=xlsx_bytes, stage=stage,
+        data=xlsx_bytes,
+        stage=stage,
     )
     deliv = Deliverable(
         service_id=service.id,
@@ -290,7 +294,15 @@ _TD_ITEMS = [
     ("Splunk Enterprise", "Splunk", "SIEM", "Log analytics", 480_000, None, "keep"),
     ("Sumo Logic", "Sumo Logic", "SIEM", "Log analytics", 140_000, None, "cut"),
     ("CrowdStrike Falcon", "CrowdStrike", "EDR", "Endpoint detection", 320_000, 4500, "keep"),
-    ("Defender for Endpoint", "Microsoft", "EDR", "Endpoint detection", 90_000, 4500, "consolidate"),
+    (
+        "Defender for Endpoint",
+        "Microsoft",
+        "EDR",
+        "Endpoint detection",
+        90_000,
+        4500,
+        "consolidate",
+    ),
     ("Okta Workforce Identity", "Okta", "IAM", "Identity", 210_000, 4500, "keep"),
     ("Duo", "Cisco", "IAM", "MFA", 65_000, 4500, "consolidate"),
     ("Tenable.io", "Tenable", "Vuln Management", "Vulnerability scanning", 175_000, None, "keep"),
@@ -337,7 +349,8 @@ def _seed_tech_debt(
                 confidence_pct=92,
                 disposition=CapabilityDisposition(disp),
                 disposition_rationale=(
-                    "Best-in-class; keep." if disp == "keep"
+                    "Best-in-class; keep."
+                    if disp == "keep"
                     else f"Overlap with {cat} stack; {disp}."
                 ),
             )
@@ -347,12 +360,16 @@ def _seed_tech_debt(
 
     today = date.today()
     pdf_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_TECH_DEBT,
-        extension="pdf", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_TECH_DEBT,
+        extension="pdf",
+        day=today,
     )
     xlsx_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_TECH_DEBT,
-        extension="xlsx", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_TECH_DEBT,
+        extension="xlsx",
+        day=today,
     )
     ctx = build_td_context(
         client_legal_name=org.legal_name,
@@ -361,10 +378,14 @@ def _seed_tech_debt(
         items=items,
     )
     deliv = _release(
-        db, storage,
-        user=admin, service=svc,
-        pdf_name=pdf_name, xlsx_name=xlsx_name,
-        pdf_bytes=render_td_pdf(ctx), xlsx_bytes=render_td_xlsx(ctx),
+        db,
+        storage,
+        user=admin,
+        service=svc,
+        pdf_name=pdf_name,
+        xlsx_name=xlsx_name,
+        pdf_bytes=render_td_pdf(ctx),
+        xlsx_bytes=render_td_xlsx(ctx),
         summary=(
             f"{len(items)} capabilities reviewed; "
             f"${ctx.estimated_savings:,.0f} estimated annual savings."
@@ -386,9 +407,7 @@ def _csf_tier_for(index: int) -> int:
     return pattern[index % len(pattern)]
 
 
-def _seed_csf(
-    db: Session, storage: LocalFilesystemStorage, admin: User, org: Client
-) -> Service:
+def _seed_csf(db: Session, storage: LocalFilesystemStorage, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.NIST_CSF,
         status=ServiceStatus.RELEASED,
@@ -433,12 +452,16 @@ def _seed_csf(
 
     today = date.today()
     pdf_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_NIST_CSF,
-        extension="pdf", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_NIST_CSF,
+        extension="pdf",
+        day=today,
     )
     xlsx_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_NIST_CSF,
-        extension="xlsx", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_NIST_CSF,
+        extension="xlsx",
+        day=today,
     )
     ctx = build_csf_context(
         client_legal_name=org.legal_name,
@@ -449,10 +472,14 @@ def _seed_csf(
         gap=gap,
     )
     _release(
-        db, storage,
-        user=admin, service=svc,
-        pdf_name=pdf_name, xlsx_name=xlsx_name,
-        pdf_bytes=render_csf_pdf(ctx), xlsx_bytes=render_csf_xlsx(ctx),
+        db,
+        storage,
+        user=admin,
+        service=svc,
+        pdf_name=pdf_name,
+        xlsx_name=xlsx_name,
+        pdf_bytes=render_csf_pdf(ctx),
+        xlsx_bytes=render_csf_xlsx(ctx),
         summary=(
             f"Overall maturity: {score.overall_maturity_label}. "
             f"{score.answered_subcategories}/{score.total_subcategories} scored; "
@@ -516,7 +543,9 @@ def _seed_zt(
                 client_id=org.id,
                 capability_code=cap.code,
                 maturity_stage=_zt_stage_for(idx),
-                notes=("Validated via control inheritance from agency MAS." if idx % 9 == 0 else None),
+                notes=(
+                    "Validated via control inheritance from agency MAS." if idx % 9 == 0 else None
+                ),
                 answered_by=admin.id,
                 answered_at=utcnow(),
             )
@@ -531,10 +560,16 @@ def _seed_zt(
 
     today = date.today()
     pdf_name = deliverable_filename(
-        company=org.legal_name, service_slug=service_slug, extension="pdf", day=today,
+        company=org.legal_name,
+        service_slug=service_slug,
+        extension="pdf",
+        day=today,
     )
     xlsx_name = deliverable_filename(
-        company=org.legal_name, service_slug=service_slug, extension="xlsx", day=today,
+        company=org.legal_name,
+        service_slug=service_slug,
+        extension="xlsx",
+        day=today,
     )
     ctx = build_zt_context(
         client_legal_name=org.legal_name,
@@ -546,10 +581,14 @@ def _seed_zt(
         gap=gap,
     )
     _release(
-        db, storage,
-        user=admin, service=svc,
-        pdf_name=pdf_name, xlsx_name=xlsx_name,
-        pdf_bytes=render_zt_pdf(ctx), xlsx_bytes=render_zt_xlsx(ctx),
+        db,
+        storage,
+        user=admin,
+        service=svc,
+        pdf_name=pdf_name,
+        xlsx_name=xlsx_name,
+        pdf_bytes=render_zt_pdf(ctx),
+        xlsx_bytes=render_zt_xlsx(ctx),
         summary=(
             f"Overall stage: {score.overall_stage_label}. "
             f"{score.answered_capabilities}/{score.total_capabilities} scored; "
@@ -579,9 +618,7 @@ def _attack_status_for(index: int, is_sub: bool) -> str | None:
     return None
 
 
-def _seed_attack(
-    db: Session, storage: LocalFilesystemStorage, admin: User, org: Client
-) -> Service:
+def _seed_attack(db: Session, storage: LocalFilesystemStorage, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.ATTACK_COVERAGE,
         status=ServiceStatus.RELEASED,
@@ -615,7 +652,9 @@ def _seed_attack(
                 technique_code=tech.id,
                 status=status_value,
                 notes=(
-                    "Detection: EDR + SIEM correlation rule." if status_value == "covered" and idx % 25 == 0 else None
+                    "Detection: EDR + SIEM correlation rule."
+                    if status_value == "covered" and idx % 25 == 0
+                    else None
                 ),
                 answered_by=admin.id,
                 answered_at=utcnow(),
@@ -629,12 +668,16 @@ def _seed_attack(
 
     today = date.today()
     pdf_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_ATTACK,
-        extension="pdf", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_ATTACK,
+        extension="pdf",
+        day=today,
     )
     xlsx_name = deliverable_filename(
-        company=org.legal_name, service_slug=SERVICE_SLUG_ATTACK,
-        extension="xlsx", day=today,
+        company=org.legal_name,
+        service_slug=SERVICE_SLUG_ATTACK,
+        extension="xlsx",
+        day=today,
     )
     ctx = build_attack_context(
         client_legal_name=org.legal_name,
@@ -644,10 +687,14 @@ def _seed_attack(
         rollup=rollup,
     )
     _release(
-        db, storage,
-        user=admin, service=svc,
-        pdf_name=pdf_name, xlsx_name=xlsx_name,
-        pdf_bytes=render_attack_pdf(ctx), xlsx_bytes=render_attack_xlsx(ctx),
+        db,
+        storage,
+        user=admin,
+        service=svc,
+        pdf_name=pdf_name,
+        xlsx_name=xlsx_name,
+        pdf_bytes=render_attack_pdf(ctx),
+        xlsx_bytes=render_attack_xlsx(ctx),
         summary=(
             f"Coverage: {rollup.coverage_pct}%. "
             f"{rollup.covered} covered, {rollup.partial} partial, "
@@ -692,7 +739,10 @@ def main() -> None:
 
         print("Seeding Zero Trust (CISA) service...")
         zt_cisa = _seed_zt(
-            db, storage, admin, org,
+            db,
+            storage,
+            admin,
+            org,
             kind=ServiceKind.ZERO_TRUST_CISA,
             framework=ZtFramework.CISA_ZTMM_2_0,
             catalog_fw=ZtFrameworkCode.CISA_ZTMM_2_0,
@@ -703,7 +753,10 @@ def main() -> None:
 
         print("Seeding Zero Trust (DoD) service...")
         zt_dod = _seed_zt(
-            db, storage, admin, org,
+            db,
+            storage,
+            admin,
+            org,
             kind=ServiceKind.ZERO_TRUST_DOD,
             framework=ZtFramework.DOD_ZTRA,
             catalog_fw=ZtFrameworkCode.DOD_ZTRA,

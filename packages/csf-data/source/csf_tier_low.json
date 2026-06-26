@@ -98,11 +98,7 @@
         "GV.RM-06",
         "GV.RM-07"
       ],
-      "implementation_groups": [
-        "1",
-        "2",
-        "3"
-      ]
+      "implementation_groups": ["1", "2", "3"]
     },
     {
       "external_id": "CSF-2-1",
@@ -133,9 +129,7 @@
         "ID.RA-09",
         "ID.RA-10"
       ],
-      "implementation_groups": [
-        "5"
-      ]
+      "implementation_groups": ["5"]
     },
     {
       "external_id": "CSF-3-1",
@@ -170,14 +164,7 @@
         "ID.RA-07",
         "ID.RA-08"
       ],
-      "implementation_groups": [
-        "7",
-        "8",
-        "9",
-        "10",
-        "11",
-        "12"
-      ]
+      "implementation_groups": ["7", "8", "9", "10", "11", "12"]
     },
     {
       "external_id": "CSF-4-1",
@@ -207,14 +194,7 @@
         "PR.DS-10",
         "PR.DS-11"
       ],
-      "implementation_groups": [
-        "17",
-        "18",
-        "19",
-        "21",
-        "22",
-        "33"
-      ]
+      "implementation_groups": ["17", "18", "19", "21", "22", "33"]
     },
     {
       "external_id": "CSF-5-1",
@@ -247,12 +227,7 @@
         "PR.AT-01",
         "PR.AT-02"
       ],
-      "implementation_groups": [
-        "14",
-        "15",
-        "24",
-        "33"
-      ]
+      "implementation_groups": ["14", "15", "24", "33"]
     },
     {
       "external_id": "CSF-6-1",
@@ -284,12 +259,7 @@
         "DE.AE-07",
         "DE.AE-08"
       ],
-      "implementation_groups": [
-        "26",
-        "27",
-        "28",
-        "30"
-      ]
+      "implementation_groups": ["26", "27", "28", "30"]
     },
     {
       "external_id": "CSF-7-1",
@@ -332,12 +302,7 @@
         "RC.CO-03",
         "RC.CO-04"
       ],
-      "implementation_groups": [
-        "30",
-        "31",
-        "33",
-        "34"
-      ]
+      "implementation_groups": ["30", "31", "33", "34"]
     },
     {
       "external_id": "CSF-8-1",
@@ -353,20 +318,8 @@
         "▸ Are cybersecurity plans updated based on what’s been learned?"
       ],
       "dimensions": "Monitoring → Continuous Improvement",
-      "csf_subcategories": [
-        "ID.IM-01",
-        "ID.IM-02",
-        "ID.IM-03",
-        "ID.IM-04"
-      ],
-      "implementation_groups": [
-        "1",
-        "12",
-        "26",
-        "30",
-        "31",
-        "34"
-      ]
+      "csf_subcategories": ["ID.IM-01", "ID.IM-02", "ID.IM-03", "ID.IM-04"],
+      "implementation_groups": ["1", "12", "26", "30", "31", "34"]
     }
   ]
 }

@@ -42,7 +42,10 @@ export function AdminShell({
           className="hidden w-60 shrink-0 flex-col border-r border-border-subtle bg-surface-card md:flex"
           aria-label="Admin navigation"
         >
-          <Link href="/admin/queue" className="flex flex-col px-5 py-4 leading-tight">
+          <Link
+            href="/admin/queue"
+            className="flex flex-col px-5 py-4 leading-tight"
+          >
             <span className="text-lg font-semibold tracking-tight text-ink-primary">
               SHIELD
             </span>
@@ -76,7 +79,10 @@ export function AdminShell({
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex items-center justify-between border-b border-border-subtle bg-surface-card px-6 py-3">
             {/* Mobile-only inline nav so the sidebar's destinations stay reachable. */}
-            <nav className="flex items-center gap-3 text-sm md:hidden" aria-label="Primary">
+            <nav
+              className="flex items-center gap-3 text-sm md:hidden"
+              aria-label="Primary"
+            >
               {NAV.map((item) => (
                 <Link
                   key={item.href}
@@ -94,7 +100,10 @@ export function AdminShell({
               <SignOutButton />
             </div>
           </header>
-          <main id="main-content" className="mx-auto w-full max-w-6xl px-6 py-8">
+          <main
+            id="main-content"
+            className="mx-auto w-full max-w-6xl px-6 py-8"
+          >
             {children}
           </main>
         </div>

@@ -14,7 +14,10 @@ export default function CsfServicePage({
 }): JSX.Element {
   return (
     <EnsureActiveClient serviceId={params.id}>
-      <CsfWorkspace serviceId={params.id} serviceTitle="NIST CSF 2.0 Assessment" />
+      <CsfWorkspace
+        serviceId={params.id}
+        serviceTitle="NIST CSF 2.0 Assessment"
+      />
     </EnsureActiveClient>
   );
 }

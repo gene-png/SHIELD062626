@@ -23,6 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.attack.analytics import compute as compute_heatmap
 from app.attack.catalog import (
     TACTICS,
@@ -46,16 +49,12 @@ from app.models.attack_assessment import (
     AttackAssessmentStatus,
     AttackCoverage,
 )
+from app.models.capability import CapabilityItem, CapabilityList
 from app.models.client import Client
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
-from app.tenant import (
-    require_attack_assessment_in_tenant,
-    require_deliverable_in_tenant,
-    require_service_in_tenant,
-)
 from app.schemas.attack import (
     AttackAssessmentResponse,
     AttackCoveragePatch,
@@ -72,12 +71,12 @@ from app.schemas.attack import (
     TacticHeatmapEntry,
 )
 from app.schemas.tech_debt import DeliverableResponse
-from app.ai.diff import diff_keyed_rows
-from app.ai.engine import run_job
-from app.ai.llm import LLMClient
-from app.models.capability import CapabilityItem, CapabilityList
 from app.storage import StorageBackend
 from app.tech_debt.filename import SERVICE_SLUG_ATTACK, deliverable_filename
+from app.tenant import (
+    require_attack_assessment_in_tenant,
+    require_service_in_tenant,
+)
 
 router = APIRouter(prefix="/attack", tags=["attack"])
 
@@ -93,9 +92,7 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
     ordered = sorted(rows, key=lambda r: r.technique_code)
     out: list[AttackCoverageResponse] = []
     for r in ordered:
-        status_enum = (
-            CoverageStatus(r.status) if r.status is not None else None
-        )
+        status_enum = CoverageStatus(r.status) if r.status is not None else None
         out.append(
             AttackCoverageResponse(
                 id=r.id,
@@ -116,9 +113,7 @@ def _serialize_coverage(rows: Iterable[AttackCoverage]) -> list[AttackCoverageRe
     return out
 
 
-def _serialize_assessment(
-    db: Session, a: AttackAssessment
-) -> AttackAssessmentResponse:
+def _serialize_assessment(db: Session, a: AttackAssessment) -> AttackAssessmentResponse:
     rows = (
         db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
         .scalars()
@@ -204,9 +199,7 @@ def get_catalog(
     _user: Annotated[User, Depends(current_user)],
 ) -> CatalogResponse:
     tactic_rows = [
-        CatalogTactic(
-            id=t.id, shortname=t.shortname, name=t.name, description=t.description
-        )
+        CatalogTactic(id=t.id, shortname=t.shortname, name=t.name, description=t.description)
         for t in TACTICS
     ]
     technique_rows = [
@@ -456,9 +449,7 @@ def run_ai(
     against the client's capability list. AI suggests; locked rows are left
     untouched; code computes coverage % elsewhere. Returns a 'what changed' list.
     """
-    svc = require_service_in_tenant(
-        db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE
-    )
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -474,9 +465,7 @@ def run_ai(
 
     rows = {
         r.technique_code: r
-        for r in db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == a.id)
-        )
+        for r in db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
         .scalars()
         .all()
     }
@@ -556,9 +545,7 @@ def run_ai(
         AttackCoverageResponse.model_validate(r, from_attributes=True)
         for r in sorted(rows.values(), key=lambda r: r.technique_code)
     ]
-    return AttackRunAiResponse(
-        tools_available=len(tools), changed=changes, coverage=coverage
-    )
+    return AttackRunAiResponse(tools_available=len(tools), changed=changes, coverage=coverage)
 
 
 @router.post(
@@ -621,9 +608,7 @@ def heatmap(
         )
     valid = attack_all_codes()
     rows = (
-        db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == a.id)
-        )
+        db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
         .scalars()
         .all()
     )
@@ -757,9 +742,7 @@ def finalize_attack_deliverable(
         )
     valid = attack_all_codes()
     coverage = (
-        db.execute(
-            select(AttackCoverage).where(AttackCoverage.assessment_id == assessment.id)
-        )
+        db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == assessment.id))
         .scalars()
         .all()
     )
@@ -773,9 +756,7 @@ def finalize_attack_deliverable(
         client_name = None
 
     today = utcnow().date()
-    existing = db.execute(
-        select(Deliverable).where(Deliverable.service_id == svc.id)
-    ).all()
+    existing = db.execute(select(Deliverable).where(Deliverable.service_id == svc.id)).all()
     next_version = len(existing) + 1
 
     pdf_name = deliverable_filename(

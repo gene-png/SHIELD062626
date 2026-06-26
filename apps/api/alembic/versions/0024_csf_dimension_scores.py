@@ -55,11 +55,15 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["client_id"], ["client.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["evidence_artifact_id"], ["artifacts.id"], ondelete="SET NULL"),
         sa.UniqueConstraint(
-            "assessment_id", "tier", "subcategory_code",
+            "assessment_id",
+            "tier",
+            "subcategory_code",
             name="uq_csf_dimension_scores_assessment_tier_subcat",
         ),
     )
-    op.create_index("ix_csf_dimension_scores_assessment_id", "csf_dimension_scores", ["assessment_id"])
+    op.create_index(
+        "ix_csf_dimension_scores_assessment_id", "csf_dimension_scores", ["assessment_id"]
+    )
     op.create_index("ix_csf_dimension_scores_client_id", "csf_dimension_scores", ["client_id"])
 
 

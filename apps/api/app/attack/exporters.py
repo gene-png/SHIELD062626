@@ -175,9 +175,7 @@ def render_xlsx(ctx: AttackDeliverableContext) -> bytes:
         cell = ws3.cell(row=1, column=col)
         cell.font = bold
         cell.fill = header_fill
-    gap_rows = [
-        c for c in ctx.coverage if c.status == CoverageStatus.GAP.value
-    ]
+    gap_rows = [c for c in ctx.coverage if c.status == CoverageStatus.GAP.value]
     gap_rows.sort(key=lambda c: c.technique_code)
     for cov in gap_rows:
         try:
@@ -332,8 +330,13 @@ def render_pdf(ctx: AttackDeliverableContext) -> bytes:
             ]
         )
     tactic_col_widths = [
-        0.8 * inch, 1.9 * inch, 0.7 * inch, 0.7 * inch,
-        0.6 * inch, 0.6 * inch, 0.9 * inch,
+        0.8 * inch,
+        1.9 * inch,
+        0.7 * inch,
+        0.7 * inch,
+        0.6 * inch,
+        0.6 * inch,
+        0.9 * inch,
     ]
     tactic_table = Table(
         tactic_table_data,

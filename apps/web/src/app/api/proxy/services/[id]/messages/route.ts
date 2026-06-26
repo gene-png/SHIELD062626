@@ -42,10 +42,9 @@ export async function GET(
   const token = await bearer();
   if (!token) return unauthorized();
   try {
-    const result = await apiFetch<unknown>(
-      `/services/${params.id}/messages`,
-      { bearer: token },
-    );
+    const result = await apiFetch<unknown>(`/services/${params.id}/messages`, {
+      bearer: token,
+    });
     return NextResponse.json(result);
   } catch (err) {
     return fail(err);

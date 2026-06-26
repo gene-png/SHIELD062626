@@ -20,7 +20,9 @@ export async function GET(): Promise<NextResponse> {
     );
   }
   try {
-    const result = await apiFetch<unknown>("/messages/inbox", { bearer: token });
+    const result = await apiFetch<unknown>("/messages/inbox", {
+      bearer: token,
+    });
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof ApiError) {

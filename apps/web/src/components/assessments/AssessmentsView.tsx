@@ -215,7 +215,9 @@ export function AssessmentsView(): JSX.Element {
                   <select
                     value={csfProfile ?? ""}
                     onChange={(e) =>
-                      setCsfProfile((e.target.value || null) as CsfProfile | null)
+                      setCsfProfile(
+                        (e.target.value || null) as CsfProfile | null,
+                      )
                     }
                     className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
                   >

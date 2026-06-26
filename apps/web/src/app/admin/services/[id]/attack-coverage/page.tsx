@@ -14,7 +14,10 @@ export default function AttackCoverageServicePage({
 }): JSX.Element {
   return (
     <EnsureActiveClient serviceId={params.id}>
-      <AttackWorkspace serviceId={params.id} serviceTitle="MITRE ATT&CK Coverage" />
+      <AttackWorkspace
+        serviceId={params.id}
+        serviceTitle="MITRE ATT&CK Coverage"
+      />
     </EnsureActiveClient>
   );
 }

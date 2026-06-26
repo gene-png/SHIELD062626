@@ -22,7 +22,9 @@ const SPREADSHEET_MIME = new Set([
 
 /** Tech-debt extraction only accepts a tabular inventory (CSV/XLSX). */
 function isInventory(a: ArtifactSummary): boolean {
-  return SPREADSHEET_MIME.has(a.mime_type) || /\.(csv|xlsx|xls)$/i.test(a.title);
+  return (
+    SPREADSHEET_MIME.has(a.mime_type) || /\.(csv|xlsx|xls)$/i.test(a.title)
+  );
 }
 
 export interface IntakeDocumentsPanelProps {

@@ -7,7 +7,6 @@ client visibility through the same generic /deliverables list.
 from __future__ import annotations
 
 import os
-import uuid as _uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -60,6 +59,7 @@ def app_client(tmp_path) -> Iterator[TestClient]:
     _seed.add(_tenant)
     _seed.flush()
     from app.models.client_domain import ClientDomain as _ClientDomain
+
     _seed.add(_ClientDomain(client_id=_tenant.id, domain="example.com"))
     _seed.commit()
     _cid = str(_tenant.id)
@@ -82,9 +82,7 @@ def _register(c: TestClient, email: str) -> dict:
     return r.json()
 
 
-def _seed_and_finalize(
-    c: TestClient, bearer: str, kind: str, *, stage: int = 3
-) -> tuple[str, str]:
+def _seed_and_finalize(c: TestClient, bearer: str, kind: str, *, stage: int = 3) -> tuple[str, str]:
     sr = c.post(
         "/zt/services",
         headers={"Authorization": f"Bearer {bearer}"},
@@ -123,7 +121,9 @@ def _seed_and_finalize(
         ("zero_trust_dod", "dod_ztra", "Advanced"),
     ],
 )
-def test_phase5_zt_admin_only_deliverable(app_client, kind: str, framework: str, expected_label: str) -> None:
+def test_phase5_zt_admin_only_deliverable(
+    app_client, kind: str, framework: str, expected_label: str
+) -> None:
     """Work Order A1: deliverables + scoring are admin-only; clients never see them."""
     c = app_client
     admin = _register(c, "admin@example.com")
