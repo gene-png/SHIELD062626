@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 import { SignOutButton } from "@/components/site/SignOutButton";
+import { SkipToContent } from "@/components/site/SkipToContent";
 import { authOptions } from "@/lib/auth/options";
 
 export const metadata: Metadata = { title: "Account" };
@@ -24,8 +25,12 @@ export default async function AccountPage(): Promise<JSX.Element> {
   const role = session?.role ?? "—";
   return (
     <>
+      <SkipToContent />
       <PublicHeader />
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10">
+      <main
+        id="main-content"
+        className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10"
+      >
         <div>
           <h1 className="text-2xl font-semibold text-ink-primary">Account</h1>
           <p className="mt-1 text-sm text-ink-secondary">

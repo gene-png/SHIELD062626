@@ -130,3 +130,33 @@ Platform now supports many `client` rows per deployment instead of exactly one. 
 Opening commit lands directly on `main`. Push is deferred until the dev container has credentials configured per AI Prompt §3.3 (no agent-introduced credentials).
 **Rationale:** AI Prompt §3.9 prescribes "push frequently" but §3.3 forbids the agent from introducing its own credentials. Eugene will push when he attaches a PAT or SSH key to the container.
 **Ref:** AI Prompt §3.3, §3.9.
+
+## D-015 — Part F: harden and ship decisions
+
+**2026-06-26 · F (harden)**
+
+- **Worker / async:** AI runs are **synchronous** — the `run-ai` endpoints invoke
+  the LLM inline via `app.ai.engine.run_job`. There is no Celery worker; the
+  orphaned `worker` service (which referenced a non-existent `app.worker`) was
+  removed from `docker-compose.yml`. `redis` remains as a config placeholder for
+  future rate-limiting/async but has no consumer today.
+- **Auth seam:** NextAuth stays pluggable. The active login is `CredentialsProvider`
+  (against the API); a Keycloak realm is scaffolded under `infra/keycloak/` so a
+  SAML/OIDC provider can be added without touching call sites. MFA stays deferred.
+- **Dependency audits:** `pip-audit` (API) and `pnpm audit --audit-level high`
+  (web) run in CI (non-blocking; surface advisories), and `.github/dependabot.yml`
+  opens the fix PRs (pip / npm / github-actions, weekly). pip-audit is clean today.
+- **Accessibility:** static `jsx-a11y` rules are enforced in CI via
+  `next/core-web-vitals` (the eslint step); skip-to-content links + a
+  `#main-content` landmark are present in every shell (admin + client pages).
+  Runtime axe/Pa11y in CI is the remaining a11y item (needs a dev-dep + a built
+  app harness in CI — pnpm-lockfile change to be made in a pnpm environment).
+- **IaC:** `apps/api/Dockerfile` exists; a production `apps/web/Dockerfile`
+  (Next standalone) was added. `infra/terraform` for AWS GovCloud / Azure
+  Government remains a skeleton — it needs concrete account/region/network
+  decisions and is intentionally left as the next infra task.
+- **Isolation:** `test_new_surface_authz.py` covers cross-tenant isolation for the
+  new tables (messages, client_domain, risk register, CSF tier profiles); these
+  run under `pytest -m unit` in CI.
+
+**Ref:** Work Order Part F.

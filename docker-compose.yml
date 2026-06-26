@@ -165,20 +165,10 @@ services:
         alembic upgrade head &&
         exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  worker:
-    restart: unless-stopped
-    build:
-      context: ./apps/api
-    environment:
-      <<: *api-env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./apps/api:/app
-    command: ["celery", "-A", "app.worker", "worker", "--loglevel=INFO"]
+  # NOTE (Work Order F): AI runs are SYNCHRONOUS. The run-ai endpoints invoke the
+  # LLM inline via app.ai.engine.run_job, so there is no Celery worker / queue.
+  # `redis` remains available for future rate-limiting or async work but has no
+  # consumer today. See DECISIONS.md.
 
   web:
     restart: unless-stopped

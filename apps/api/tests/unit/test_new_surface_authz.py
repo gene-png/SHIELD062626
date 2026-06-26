@@ -114,3 +114,59 @@ def test_dimension_score_patch_is_tenant_scoped(c: TestClient) -> None:
     ok = c.patch(f"/csf/dimension-scores/{score_id}", headers=ah, json={"governance": 2})
     assert ok.status_code == 200
     assert ok.json()["governance"] == 2
+
+
+@pytest.mark.unit
+def test_csf_tier_profile_endpoints_are_tenant_scoped(c: TestClient) -> None:
+    admin = _admin(c)
+    a_cid = _make_client(c, admin, "Acme", "acme.example")
+    b_cid = _make_client(c, admin, "Beta", "beta.example")
+    ah = {"Authorization": f"Bearer {admin}", "X-Client-Id": a_cid}
+    svc_id = c.post("/csf/services", headers=ah, json={"kind": "nist_csf", "title": "CSF"}).json()["id"]
+    c.post(f"/csf/services/{svc_id}/assessments", headers=ah)
+    c.post(f"/csf/services/{svc_id}/profiles/seed", headers=ah, json={"tiers": ["high"]})
+
+    # Acting as client B, client A's service + its tier-profile data is invisible.
+    bh = {"Authorization": f"Bearer {admin}", "X-Client-Id": b_cid}
+    assert c.get(f"/csf/services/{svc_id}/profile/high", headers=bh).status_code == 404
+    assert c.get(f"/csf/services/{svc_id}/enterprise-profile", headers=bh).status_code == 404
+    assert c.post(f"/csf/services/{svc_id}/playbook/export", headers=bh).status_code == 404
+    assert c.post(f"/csf/services/{svc_id}/run-ai", headers=bh).status_code in (404, 409)
+    # As client A it resolves.
+    assert c.get(f"/csf/services/{svc_id}/profile/high", headers=ah).status_code == 200
+
+
+@pytest.mark.unit
+def test_client_domain_management_is_admin_only(c: TestClient) -> None:
+    admin = _admin(c)
+    cid = _make_client(c, admin, "Acme", "acme.example")
+    user = c.post(
+        "/auth/register",
+        json={"email": "user@acme.example", "password": "correct horse battery staple!", "display_name": "U"},
+    )
+    ch = {"Authorization": f"Bearer {user.json()['tokens']['access_token']}"}
+    assert c.get(f"/admin/clients/{cid}/domains", headers=ch).status_code == 403
+    assert (
+        c.post(f"/admin/clients/{cid}/domains", headers=ch, json={"domain": "x.example"}).status_code
+        == 403
+    )
+
+
+@pytest.mark.unit
+def test_messages_inbox_does_not_leak_across_tenants(c: TestClient) -> None:
+    admin = _admin(c)
+    a_cid = _make_client(c, admin, "Acme", "acme.example")
+    b_cid = _make_client(c, admin, "Beta", "beta.example")
+    ah = {"Authorization": f"Bearer {admin}", "X-Client-Id": a_cid}
+    svc = c.post("/attack/services", headers=ah, json={"kind": "attack_coverage", "title": "A"}).json()["id"]
+    c.post(f"/services/{svc}/messages", headers=ah, json={"body": "hello A"})
+
+    # The thread shows in A's inbox.
+    a_inbox = c.get("/messages/inbox", headers=ah).json()
+    assert any(t["service_id"] == svc for t in a_inbox["threads"])
+    # ...and never in B's.
+    bh = {"Authorization": f"Bearer {admin}", "X-Client-Id": b_cid}
+    b_inbox = c.get("/messages/inbox", headers=bh).json()
+    assert all(t["service_id"] != svc for t in b_inbox["threads"])
+    # B cannot read A's thread directly either.
+    assert c.get(f"/services/{svc}/messages", headers=bh).status_code == 404
