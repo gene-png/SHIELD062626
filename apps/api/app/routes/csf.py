@@ -47,6 +47,9 @@ from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
+from app.ai.diff import diff_keyed_rows
+from app.ai.engine import run_job
+from app.ai.llm import LLMClient
 from app.csf.catalog import subcategory_by_code
 from app.csf.playbook import (
     DimensionScores,
@@ -77,9 +80,11 @@ from app.schemas.csf import (
     CsfAnswerPatch,
     CsfAnswerResponse,
     CsfAssessmentResponse,
+    CsfDimensionChange,
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
     CsfProfileResponse,
+    CsfRunAiResponse,
     CsfScoreSummary,
     CsfSelfAssessmentSubmit,
     CsfQuestionnaireResponse,
@@ -1013,6 +1018,121 @@ def enterprise_profile(
     return EnterpriseProfileResponse(
         tiers_in_use=sorted(tiers_in_use), subcategories=out
     )
+
+
+def _llm_dep() -> LLMClient:
+    return LLMClient.from_settings()
+
+
+_DIM_FIELDS = ("governance", "policy", "implementation", "monitoring", "improvement")
+_RUN_FIELDS = (*_DIM_FIELDS, "what_we_found")
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=CsfRunAiResponse,
+    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+) -> CsfRunAiResponse:
+    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
+    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
+    rows are untouched; code does the total/level/cap + Enterprise roll-up.
+    Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (CsfAssessmentStatus.APPROVED, CsfAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+    rows = {
+        f"{r.tier}|{r.subcategory_code}": r
+        for r in db.execute(
+            select(CsfDimensionScore).where(CsfDimensionScore.assessment_id == a.id)
+        )
+        .scalars()
+        .all()
+    }
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Seed the Working Profile before running AI.",
+        )
+    locked_keys = frozenset(k for k, r in rows.items() if r.locked)
+
+    def _snap() -> dict[str, dict]:
+        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
+
+    before = _snap()
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    result = run_job(
+        db,
+        llm,
+        "csf_score",
+        inputs={
+            "tiers": sorted({r.tier for r in rows.values()}),
+            "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+        },
+        requested_by=user.id,
+        service_id=svc.id,
+        client_org_name=client_org,
+    )
+    data = result.data if isinstance(result.data, dict) else {}
+
+    for sugg in data.get("scores", []):
+        if not isinstance(sugg, dict):
+            continue
+        row = rows.get(f"{sugg.get('tier')}|{sugg.get('subcategory_code')}")
+        if row is None or row.locked:
+            continue
+        for dim in _DIM_FIELDS:
+            if dim in sugg:
+                try:
+                    v = int(sugg[dim])
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= v <= 2:
+                    setattr(row, dim, v)
+        if isinstance(sugg.get("what_we_found"), str):
+            row.what_we_found = sugg["what_we_found"]
+
+    db.flush()
+    after = _snap()
+    diffs = diff_keyed_rows(before, after, list(_RUN_FIELDS), locked_keys=locked_keys)
+    changes: list[CsfDimensionChange] = []
+    for d in diffs:
+        tier, _, code = d.key.partition("|")
+        for ch in d.changes:
+            changes.append(
+                CsfDimensionChange(
+                    tier=tier, subcategory_code=code, field=ch.field, old=ch.old, new=ch.new
+                )
+            )
+
+    audit(
+        db,
+        action="csf.run_ai",
+        target_type="csf_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"changed_rows": len(diffs)},
+    )
+    db.commit()
+    out_rows = [
+        _score_response(r)
+        for r in sorted(rows.values(), key=lambda r: (r.tier, r.subcategory_code))
+    ]
+    return CsfRunAiResponse(changed=changes, rows=out_rows)
 
 
 # ---------------------------------------------------------------------------

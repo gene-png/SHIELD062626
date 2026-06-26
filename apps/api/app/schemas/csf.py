@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -284,3 +285,20 @@ class EnterpriseSubcategory(BaseModel):
 class EnterpriseProfileResponse(BaseModel):
     tiers_in_use: list[str]
     subcategories: list[EnterpriseSubcategory]
+
+
+class CsfDimensionChange(BaseModel):
+    """One field the csf_score AI run changed on a tiered row (Work Order D4/C2)."""
+
+    tier: str
+    subcategory_code: str
+    field: str
+    old: Any = None
+    new: Any = None
+
+
+class CsfRunAiResponse(BaseModel):
+    """Result of a csf_score Run-AI: what changed + the refreshed rows."""
+
+    changed: list[CsfDimensionChange]
+    rows: list[CsfDimensionScoreResponse]
