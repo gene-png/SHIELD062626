@@ -39,6 +39,11 @@ export interface AttackCoverageRow {
   status: CoverageStatus | null;
   notes: string | null;
   evidence_artifact_id: string | null;
+  locked?: boolean;
+  detection_tools?: string[] | null;
+  prevention_tools?: string[] | null;
+  response_tools?: string[] | null;
+  rationale?: string | null;
   answered_by: string | null;
   answered_at: string | null;
 }
@@ -57,6 +62,24 @@ export interface AttackCoveragePatch {
   status?: CoverageStatus | null;
   notes?: string;
   evidence_artifact_id?: string | null;
+  locked?: boolean;
+  detection_tools?: string[] | null;
+  prevention_tools?: string[] | null;
+  response_tools?: string[] | null;
+  rationale?: string | null;
+}
+
+export interface CoverageChange {
+  technique_code: string;
+  field: string;
+  old: unknown;
+  new: unknown;
+}
+
+export interface AttackRunAiResponse {
+  tools_available: number;
+  changed: CoverageChange[];
+  coverage: AttackCoverageRow[];
 }
 
 export interface TacticHeatmapEntry {
