@@ -259,21 +259,12 @@ def _release(
         xlsx_artifact_id=xlsx_art.id,
         finalized_at=utcnow(),
         finalized_by=user.id,
-        released_to_client_at=utcnow(),
     )
     db.add(deliv)
     db.flush()
     audit(
         db,
         action=f"{stage}.finalized",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={"service_id": str(service.id), "demo": True},
-    )
-    audit(
-        db,
-        action=f"{stage}.released",
         target_type="deliverable",
         target_id=deliv.id,
         actor_user_id=user.id,
