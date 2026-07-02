@@ -29,7 +29,7 @@ async function bearerOrUnauthorized(): Promise<string | NextResponse> {
 /**
  * Bearer + tenant headers for the upstream call. This route hand-rolls the
  * proxy (multipart can't go through `lib/api.ts`), so we forward the active
- * client cookie as X-Client-Id ourselves - otherwise admin/reviewer uploads
+ * client cookie as X-Client-Id ourselves - otherwise admin uploads
  * hit the backend's `current_client` guard and 400. Don't set Content-Type:
  * `fetch` derives the multipart boundary from the FormData body.
  */

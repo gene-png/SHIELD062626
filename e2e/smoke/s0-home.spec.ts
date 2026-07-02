@@ -28,6 +28,20 @@ test("home renders without console errors", async ({ page }) => {
   expect(errors, `console errors on home: ${errors.join(" | ")}`).toEqual([]);
 });
 
+test("home copy has no stale reviewer role and uses spec ATT&CK name", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const body = (await page.locator("body").innerText()).toLowerCase();
+  // The reviewer role was collapsed into admin (Work Order A3); no marketing
+  // copy should still advertise a reviewer walk.
+  expect(body).not.toContain("reviewer");
+  // The ATT&CK service uses its spec name, not the old "Attack Surface Mapping".
+  await expect(
+    page.getByText("MITRE ATT&CK Coverage Mapping"),
+  ).toBeVisible();
+});
+
 test("admin sign-in lands authenticated (nav shows Sign out)", async ({
   page,
 }) => {

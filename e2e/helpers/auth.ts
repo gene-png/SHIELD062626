@@ -45,15 +45,22 @@ export async function signIn(
   // hydration at the start of every attempt, since a native reload restarts the
   // hydration clock. Then assert the authenticated header separately (the
   // callback nav can be a cold Next compile on first hit).
+  //
+  // Guard: a previous attempt's submit may have succeeded with the navigation
+  // landing AFTER its waitForURL gave up (cold next-dev compiles can exceed
+  // it). In that case the retry runs on an already-signed-in page with no
+  // email input, so skip straight to the URL check instead of re-filling.
   await expect(async () => {
-    await settleForHydration(page);
-    await page.locator('input[type="email"]').fill(email);
-    await page.locator('input[type="password"]').fill(password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    if (new URL(page.url()).pathname.startsWith("/sign-in")) {
+      await settleForHydration(page);
+      await page.locator('input[type="email"]').fill(email);
+      await page.locator('input[type="password"]').fill(password);
+      await page.getByRole("button", { name: "Sign in" }).click();
+    }
     await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"), {
-      timeout: 8000,
+      timeout: 15000,
     });
-  }).toPass({ timeout: 40000 });
+  }).toPass({ timeout: 60000 });
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
     timeout: 20000,
   });

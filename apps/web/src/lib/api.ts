@@ -8,7 +8,7 @@
  *
  * Multi-tenant: if the request has a `shield_active_client_id` cookie set
  * by the client switcher, we forward it as `X-Client-Id` so the backend
- * scopes queries to that tenant for admin/reviewer users.
+ * scopes queries to that tenant for admin users.
  */
 
 import { cookies } from "next/headers";

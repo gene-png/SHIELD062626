@@ -23,7 +23,7 @@ const SERVICES: { title: string; description: string }[] = [
       "Assess organizational cybersecurity maturity using NIST CSF 2.0 with weighted scoring, prioritized gaps, and actionable remediation planning.",
   },
   {
-    title: "Attack Surface Mapping",
+    title: "MITRE ATT&CK Coverage Mapping",
     description:
       "Visualize defensive coverage, identify exposure gaps, and understand how security investments support real operational defense.",
   },
@@ -57,7 +57,8 @@ export function ServiceGrid(): JSX.Element {
               <p className="text-xs uppercase tracking-wider text-ink-tertiary">
                 Includes:
                 <span className="ml-2 normal-case tracking-normal text-ink-secondary">
-                  reviewer audit walk, exec rollup, audit-logged AI extractions.
+                  editable consultant workspace, exec rollup, audit-logged AI
+                  extractions.
                 </span>
               </p>
             </CardBody>

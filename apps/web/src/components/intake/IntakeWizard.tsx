@@ -82,7 +82,7 @@ export function IntakeWizard(): JSX.Element {
       })
       .catch((err) => {
         if (cancelled) return;
-        // Admin/reviewer with no active client selected: the backend returns
+        // Admin with no active client selected: the backend returns
         // 400 "X-Client-Id required". Show a friendly picker prompt instead.
         if (err instanceof ProxyError && err.status === 400) {
           setNeedsClient(true);

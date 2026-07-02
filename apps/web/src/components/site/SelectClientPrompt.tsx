@@ -7,7 +7,7 @@ export interface SelectClientPromptProps {
 
 /**
  * Friendly stand-in for the backend's raw 400 "X-Client-Id header is required"
- * response. Admin/reviewer users aren't tied to a single tenant, so tenant-
+ * response. Admin users are not tied to a single tenant, so tenant-
  * scoped pages need them to pick an active client first. Pure markup so it can
  * render in both server and client components.
  */
