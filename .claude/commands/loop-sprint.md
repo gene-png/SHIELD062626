@@ -82,12 +82,10 @@ For tasks marked `risk=gcp-mutating`: write the change, run `terraform validate`
 ## 5. Verify
 
 For every task, run the gates that apply:
-- `npx tsc --noEmit` must pass.
-- `npm test` must pass (or a targeted subset if the suite is slow; full suite at minimum for module-shaped tasks).
-- Synthetic drift check, only for tasks touching `lib/synthetic/**` or `content/evals/**`: `npm run synth:generate` then `git diff --exit-code content/evals/synthetic-engagements/` must show no diff after staging the new files.
-- Forbidden-token scan over staged files (the pre-commit hook handles this once installed; before that, invoke the scanner manually).
-- Em-dash scan on any staged `*.md`: `grep -P "\x{2014}"` must return nothing.
-- Playwright only if the task added routes under `app/`.
+- Every command in the queue's `gates` array must exit 0. These are the repo-wide
+  gates (this project runs its test/typecheck gates inside Docker containers;
+  the queue encodes the exact commands, including the required PATH export).
+- Playwright specs relevant to the task (the task's `verify` array lists them).
 
 Plus any verification predicates listed in the task's own `verify` array.
 
@@ -101,8 +99,8 @@ If any gate fails:
 ## 6. Commit
 
 - Stage **only** the files in the task's `expected_paths` (use `git add <explicit-files>`, never `git add -A`).
-- Run the em-dash scan and forbidden-token scan on the staged set before committing. If anything trips, fix it; do not bypass with `--no-verify`.
-- Write a conventional commit message: `<type>(<scope>): <subject>`. Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`. Subject under 70 chars. Body explains the why in 1-2 sentences. End the body with `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`.
+- Never commit secrets, `.env`, or credentials; do not bypass repo pre-commit hooks with `--no-verify`.
+- Write a conventional commit message: `<type>(<scope>): <subject>`. Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`. Subject under 70 chars. Body explains the why in 1-2 sentences. End the body with the current model's co-author line, e.g. `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 - Capture the new commit SHA.
 
 ---
