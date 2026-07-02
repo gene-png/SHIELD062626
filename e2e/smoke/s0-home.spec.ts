@@ -1,0 +1,38 @@
+import { expect, test } from "@playwright/test";
+
+import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+
+/**
+ * SMOKE_TEST.md section 0 (bring-up): the marketing home renders cleanly and
+ * an admin can sign in to an authenticated session.
+ */
+
+test("home renders without console errors", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      errors.push(msg.text());
+    }
+  });
+  page.on("pageerror", (err) => {
+    errors.push(err.message);
+  });
+
+  await page.goto("/");
+  await expect(page).toHaveTitle(/SHIELD/i);
+  // The public header brand mark is present on the marketing home.
+  await expect(
+    page.getByRole("link", { name: /SHIELD/ }).first(),
+  ).toBeVisible();
+
+  expect(errors, `console errors on home: ${errors.join(" | ")}`).toEqual([]);
+});
+
+test("admin sign-in lands authenticated (nav shows Sign out)", async ({
+  page,
+}) => {
+  await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  // Admin sees the Admin nav entry once signed in.
+  await expect(page.getByRole("link", { name: "Admin" })).toBeVisible();
+});
