@@ -52,6 +52,12 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Claude Code runtime state (commands are tracked; runtime files are not)
+.claude/sprint-queue.json
+.claude/*.log
+.claude/*.lock
+.claude/settings.local.json
+
 # Local data
 postgres-data/
 redis-data/
