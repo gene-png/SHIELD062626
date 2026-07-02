@@ -149,9 +149,16 @@ def register(
     email = _normalize_email(body.email)
 
     if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
+        # Typed detail (reason + message): the web sign-up form maps `reason`
+        # to the right field/copy. Duplicate-email disclosure is consistent
+        # with the domain-rejection copy below, which already tells the caller
+        # whether their domain is approved (see DECISIONS.md D-016).
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account already exists for that email.",
+            detail={
+                "reason": "email_exists",
+                "message": "An account already exists for that email.",
+            },
         )
 
     try:
@@ -159,7 +166,7 @@ def register(
     except PasswordPolicyError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
+            detail={"reason": "password_policy", "message": str(exc)},
         ) from exc
 
     is_first_user = _user_count(db) == 0
@@ -181,11 +188,14 @@ def register(
         if not domain or is_generic_provider(domain):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    "Registration requires a work email at your organization's "
-                    "approved domain. Personal email providers can't be used; "
-                    "contact your administrator."
-                ),
+                detail={
+                    "reason": "email_domain_not_allowed",
+                    "message": (
+                        "Registration requires a work email at your organization's "
+                        "approved domain. Personal email providers can't be used; "
+                        "contact your administrator."
+                    ),
+                },
             )
         approved = db.execute(
             select(ClientDomain).where(ClientDomain.domain == domain)
@@ -193,16 +203,22 @@ def register(
         if approved is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    "No organization is registered for that email domain. Ask "
-                    "your administrator to add your company and domain first."
-                ),
+                detail={
+                    "reason": "email_domain_not_approved",
+                    "message": (
+                        "No organization is registered for that email domain. Ask "
+                        "your administrator to add your company and domain first."
+                    ),
+                },
             )
         client_for_user = db.get(Client, approved.client_id)
         if client_for_user is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="The organization for that domain is no longer available.",
+                detail={
+                    "reason": "email_domain_unavailable",
+                    "message": "The organization for that domain is no longer available.",
+                },
             )
 
     user = User(

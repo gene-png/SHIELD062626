@@ -160,3 +160,31 @@ Opening commit lands directly on `main`. Push is deferred until the dev containe
   run under `pytest -m unit` in CI.
 
 **Ref:** Work Order Part F.
+
+## D-016 — Duplicate-email registration discloses existence (typed error copy)
+
+**2026-07-02 · auth**
+Self-registration surfaces a friendly, field-scoped error for a duplicate email
+("An account already exists for that email. Sign in instead.") rather than a
+generic enumeration-resistant message. The `/auth/register` endpoint returns a
+typed error envelope on every rejection — `error.reason` (machine code) plus
+`error.message` (human copy) — and the web sign-up form maps each `reason` to the
+right field: `email_exists` (409) and `email_domain_not_allowed` /
+`email_domain_not_approved` / `email_domain_unavailable` (422) attach to the email
+field; `password_policy` (422) attaches to the password field; a raw
+`RequestValidationError` (no `reason`) shows a plain-language form-level prompt
+instead of leaking the internal "Request validation failed." string.
+
+**Rationale:** Disclosure posture is kept **consistent with the pre-existing
+domain-rejection copy**, which already tells a caller whether their domain is
+approved. Registration is gated behind admin-approved email domains, so an
+attacker must already control an approved-domain mailbox to probe for account
+existence — the marginal enumeration surface a duplicate-email message adds over
+the domain-approval oracle is negligible, and the usability win (the user learns
+to sign in instead of retrying) is real. The **login** path keeps its stricter
+enumeration-resistant posture unchanged (generic "Invalid email or password." +
+constant-time dummy-hash compare, OWASP A07); the two surfaces differ
+deliberately because login is unauthenticated-probe-heavy while register is
+domain-gated. No new information beyond the existing domain oracle is disclosed.
+
+**Ref:** Master Spec §17 Q2, §4.5; SPRINT_1.md T4; OWASP A07 (login path unchanged).
