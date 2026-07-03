@@ -18,8 +18,7 @@ Enterprise cybersecurity assessment platform. Single-tenant per deployment, FedR
 ```
 apps/
   web/              Next.js 14 (App Router, TS strict, Tailwind, shadcn/ui)
-  api/              FastAPI (Python 3.12) - REST API + OpenAPI
-  worker/           Celery worker (shares the apps/api image)
+  api/              FastAPI (Python 3.12) - REST API + OpenAPI, synchronous AI jobs
 packages/
   design-system/    Tailwind tokens + shadcn components + label maps + copy
   shared-types/     TS types generated from apps/api OpenAPI
@@ -50,7 +49,7 @@ All development happens inside the dev container. Nothing installs to the host.
 ### Option A - VS Code Dev Containers (recommended)
 
 1. Open the repo in VS Code with the **Dev Containers** extension installed.
-2. When prompted, **Reopen in Container**. VS Code builds the dev image and brings up all 8 compose services (db, redis, minio, keycloak, mailhog, api, worker, web).
+2. When prompted, **Reopen in Container**. VS Code builds the dev image and brings up the compose services (db, redis, minio, keycloak, mailhog, api, web). There is no `worker` service — AI jobs run synchronously in `api`.
 3. Once VS Code attaches, run:
    ```bash
    cp .env.example .env
@@ -68,7 +67,7 @@ All development happens inside the dev container. Nothing installs to the host.
 ```bash
 cp .env.example .env
 docker compose up -d db redis minio keycloak mailhog
-docker compose up -d --build api worker
+docker compose up -d --build api
 docker compose run --service-ports --rm web bash scripts/dev-web.sh
 ```
 
@@ -113,11 +112,11 @@ docker compose exec api pytest -m integration
 # Web tests
 docker compose exec web pnpm test
 
-# End-to-end (Playwright)
-docker compose run --rm e2e pnpm e2e
-
-# Accessibility (axe-core / Pa11y)
-docker compose run --rm e2e pnpm a11y
+# End-to-end (Playwright) - host-run against the running stack on :3000.
+# The e2e/ harness holds the sprint-1 smoke suite (14 spec files under
+# e2e/smoke/). Chromium only; needs the stack up and the demo seed loaded.
+cd e2e && npm install && npx playwright test          # whole suite
+cd e2e && npx playwright test smoke/s15-headers.spec.ts   # one spec
 ```
 
 ## Documentation

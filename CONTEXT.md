@@ -1,58 +1,66 @@
 # Project Context
-_Last updated: 2026-07-02 (morning session — first Claude Code session in this repo)_
+_Last updated: 2026-07-03 (end of sprint-1 "smoke sweep" — autonomous loop, branch `qa/smoke-sweep-sprint-1`)_
 
 ## What This Project Is
 SHIELD is Kentro's multi-tenant cybersecurity assessment platform for consultant-led client engagements, targeting high-compliance environments (FedRAMP Moderate/High, AWS GovCloud / Azure Government). It delivers four assessment services — Technical Debt Review, Zero Trust (CISA ZTMM 2.0 + DoD ZTRA), NIST CSF 2.0 (full 10-step Playbook), and MITRE ATT&CK coverage mapping — plus a greenfield Risk Register (5x5 NIST 800-30) that synthesizes from them. Core principle: "AI suggests, code computes" — deterministic scoring lives in Python engines (`apps/api/app/csf/playbook.py`, `app/risk/engine.py`, `app/zt/scoring.py`); the LLM only drafts values and narrative through a single redacting egress client.
 
-Stack: pnpm monorepo. Next.js 14 App Router (`apps/web`), FastAPI + SQLAlchemy 2 + Alembic (`apps/api`), Postgres 16 / Redis / MinIO / Keycloak / MailHog via `docker-compose.yml`. Version 3.0.0.
+Stack: pnpm monorepo. Next.js 14 App Router (`apps/web`), FastAPI + SQLAlchemy 2 + Alembic (`apps/api`), Postgres 16 / Redis / MinIO / Keycloak / MailHog via `docker-compose.yml`. There is no Celery worker — AI jobs run synchronously in `api`. Version 3.0.0.
 
 ## Current State
 - **v2 work order (Parts A-F) is merged to main** (PR #1, migrations 0015-0025). All four service surfaces, multi-tenant onboarding, AI job registry, CSF Playbook engine, Risk Register, and the F hardening pass are built.
-- All local CI-equivalent gates were green at merge: ruff, black, bandit, prettier, tsc, eslint, `pytest -m unit` (incl. deterministic-engine and tenant-isolation suites); `next build` compiles all 35 pages.
-- **Nothing has been human-QA'd at runtime yet.** The entire `SMOKE_TEST.md` checklist (browser walkthrough, eyeballing generated PDF/Word/XLSX, one live-AI run) is unchecked. This is the gate before prod.
-- AI defaults to `fixture` mode (no API key needed); live mode needs `ANTHROPIC_API_KEY` + `SHIELD_LLM_MODE=live` in `.env`.
-- The Celery worker was REMOVED in Part F (AI is synchronous). README references to a worker are stale.
+- **Sprint-1 "smoke sweep" is COMPLETE** on branch `qa/smoke-sweep-sprint-1` (T0 through T10, plus inserted T0b and T6b). The `SMOKE_TEST.md` checklist is now backed by a green 14-file Playwright smoke suite under `e2e/smoke/`; only the human-only items remain (see "Needs David").
+- AI defaults to `fixture` mode. As of T6b, fixture mode serves deterministic, demo-plausible suggestions for all five AI purposes fully OFFLINE (no API key) — the demo/dev stack is now exercisable end-to-end without live LLM. Live mode still needs `ANTHROPIC_API_KEY` + `SHIELD_LLM_MODE=live`.
 
-## Just Completed
-- (This session) Copied the standard 20-command Claude workflow set from kentro-cloud-modernization into `.claude/commands/`; gitignored `.claude` runtime state; created this CONTEXT.md.
-- (This session) **Fixed seed_demo.py crash**: it still passed `released_to_client_at` to `Deliverable` (column dropped by migration 0015 / Work Order A1) and seeded a `.released` audit event for the removed release-to-client path. Removed both (`apps/api/scripts/seed_demo.py:253-263`). Seed now completes; demo data fully loaded. UNCOMMITTED.
-- `scripts/dev-up.ps1` — one-shot stack startup (starts Docker Desktop, compose up, waits for health, seeds demo accounts, prints creds banner). Auto-runs via `.vscode/tasks.json`.
-- `SMOKE_TEST.md` — the pre-prod runtime QA checklist (15 sections + sign-off).
-- PR #1 merged: the full A-F work order. Details in `PR_DESCRIPTION.md`; part-by-part log in `IMPLEMENTATION.md`; decisions in `DECISIONS.md`.
+## What Shipped This Sprint (sprint-1 smoke sweep)
+Every task committed on `qa/smoke-sweep-sprint-1`:
+- **T0** (c15a8da) — scaffolded the Playwright smoke harness (`e2e/`: package.json, lockfile, playwright.config.ts chromium-only + fullyParallel:false, helpers/auth.ts, s0-home spec). The `e2e/` dir was empty despite the README claiming a suite.
+- **T0b** (e017480) — PRE-EXISTING defect: `tests/unit/test_zt_questionnaire.py` did `parents[4]` which IndexErrors at COLLECTION time in-container (killed the whole unit suite). Resolved the zt-data dir defensively + mounted `packages/zt-data` read-only into `api` so the test still runs. Unblocked the queue-wide pytest gate.
+- **T1** (dd0e23b) — stale marketing/sign-up copy: renamed the ATT&CK card to "MITRE ATT&CK Coverage Mapping", removed the reviewer-role blurb (removed in A3), fixed B1 bootstrap copy, scrubbed 8 stale admin/reviewer code comments.
+- **T2** (63a2d2a) — `seed_demo.py` now idempotently approves the `atlas.example` client domain so a fresh stack supports self-registration.
+- **T3** (22e79e9) — custom `not-found.tsx` (app shell + Home / My Assessments / Sign in recovery links); added `id=main-content` for the skip-link work.
+- **T4** (a350e9e) — typed registration errors (`{reason, message}` dict-detail) mapped to friendly per-field sign-up copy; disclosure posture logged DECISIONS D-016.
+- **T5** (aaae28c) — s3 client self-assessment spec: "assessment" terminology, CSF answer persistence across save-and-exit, DoD ZT 3-level ladder, submit-moves-status.
+- **T6b** (8a9743c) — DAVID-APPROVED product decision: fixture-mode AI now serves deterministic runtime suggestions offline. New `app/ai/fixtures.py` (`RuntimeFixtureProvider`, payload-aware per purpose); missing fixture -> typed 503 (never raw 500). Logged DECISIONS D-017. Unblocked T6/T7/T8.
+- **T6** (dfa432b) — s4-techdebt / s5-attack / s6-zt admin smoke specs; found + fixed a REAL app defect (see below).
+- **T7** (c01aaa6) — s7-csf-playbook / s8-risk-register specs; downloaded 8 export artifacts to `e2e/artifacts/` for the section-10 eyeball.
+- **T8** (da3c822) — s9-messaging (thread + inbox round-trip) and s11-staleness (C3 nudge set/clear) specs.
+- **T9** (4375816) — s12-a11y-nav (skip-link + keyboard) and s13-isolation (tenant isolation) specs.
+- **T10** (this commit) — s15-headers spec (all six security headers verified present); synced SMOKE_TEST.md checkboxes to green specs; fixed README worker/e2e drift; this CONTEXT snapshot.
 
-## Active / In Progress
-- **Pre-prod smoke test (`SMOKE_TEST.md`)** — Section 0 (bring-up) effectively passes: stack healthy, web 200, API healthy, no worker service, admin sign-in works via Playwright with no console errors. Rest unchecked.
-- Smoke-test finding (open): marketing home service cards say "INCLUDES: reviewer audit walk" — stale copy; the reviewer role was removed in A3. Also home page calls the ATT&CK service "Attack Surface Mapping" (verify against spec naming).
-- Uncommitted in working tree: `.claude/commands/` (20 files), the `.gitignore` addition, and the seed_demo.py fix (below).
+## Real Bug Found + Fixed This Sprint
+- **T6, attack coverage PATCH route (dfa432b):** the ATT&CK technique panel's status/notes/lock edits were dead in the browser — `/api/proxy/attack/coverage/[id]` PATCH route did not exist (the zt/answers equivalent did), so edits 404'd. Added the route (mirrors zt). GOTCHA: the repo-wide `.gitignore` `coverage/` pattern silently ignored the new `.../attack/coverage/` dir — needed a `.gitignore` negation. **Check `git status` after creating any dir named `coverage`.**
 
-## Session 2026-07-02 environment notes
-- Docker Desktop + WSL2 were installed fresh on this machine today (WSL platform install needs an elevated shell; `winget install Microsoft.WSL` fails non-elevated).
-- Docker CLI is NOT on Git Bash PATH: use `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` (also fixes the `docker-credential-desktop not found` pull error).
-- PowerShell script execution is deny-ruled in Claude Code here — replicate dev-up.ps1 steps in bash instead.
-- Playwright 1.61.1 + Chromium installed on host; scripted browsing works from the session scratchpad (`npm install playwright` there).
+## Needs David (human-only, cannot be automated)
+- **SMOKE_TEST section 10** — eyeball the 8 generated documents. They are saved (gitignored) to `e2e/artifacts/`: `CSF_Playbook_v8.xlsx`, `CSF_Playbook_v8_Executive.pdf/.docx`, `CSF_Playbook_v8_Full.pdf/.docx`, `Risk_Register_v5.xlsx/.pdf/.docx`. Each was asserted HTTP 200 + correct content-type; only the visual look-right check remains.
+- **SMOKE_TEST section 14** — one live-AI run: set `ANTHROPIC_API_KEY` + `SHIELD_LLM_MODE=live`, run one Run-AI, confirm a redacted `llm_calls` entry with no PII.
+- **PR push** — the sprint branch is ready to open as a PR but that is `review-required` per autonomy rules; also pending Gene's collaborator access on the repo.
 
-## Important Next Steps
-1. Run the `SMOKE_TEST.md` checklist top to bottom against a running stack (`scripts/dev-up.ps1`). Fix what it surfaces; check off items as they pass.
-2. Section 10 (eyeball the generated CSF/Risk Register documents) and Section 14 (one live-AI run) need David specifically.
-3. `infra/terraform` for AWS GovCloud / Azure Government — blocked on account/region/network decisions.
-4. Runtime axe/Pa11y in CI (static jsx-a11y is enforced; runtime needs a built-app harness).
-5. Import IG Core/Supporting cross-reference metadata so CSF roll-up Rules 2/5 and `is_core` priority stop using safe defaults.
+## Backlog (found this sprint, not in scope to fix)
+- **`next@14.2.15` CRITICAL vuln + ~29 pnpm advisories** — dependency audit surfaced a critical Next.js advisory plus a stack of transitive pnpm vulnerabilities. Needs a dependency-bump pass (verify no App-Router breakage).
+- **`beacon.test` is unregistrable** — the seeded Beacon Labs approved domain uses `.test`, a reserved/special-use TLD the API email-validator rejects (422 "special-use or reserved name") BEFORE the domain-approval check, so no user can ever register on it. Admin can approve a `.test`/`.invalid`/`.localhost` domain in the UI but it can never onboard a user. s13 uses `beacon.example` instead. Product inconsistency to resolve (reject reserved TLDs at approval time, or document).
+- **Skip-link landmark focus** — `<main id=main-content>` has no `tabindex=-1`, so activating the skip link moves the sequential-focus start point but does not land focus ON the landmark (WAI-ARIA skip-link practice).
+- **Roving-tabindex on radiogroups** — TierPicker / ZtStagePicker radios are Tab-reachable and Space/Enter-operable but lack arrow-key navigation within the radiogroup.
+- **Heatmap `scope=row`** — tbody `<th>` likelihood labels lack `scope=row`, so Chromium's a11y tree does not treat them as row headers (thead `<th>`s do resolve to columnheader).
+- **Unlimited CSF draft versions** — `POST csf/services/<id>/assessments` has no draft-exists guard; versions just increment on every call. Fine for tests (fresh draft each run) but unbounded in practice.
 
-## Known Issues & Blockers
-- `BUILD_REPORT.md` and `CHANGELOG.md` are STALE (stuck at Phase 2, 2026-05-21, still describe the removed worker). Trust `PR_DESCRIPTION.md` + `IMPLEMENTATION.md` + git log instead.
-- MFA and email verification are deliberately feature-flagged OFF (compensating controls documented); FedRAMP-authorized LLM connector deferred.
-- CI on GitHub runs only on main/PRs — PR #1 was its first real run; watch for CI-vs-local drift.
-- Host has no node_modules installed (everything ran in Docker so far); Docker Desktop not running at session start.
+## Environment Notes (carried forward — still true)
+- Docker CLI is NOT on Git Bash PATH: `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` in every shell.
+- **next dev hot-reload does NOT fire through the Windows bind mount** — after ANY `apps/web` source edit run `docker compose up -d --force-recreate web` (~10-20s) before e2e; in-container touch/restart does not help. Adding a NEW python module to `app/` needs `docker compose restart api` (uvicorn --reload picks up edits to existing modules but may miss new files).
+- e2e specs run on the HOST: `cd e2e && npx playwright test [file]`, base URL `http://localhost:3000`, Chromium installed.
+- In-container `pytest -m unit` takes ~3min alone but ~13-16min under concurrent load; run gates sequentially, capture exit via `sh -c 'pytest; echo PYTEST_EXIT=$?'`, and poll a detached log rather than a foreground wait.
+- next-dev under back-to-back e2e load queues requests for tens of seconds -> cold-compile timeouts on signIn/register (`auth.ts` toPass 60s). This is a documented dev-server flake, not a spec defect; re-run passes clean.
+- Demo logins: `admin@kentro.example` / `DemoPass!2026` (Kentro consultant), `client@atlas.example` / `DemoPass!2026` (Atlas tenant). Seeded Atlas service ids are stable constants: attack_coverage=`7c2ec112-...`, zero_trust_cisa=`2a2c1b0d-...`, zero_trust_dod=`0290f4e2-...`, nist_csf=`55eb8797-...`, tech_debt=`3c73a6cb-...`; Atlas client=`1b9c80e3-...`.
 
-## Lessons Learned — This Codebase
+## Test Coverage Status
+- **Backend:** full `pytest -m unit` suite green in-container (T0b unblocked collection). Includes CSF Playbook engine, risk engine, cross-tenant isolation, and the new `test_ai_runtime_fixtures.py` (T6b).
+- **Web:** tsc `--noEmit` clean (the standing repo-health gate for spec-only tasks).
+- **Playwright e2e:** 14 smoke spec files under `e2e/smoke/` mapping to SMOKE_TEST sections 0-15. Prior checkpoint ran 25/25 green; T10 targeted s15 run green.
+- Known flake: dev-server cold-compile timeouts under concurrent load (above) — re-run clears it.
+
+## Lessons Learned — This Codebase (preserved history)
 - Demo logins seeded by dev-up: `admin@kentro.example` / `DemoPass!2026` and `client@atlas.example` / `DemoPass!2026`. Web :3000, API docs :8000/docs, Keycloak :8080, MinIO :9001, MailHog :8025.
 - Migrations must stay SQLite-safe (`batch_alter_table`) — tests use SQLite, prod uses Postgres.
 - New persisted analysis fields should be additive/optional so older assessments parse unchanged (the C0 pattern).
 - The tiered CSF model coexists with the simpler `CsfAnswer` (which still backs the client self-assessment) — do not consolidate them casually.
-- Tests run inside containers: `docker compose exec api pytest -m unit|integration`, `docker compose exec web pnpm test`, `docker compose run --rm e2e pnpm e2e|a11y`.
-
-## Test Coverage Status
-- **Backend:** full unit suite green, including 20 CSF Playbook engine tests, risk engine tests, and cross-tenant isolation tests for every new table. Integration suite exists (`pytest -m integration`, real DB).
-- **Web:** unit tests via `pnpm test`; tsc + eslint clean.
-- **Playwright e2e:** suite lives in `e2e/` and runs via the `e2e` compose service; also a11y (axe/Pa11y). Coverage of the new v2 surfaces vs. the checklist has not been audited — the smoke test exists precisely because runtime coverage is unverified.
-- No known flaky tests recorded yet.
+- Tests run inside containers: `docker compose exec api pytest -m unit|integration`, `docker compose exec web pnpm test`. e2e is host-run Playwright (`cd e2e && npx playwright test`).
+- Playwright gotchas learned this sprint: `getByRole` name matching is SUBSTRING (use `exact:true` near sibling widgets); `check()/uncheck()` fail on auto-save checkboxes (use `click()` + `waitForResponse`); assert post-Run-AI UI state after `page.reload()` (dodges the next-dev StrictMode double-load clobber race); a body click before the first Tab moves the sequential-focus start point past the skip link.
