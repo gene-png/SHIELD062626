@@ -13,6 +13,8 @@ node_modules/
 dist/
 build/
 coverage/
+# ...but the ATT&CK coverage proxy route dir is app code, not a coverage report
+!apps/web/src/app/api/proxy/attack/coverage/
 *.tsbuildinfo
 
 # Python
