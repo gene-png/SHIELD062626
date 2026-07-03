@@ -103,6 +103,10 @@ test("DoD questionnaire renders by pillar and current/target stages are settable
 test("Run AI clamps DoD suggestions to <= 3 and the roadmap groups gaps by month", async ({
   page,
 }) => {
+  // Long flow (sign-in + create + reload + Run AI, all against a next-dev server
+  // that cold-compiles routes and queues requests under whole-suite load); the
+  // sibling test above uses the same budget, so triple the default timeout.
+  test.slow();
   await openFreshDraft(page);
 
   // Run the fixture AI and capture the what-changed payload.
