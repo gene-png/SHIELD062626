@@ -188,3 +188,34 @@ deliberately because login is unauthenticated-probe-heavy while register is
 domain-gated. No new information beyond the existing domain oracle is disclosed.
 
 **Ref:** Master Spec §17 Q2, §4.5; SPRINT_1.md T4; OWASP A07 (login path unchanged).
+
+## D-017 — Fixture-mode AI serves deterministic runtime suggestions offline
+
+**2026-07-03 · ai**
+Fixture mode (`SHIELD_LLM_MODE=fixture`) now registers a deterministic,
+demo-plausible canned response for every one of the five AI job purposes
+(`mitre_map`, `zt_score`, `csf_score`, `extract.capabilities`,
+`risk_synthesize`) via a new `app/ai/fixtures.py` module. `_build_provider`
+returns a `RuntimeFixtureProvider` preloaded with those fixtures instead of a
+bare, empty `FixtureProvider`. Each fixture is payload-aware — it reads the
+redacted job payload (technique codes, capability codes, tiers/subcategories,
+findings) so the drafted suggestions line up with the live assessment and
+"Run AI" actually changes rows. The demo/dev stack is now fully exercisable
+OFFLINE with no provider API key.
+
+A missing fixture at runtime is surfaced as a typed configuration error mapped
+to HTTP 503 (`reason=ai_fixture_unavailable`, mirroring the D-016 / T4 typed-error
+pattern), never a raw 500 `KeyError`. The bare `FixtureProvider` keeps its loud
+`KeyError` for tests, and pytest's own dependency-override fixtures still take
+precedence over the runtime provider.
+
+**Rationale:** David-approved product decision (2026-07-03) after the T6 halt
+(Run-AI 500'd because the runtime provider had zero fixtures registered — only
+pytest registered them). "AI suggests, code computes" is preserved: fixtures
+only DRAFT values (statuses, stages, dimension scores, risk links); the
+deterministic engines still compute every total, tier, roll-up and roadmap. DoD
+ZTRA fixture values respect the framework's `<=3` stage clamp. Live-mode behavior
+is unchanged.
+
+**Ref:** Master Spec §4.4 (LLM env-configurable), §12 (redaction on egress);
+SPRINT_1.md T6b; DECISIONS D-016 (typed-error pattern reused for the 503).

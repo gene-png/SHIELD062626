@@ -148,7 +148,15 @@ class AnthropicProvider:
 
 def _build_provider(settings: Settings) -> LLMProvider:
     if settings.shield_llm_mode == "fixture":
-        return FixtureProvider(model=settings.shield_llm_model)
+        # Fixture mode serves deterministic, demo-plausible canned responses so
+        # the whole stack is exercisable OFFLINE (T6b / DECISIONS D-017). The
+        # runtime provider is preloaded with a fixture for every job purpose; a
+        # forgotten purpose surfaces as a typed HTTP 503, never a raw 500. The
+        # bare FixtureProvider (no fixtures, loud KeyError) is reserved for
+        # pytest, which overrides the LLM dependency and takes precedence.
+        from app.ai.fixtures import build_runtime_provider
+
+        return build_runtime_provider(model=settings.shield_llm_model)
     if settings.shield_llm_provider == "anthropic":
         return AnthropicProvider(
             model=settings.shield_llm_model,
