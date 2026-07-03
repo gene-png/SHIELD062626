@@ -154,8 +154,14 @@ test("CSF answers persist across save-and-exit, and submit moves the status", as
     timeout: 20000,
   });
 
+  // Back on the tenant-scoped list, at least one assessment now reads
+  // "Submitted — under review". The list is scoped to the Atlas client (not the
+  // individual user), so prior spec runs in the shared seeded DB can leave more
+  // than one submitted pill; our own submission was already proven by the
+  // confirmation card above, so .first() keeps this robust against accumulation
+  // (mirrors the Continue link's .first() earlier in this spec).
   await page.goto("/assessments");
-  await expect(page.getByText(/submitted.*under review/i)).toBeVisible({
+  await expect(page.getByText(/submitted.*under review/i).first()).toBeVisible({
     timeout: 20000,
   });
 });
