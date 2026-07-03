@@ -21,12 +21,10 @@ import {
  *      the FIRST Tab from a fresh page load focuses "Skip to content"; a visible
  *      Primary top-nav is present.
  *   2. Activating the skip link jumps the browser to the `#main-content`
- *      landmark, so the NEXT Tab moves focus INTO the main content (past the
- *      nav). NOTE: the app's `<main id="main-content">` has no `tabindex="-1"`,
- *      so activation moves the *sequential focus starting point* to the landmark
- *      (location.hash === "#main-content") rather than programmatically focusing
- *      <main> itself. That is the current behavior; adding tabindex=-1 so screen
- *      readers land directly on <main> is a minor a11y follow-up logged for T10.
+ *      landmark AND (since the final-audit fix added `tabindex="-1"` to every
+ *      `<main id="main-content">`) programmatically focuses the landmark itself
+ *      (WAI-ARIA skip-link practice), so the NEXT Tab moves focus INTO the main
+ *      content (past the nav).
  *   3. Workspace spot-check: a self-assessment maturity control (radiogroup) is
  *      keyboard-focusable and operable (Space toggles + auto-saves).
  */
@@ -75,6 +73,14 @@ async function assertSkipLinkAndNav(page: Page, path: string): Promise<void> {
       message: `${path}: activating skip link targets #main-content`,
     })
     .toBe("#main-content");
+
+  // The landmark itself receives programmatic focus (tabindex=-1 on <main>),
+  // per WAI-ARIA skip-link practice — screen readers land ON the landmark.
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.id ?? null), {
+      message: `${path}: skip link activation focuses the main landmark`,
+    })
+    .toBe("main-content");
 
   // When the landmark holds a focusable control, the next Tab moves focus INTO
   // it (proving the nav was actually skipped). Some shells render a main with no

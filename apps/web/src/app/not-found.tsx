@@ -12,7 +12,8 @@ export default function NotFound(): JSX.Element {
       <PublicHeader />
       <main
         id="main-content"
-        className="mx-auto flex max-w-3xl flex-col px-6 py-24"
+        tabIndex={-1}
+        className="mx-auto flex max-w-3xl flex-col px-6 py-24 outline-none"
       >
         <p className="text-sm font-semibold uppercase tracking-wider text-ink-tertiary">
           Error 404

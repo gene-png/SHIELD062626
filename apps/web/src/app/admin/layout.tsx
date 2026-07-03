@@ -24,7 +24,8 @@ export default async function AdminLayout({
         <SkipToContent />
         <main
           id="main-content"
-          className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16"
+          tabIndex={-1}
+          className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-16 outline-none"
         >
           <h1 className="text-2xl font-semibold text-ink-primary">
             Not authorized

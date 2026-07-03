@@ -32,7 +32,9 @@ async function registerAtlasClient(page: Page): Promise<string> {
 /**
  * Start a new assessment from /assessments and wait until we land on the
  * self-assessment workspace. CSF needs a target tier + impact profile; ZT needs
- * a target stage.
+ * a target stage. Returns the workspace URL so callers can reopen the EXACT
+ * assessment they created (the tenant-scoped list accumulates drafts across
+ * runs, so "first Continue link" is not guaranteed to be ours).
  */
 async function startAssessment(
   page: Page,
@@ -42,7 +44,7 @@ async function startAssessment(
     profile?: "LOW" | "MOD" | "HIGH";
     stage?: number;
   },
-): Promise<void> {
+): Promise<string> {
   await page.goto("/assessments");
   await expect(
     page.getByRole("heading", { name: "My assessments" }),
@@ -67,6 +69,7 @@ async function startAssessment(
   }
   await page.getByRole("button", { name: "Start assessment" }).click();
   await page.waitForURL(/\/self-assessment\//, { timeout: 30000 });
+  return page.url();
 }
 
 test("self-assessment surfaces use 'assessment' terminology, never 'engagement'", async ({
@@ -84,6 +87,12 @@ test("self-assessment surfaces use 'assessment' terminology, never 'engagement'"
   expect(listText).toContain("assessment");
   expect(listText).not.toContain("engagement");
 
+  // A1: a freshly-registered client sees NO admin/deliverables links anywhere
+  // on the client shell (nav + page body).
+  await expect(
+    page.getByRole("link", { name: /admin|deliverable/i }),
+  ).toHaveCount(0);
+
   // And the self-assessment workspace itself.
   await startAssessment(page, { type: "nist_csf", tier: 3, profile: "LOW" });
   await expect(page.getByRole("heading", { name: /self-assessment/i })).toBeVisible(
@@ -98,7 +107,14 @@ test("CSF answers persist across save-and-exit, and submit moves the status", as
   page,
 }) => {
   await registerAtlasClient(page);
-  await startAssessment(page, { type: "nist_csf", tier: 3, profile: "LOW" });
+  const workspaceUrl = await startAssessment(page, {
+    type: "nist_csf",
+    tier: 3,
+    profile: "LOW",
+  });
+  // The path segment after /self-assessment/ identifies OUR assessment's
+  // service; used below to reopen the exact draft we answered.
+  const serviceId = new URL(workspaceUrl).pathname.split("/").pop() as string;
 
   await expect(
     page.getByRole("heading", { name: "CSF 2.0 questionnaire" }),
@@ -129,12 +145,17 @@ test("CSF answers persist across save-and-exit, and submit moves the status", as
     chosen.push({ label: label as string, tierIdx });
   }
 
-  // Save-and-exit: navigate away, then reopen via the Continue link.
+  // Save-and-exit: navigate away, then reopen via OUR assessment's Continue
+  // link (matched by service id — the tenant-scoped list accumulates drafts
+  // across runs, so a bare .first() could open somebody else's draft).
   await page.goto("/assessments");
   await expect(
     page.getByRole("heading", { name: "My assessments" }),
   ).toBeVisible({ timeout: 20000 });
-  await page.getByRole("link", { name: /Continue/ }).first().click();
+  await page
+    .locator(`a[href*="${serviceId}"]`)
+    .filter({ hasText: /Continue/ })
+    .click();
   await expect(
     page.getByRole("heading", { name: "CSF 2.0 questionnaire" }),
   ).toBeVisible({ timeout: 30000 });
@@ -158,8 +179,7 @@ test("CSF answers persist across save-and-exit, and submit moves the status", as
   // "Submitted — under review". The list is scoped to the Atlas client (not the
   // individual user), so prior spec runs in the shared seeded DB can leave more
   // than one submitted pill; our own submission was already proven by the
-  // confirmation card above, so .first() keeps this robust against accumulation
-  // (mirrors the Continue link's .first() earlier in this spec).
+  // confirmation card above, so .first() keeps this robust against accumulation.
   await page.goto("/assessments");
   await expect(page.getByText(/submitted.*under review/i).first()).toBeVisible({
     timeout: 20000,
