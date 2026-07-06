@@ -10,11 +10,7 @@ We are starting a new feature. Plan it before writing any code.
 $ARGUMENTS
 
 ## Step 1 — Understand the context
-Read the relevant parts of the codebase: existing files in `tests/`, the project structure, and any related modules. Do not assume — look first.
-
-<project_structure>
-!`find . -type f -not -path './node_modules/*' -not -path './.git/*' | sort`
-</project_structure>
+Read the relevant parts of the codebase: existing tests (`apps/api/tests/`, `e2e/smoke/`), the module layout under `apps/api/app/` or `apps/web/src/`, and any related modules. Do not assume — look first.
 
 ## Step 2 — Write a test plan
 Before creating any files, describe:

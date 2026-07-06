@@ -11,9 +11,9 @@ $ARGUMENTS
 
 ## Steps
 
-1. **Write the test first.** Create or add to a test file in `tests/`. The test must target the described behaviour. Do not create any implementation code yet.
+1. **Write the test first.** API behaviour: a pytest under `apps/api/tests/unit/`. Browser behaviour: a Playwright spec under `e2e/smoke/` (or `e2e/` subdir that fits). The test must target the described behaviour. Do not create any implementation code yet.
 
-2. **Run the test and confirm it fails.** Run `npx playwright test` (or the relevant test command). Show me the failure output. If the test passes immediately, stop — something is wrong. Either the test is not actually testing the right thing, or the implementation already exists. Flag this before proceeding.
+2. **Run the test and confirm it fails.** Use the matching command from `CLAUDE.md` (in-container pytest, or `cd e2e && npx playwright test <file>`). Show me the failure output. If the test passes immediately, stop — something is wrong. Either the test is not actually testing the right thing, or the implementation already exists. Flag this before proceeding.
 
 3. **Write the minimum implementation to make the test pass.** No extra features, no defensive abstractions, no speculative generality. Just enough to go green.
 

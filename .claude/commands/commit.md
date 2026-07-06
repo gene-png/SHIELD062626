@@ -22,7 +22,7 @@ model: claude-haiku-4-5-20251001
 ## Instructions
 
 1. Read the diff above.
-2. Stage all changes: `git add -A`
+2. Review `git status` for anything that should NOT ship (scratch files, artifacts, another task's files) — stage explicitly if in doubt, otherwise `git add -A`.
 3. Write a commit message following Conventional Commits format:
    - `feat:` new functionality
    - `fix:` bug fix
@@ -32,6 +32,8 @@ model: claude-haiku-4-5-20251001
 
    Subject line: imperative mood, under 72 chars, lowercase after the type prefix.
    If the change is non-trivial, add a short body (1–3 lines) explaining the *why*.
+   End the body with the current model's co-author line
+   (`Co-Authored-By: Claude <model> <noreply@anthropic.com>`).
 
 4. If `$ARGUMENTS` was provided, use it as guidance for the message.
 

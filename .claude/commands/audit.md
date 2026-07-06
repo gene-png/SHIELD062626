@@ -9,10 +9,12 @@ Run a full security audit across three areas. Use subagents to run all three in 
 
 ## Agent 1 — Dependency Vulnerabilities
 
-Run:
+Run both (pnpm monorepo at root, separate npm package in `e2e/`):
 ```bash
-npm audit --json
+pnpm audit --json
+cd e2e && npm audit --json
 ```
+Also `pip-audit` inside the api container if Python dependencies changed.
 
 Parse and report:
 - Count of critical, high, medium, low vulnerabilities
@@ -37,9 +39,11 @@ grep -rn \
   -e "private_key" \
   -e "sk-[a-zA-Z0-9]{20,}" \
   -e "Bearer [a-zA-Z0-9\-_]{20,}" \
-  --include="*.ts" --include="*.js" --include="*.json" --include="*.env*" \
+  --include="*.ts" --include="*.tsx" --include="*.js" --include="*.json" --include="*.py" --include="*.env*" \
   . 2>/dev/null | grep -v "node_modules" | grep -v ".git"
 ```
+
+Known-intentional demo/test constants (`DemoPass!2026`, `.env.example` dev creds) are NOT findings — flag anything else.
 
 Also check:
 - Is `.env` in `.gitignore`? Read `.gitignore` to confirm.
@@ -51,7 +55,7 @@ Report every match with file and line number. False positives (like `process.env
 
 ## Agent 3 — OWASP Top 10 Code Review
 
-Read all source files in `src/` (or equivalent) and check for patterns associated with the OWASP Top 10. For each category, give a **PASS**, **FAIL**, or **REVIEW NEEDED** with specific file and line references:
+Read the source under `apps/api/app/` and `apps/web/src/` (scope to changed files when the diff is small) and check for patterns associated with the OWASP Top 10. For each category, give a **PASS**, **FAIL**, or **REVIEW NEEDED** with specific file and line references:
 
 **A01 — Broken Access Control**
 - Are there any routes or API calls with no authentication check?

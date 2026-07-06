@@ -7,7 +7,7 @@ Run a complete persona-driven UX and test cycle. This command has five stages �
 
 ## Stage 1 — Generate personas
 
-Read `ARCHITECTURE.md`, `CONTEXT.md`, and `CLAUDE.md` to understand the app and its users.
+Read `docs/architecture.md` and `CONTEXT.md` to understand the app and its users (`CLAUDE.md` is already loaded).
 
 Generate 3–5 distinct user personas. For each one:
 
@@ -48,16 +48,16 @@ Present these plans to me. **Wait for confirmation** before writing any test cod
 Spawn one subagent per approved persona. Each subagent independently writes its test file — they have no dependencies on each other and can run simultaneously.
 
 Each subagent is responsible for one persona and must:
-- Create `tests/personas/[persona-name].spec.ts`
+- Create `e2e/personas/[persona-name].spec.ts`
 - Follow the interaction steps from the approved plan exactly
 - Use `getByRole` and `getByLabel` selectors — not CSS selectors
 - Assert the expected outcome at the end
 - Include a comment at the top identifying which persona and scenario it covers
 - Report back: filename created and a one-line summary of what it tests
 
-Wait for all subagents to complete, then run the full suite:
+Wait for all subagents to complete, then run the full suite (host-run; force-recreate web first if `apps/web` changed):
 ```bash
-npx playwright test tests/personas/ --reporter=line
+cd e2e && npx playwright test personas/ --reporter=line
 ```
 
 Report which passed and which failed.

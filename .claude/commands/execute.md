@@ -8,9 +8,9 @@ Execute the current plan, then debug everything written.
 ## Step 1 — Read the plan
 
 Read these files before writing a single line of code:
-- `SPRINT.md` if it exists
-- `CONTEXT.md` — specifically the "Important Next Steps" section
-- `ARCHITECTURE.md` if it exists
+- The active `SPRINT_<n>.md` if one exists (highest n)
+- `CONTEXT.md` and my `context/<name>.md` — current state and next steps
+- `docs/architecture.md` if relevant
 - Any relevant existing source files to understand what's already built
 
 Summarise what you are about to build in 3–5 bullet points. This is your execution plan. **Show it to me and confirm before proceeding.**
@@ -45,12 +45,10 @@ Specifically:
 
 Fix everything found before finishing.
 
-## Step 4 — Update CONTEXT.md
+## Step 4 — Snapshot context
 
-After the debug loop is clean, update `CONTEXT.md`:
-- Move completed items to "Just Completed"
-- Update "Current State"
-- Update "Important Next Steps" with what comes after
+After the debug loop is clean, run `/context` inline (updates my
+`context/<name>.md`, and `CONTEXT.md` only if this ships in a PR).
 
 ## Step 5 — Final report
 

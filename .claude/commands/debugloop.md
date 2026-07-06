@@ -20,8 +20,8 @@ Spawn a subagent to:
 - Check every function in the changed files
 - Verify parameter types match how the function is called at every call site
 - Verify return types match what callers expect
-- Flag any `any` types introduced
-- Run `npx tsc --noEmit` and report all TypeScript errors
+- Flag any `any` types introduced (TS) or untyped dict-passing across module boundaries (Python)
+- Run the typecheck for the layers touched (commands in `CLAUDE.md`): web `tsc --noEmit` in-container; API `pytest -m unit` in-container catches type/contract breaks
 - Report findings as a list: `[FILE:LINE] description of issue`
 
 ## Agent 2 — Logic & Runtime Error Audit
@@ -34,7 +34,7 @@ Spawn a subagent to:
 
 ## Agent 3 — Spec Compliance Audit
 Spawn a subagent to:
-- Read `CONTEXT.md` and any planning docs (`.claude/*.md`, `ARCHITECTURE.md`, `SPRINT.md` if present)
+- Read `CONTEXT.md` and any planning docs (the active `SPRINT_<n>.md`, `docs/architecture.md`, `reference-docs/SHIELDv2_Master_Spec.txt` sections relevant to the change)
 - Compare what was just written against what was intended
 - Flag any function that is missing, named differently than planned, or behaves differently than specified
 - Report findings as a list: `[FILE] description of discrepancy`
@@ -74,9 +74,9 @@ Then **fix every issue found**, in order of severity (type errors and runtime bu
 - Make the change
 - Do not introduce new abstractions to paper over a bug — fix the root cause
 
-After all fixes, run the test suite:
+After all fixes, run the suites for every layer touched (see `CLAUDE.md` for the exact commands):
 ```bash
-npx playwright test --reporter=line
+cd e2e && npx playwright test --reporter=line      # plus pytest / tsc in-container as applicable
 ```
 
 If tests fail, fix the failures before finishing. Do not exit the loop until all tests are green and the report is clean.
