@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+
 def _resolve_zt_data_dir() -> Path | None:
     """Locate the zt-data source dir across host and in-container layouts.
 
