@@ -219,3 +219,31 @@ is unchanged.
 
 **Ref:** Master Spec §4.4 (LLM env-configurable), §12 (redaction on egress);
 SPRINT_1.md T6b; DECISIONS D-016 (typed-error pattern reused for the 503).
+
+## D-018 — Dependabot majors suppressed; framework upgrades are sprint-planned
+
+**2026-07-07 · dependencies**
+Merging PR #16 activated Dependabot (config landed with Work Order F but the
+repo had no CI/dependabot before that merge), and it filed its whole backlog at
+once: 15 PRs, of which 7 were major framework jumps (react 19, next 16,
+tailwindcss 4, eslint 10, tailwind-merge 3, @types/node 26, eslint-config-next
+16). Decision (David, 2026-07-07): `.github/dependabot.yml` now ignores
+`version-update:semver-major` for the entire npm ecosystem and groups
+minor/patch updates into one weekly PR per ecosystem; the 7 major PRs are
+closed unmerged. The 8 safe PRs (5 GitHub Actions bumps; autoprefixer,
+next-auth, prettier minors/patches) are merged after a `@dependabot rebase` —
+their original CI failures were stale runs from 2026-07-03 against the pre-fix
+`main` (the pnpm double-pin bug fixed in `f65e36f`), not real breakage.
+
+**Rationale:** Sprint 2 T0 deliberately stays on the Next 14.2.x App Router
+line, and CI has no e2e job yet (S2 T3), so a green dependabot check proves
+lint/tsc/build only — nowhere near enough verification for a framework major.
+Majors move as one deliberate, e2e-netted upgrade bundle instead: Next 15/16 +
+React 19 + Tailwind 4 + ESLint 10 + Node 22 LTS/@types/node (Node 20 passed
+EOL 2026-04-30), targeted at Sprint 3/4 after e2e runs in CI. Trade-off
+accepted: a security fix that ships only in a major is suppressed too — the
+non-blocking `pnpm audit` / `pip-audit` CI steps remain the tripwire for that
+case.
+
+**Ref:** SPRINT_2.md T0/T3; CLAUDE.md (migrations/e2e gotchas); D-015 (Part F
+dependency-audit posture).
