@@ -280,8 +280,14 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
 
   // Server truth for the edited row: 3 tier levels, an enterprise level, a
   // roll-up rule #, our L5 target, a gap, and a computed priority. The row has
-  // no evidence, so its level caps at <= 2 -> the L5 target guarantees a gap;
-  // HIGH tier in play + not-core => P2 by the CSF_Flow_Spec section 8 table.
+  // no evidence, so its level caps at <= 2 -> the L5 target guarantees a gap.
+  // Priority: HIGH tier is always in play here (3 tiers), so gap_priority
+  // never yields P3 - it's P1 when this subcategory maps to a Core IG metric
+  // (Core + HIGH tier + multi-system), else P2. Before T5 the route hard-coded
+  // is_core=False so this row was always P2; now that the IG Core/Supporting
+  // metadata is imported (catalog.is_core), a Core subcategory correctly rolls
+  // up to P1. We assert against server truth + the {P1,P2} invariant rather
+  // than a stale constant so the check survives which subcategory is nth(1).
   const row = enterprise.subcategories.find((s) => s.subcategory_code === code);
   expect(row).toBeTruthy();
   expect(Object.keys(row!.tier_levels).sort()).toEqual([
@@ -294,13 +300,13 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   expect(row!.rollup_rule).toBeGreaterThanOrEqual(1);
   expect(row!.target_level).toBe(5);
   expect(row!.gap).toBe(true);
-  expect(row!.priority).toBe("P2");
+  expect(["P1", "P2"]).toContain(row!.priority);
 
-  // And the roll-up table renders that row: rule # + priority pill.
+  // And the roll-up table renders that row: rule # + the server's priority pill.
   const tableRow = page.getByRole("row").filter({ hasText: code! }).first();
   await expect(tableRow).toBeVisible({ timeout: 30000 });
   await expect(tableRow).toContainText(`#${row!.rollup_rule}`);
-  await expect(tableRow).toContainText("P2");
+  await expect(tableRow).toContainText(row!.priority!);
   await expect(tableRow).toContainText(`L${row!.enterprise_level}`);
 
   // --- Export: 5 files, each link streaming the right content-type ---------

@@ -37,6 +37,9 @@ from app.csf.catalog import (
     FUNCTIONS,
     SUBCATEGORIES,
     all_codes,
+    is_core,
+    is_core_primary,
+    is_supporting_or_supplemental,
     min_profile_for_category,
     subcategory_by_code,
 )
@@ -977,17 +980,18 @@ def _enterprise_subcategories(
         }
         rollup = weighted_floor_rollup(
             {Tier(t): lvl for t, lvl in tier_levels.items()},
-            # IG core/supporting metadata isn't in the catalog yet; defaults keep
-            # the roll-up on rules 1/3/4/6 until the IG import lands.
-            is_core_primary=False,
-            is_supporting_or_supplemental=False,
+            # Real IG Core/Supporting classification from the catalog (T5).
+            # Absent subcategories return safe defaults, keeping older
+            # assessments on rules 1/3/4/6 unchanged (C0 additive pattern).
+            is_core_primary=is_core_primary(code),
+            is_supporting_or_supplemental=is_supporting_or_supplemental(code),
         )
         targets = [row.target_level for row in tier_rows.values() if row.target_level]
         target = max(targets) if targets else None
         gap = is_gap(rollup.score, target) if target is not None else False
         priority = (
             gap_priority(
-                is_core=False,
+                is_core=is_core(code),
                 high_tier=Tier.HIGH.value in tier_rows,
                 multi_system=len(tier_rows) > 1,
             )
