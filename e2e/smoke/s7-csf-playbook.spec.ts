@@ -68,9 +68,28 @@ async function openWorkspaceOnDraft(
       .first(),
   ).toBeVisible({ timeout: 30000 });
 
-  if (opts.fresh || !(await page.getByText(/Draft v\d+/).isVisible())) {
-    // The seeded assessment is RELEASED (read-only), and re-runs need clean
-    // rows: mint a fresh draft via the proxy (the active-client cookie is
+  const draftVisible = await page.getByText(/Draft v\d+/).isVisible();
+  if (opts.fresh) {
+    // The seeded assessment is RELEASED (read-only) and re-runs need clean
+    // rows. T7 added a draft-exists guard: POST now REUSES an open draft
+    // instead of minting a new version, so a plain POST would hand back the
+    // previous run's already-seeded/AI-drafted draft. Close any open draft
+    // first (self-assessment/submit moves it out of DRAFT; a 404/409 when
+    // there's nothing open is expected and ignored), so the following POST
+    // cuts a genuinely fresh v+1 with empty rows.
+    await page.request.post(
+      `/api/proxy/csf/services/${csfServiceId}/self-assessment/submit`,
+      { data: {} },
+    );
+    const created = await page.request.post(
+      `/api/proxy/csf/services/${csfServiceId}/assessments`,
+    );
+    expect(created.ok()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByText(/Draft v\d+/)).toBeVisible({ timeout: 30000 });
+  } else if (!draftVisible) {
+    // No open draft yet: mint one. The T7 guard makes any later POST reuse it,
+    // so this stays idempotent across re-runs (the active-client cookie is
     // already set by EnsureActiveClient).
     const created = await page.request.post(
       `/api/proxy/csf/services/${csfServiceId}/assessments`,

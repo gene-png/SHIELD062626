@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Iterable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,6 +60,7 @@ from app.csf.playbook import (
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
 from app.dependencies import current_client, current_user, require_role
+from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -116,6 +117,8 @@ from app.tenant import (
 )
 
 router = APIRouter(prefix="/csf", tags=["csf"])
+
+_log = get_logger(__name__)
 
 _admin_required = Depends(require_role(UserRole.ADMIN))
 
@@ -352,12 +355,29 @@ def get_catalog(
 )
 def create_assessment(
     service_id: uuid.UUID,
+    response: Response,
     user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     prior = _latest_assessment(db, svc.id)
+    # Draft-exists guard (SPRINT_2 T7): this route used to mint a new version on
+    # EVERY call, so a client hammering "start assessment" produced unbounded
+    # v2, v3, v4… drafts. If an unsubmitted draft is already open, return it
+    # idempotently (HTTP 200) instead of minting. A new version is only cut once
+    # the prior draft has moved on (submitted/approved/released). This mirrors
+    # the approve route's idempotent-200 shape rather than a 409, so callers
+    # that expect a usable assessment back keep working unchanged.
+    if prior is not None and prior.status == CsfAssessmentStatus.DRAFT:
+        _log.info(
+            "csf_assessment_create_reused_open_draft",
+            assessment_id=str(prior.id),
+            version=prior.version,
+            service_id=str(svc.id),
+        )
+        response.status_code = status.HTTP_200_OK
+        return _serialize_assessment(db, prior)
     version = (prior.version + 1) if prior else 1
     assessment = CsfAssessment(
         service_id=svc.id,
@@ -387,6 +407,12 @@ def create_assessment(
     )
     db.commit()
     db.refresh(assessment)
+    _log.info(
+        "csf_assessment_created",
+        assessment_id=str(assessment.id),
+        version=version,
+        service_id=str(svc.id),
+    )
     return _serialize_assessment(db, assessment)
 
 

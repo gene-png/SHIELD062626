@@ -153,12 +153,20 @@ def test_create_assessment_seeds_106_empty_answers(app_client) -> None:
 
 
 @pytest.mark.unit
-def test_create_assessment_increments_version(app_client) -> None:
+def test_create_assessment_increments_version_after_prior_closed(app_client) -> None:
+    # T7 draft-exists guard: a second POST while a draft is open reuses it
+    # (see test_csf_draft_guard.py). A new version is only cut once the prior
+    # draft is closed — approve v1, then POST mints v2.
     c = app_client
     admin = _register(c, "admin@example.com")
     bearer = admin["tokens"]["access_token"]
     svc_id = _open_service(c, bearer)
     v1 = _new_assessment(c, bearer, svc_id)
+    approved = c.post(
+        f"/csf/assessments/{v1['id']}/approve",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert approved.status_code == 200, approved.text
     v2 = _new_assessment(c, bearer, svc_id)
     assert v1["version"] == 1
     assert v2["version"] == 2
