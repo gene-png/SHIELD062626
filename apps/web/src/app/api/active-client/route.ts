@@ -1,7 +1,7 @@
 /**
  * Set/clear the active client id cookie used by the client switcher.
  *
- * Multi-tenant: admin/reviewer users pick which client they're viewing.
+ * Multi-tenant: admin users pick which client they are viewing.
  * The cookie is read by `lib/api.ts` and forwarded to the FastAPI backend
  * as `X-Client-Id`. Client-role users don't use this; their tenant is
  * pinned server-side.

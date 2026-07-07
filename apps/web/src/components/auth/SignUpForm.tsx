@@ -29,16 +29,39 @@ export function SignUpForm(): JSX.Element {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, display_name: displayName }),
     });
-    if (res.status === 409) {
-      setErrors({ email: "An account already exists for that email." });
-      setPending(false);
-      return;
-    }
-    if (res.status === 422) {
-      const body = (await res.json()) as { error?: { message?: string } };
-      setErrors({
-        password: body.error?.message ?? "Password does not meet policy.",
-      });
+    if (res.status === 409 || res.status === 422) {
+      // The API returns a typed error envelope: error.reason is a stable
+      // machine code, error.message is human-friendly copy. Map each reason to
+      // the field it belongs to so the copy lands next to the offending input
+      // (and never surfaces a raw "Request validation failed.").
+      const body = (await res.json()) as {
+        error?: { message?: string; reason?: string };
+      };
+      const reason = body.error?.reason;
+      const message = body.error?.message;
+      if (reason === "email_exists") {
+        setErrors({
+          email: "An account already exists for that email. Sign in instead.",
+        });
+      } else if (
+        reason === "email_domain_not_allowed" ||
+        reason === "email_domain_not_approved" ||
+        reason === "email_domain_unavailable"
+      ) {
+        setErrors({
+          email:
+            message ?? "That email domain isn't approved for registration yet.",
+        });
+      } else if (reason === "password_policy") {
+        setErrors({ password: message ?? "Choose a stronger password." });
+      } else {
+        // Raw schema validation (RequestValidationError) carries no typed
+        // reason and its message is the unfriendly "Request validation failed."
+        // Show a plain-language prompt instead of leaking that string.
+        setErrors({
+          form: "Please double-check your name, email, and password (12+ characters), then try again.",
+        });
+      }
       setPending(false);
       return;
     }

@@ -23,16 +23,23 @@ def _correlation_id_from(request: Request) -> str:
 
 
 async def _handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "code": exc.status_code,
-                "message": exc.detail,
-                "correlation_id": _correlation_id_from(request),
-            }
-        },
-    )
+    # A route may raise HTTPException with either a plain string detail (the
+    # common case) or a typed detail dict {"reason": <machine code>, "message":
+    # <human copy>}. The typed form lets the web layer map a specific error to
+    # the right field/copy deterministically instead of string-sniffing.
+    error: dict[str, object] = {
+        "code": exc.status_code,
+        "correlation_id": _correlation_id_from(request),
+    }
+    detail = exc.detail
+    if isinstance(detail, dict):
+        error["message"] = detail.get("message", "")
+        reason = detail.get("reason")
+        if reason is not None:
+            error["reason"] = reason
+    else:
+        error["message"] = detail
+    return JSONResponse(status_code=exc.status_code, content={"error": error})
 
 
 async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

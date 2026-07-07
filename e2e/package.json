@@ -1,0 +1,12 @@
+{
+  "name": "shield-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright smoke-test harness for the SHIELD stack (runs on host against http://localhost:3000).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

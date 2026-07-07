@@ -18,8 +18,9 @@ export default function SignUpPage(): JSX.Element {
             Create your account
           </h1>
           <p className="text-sm text-ink-secondary">
-            Self-registration creates a deployment user. The first registrant on
-            a fresh deployment becomes the Primary POC for the assessment.
+            The first user to register on a fresh deployment becomes the
+            administrator. After that, new sign-ups need an email domain your
+            administrator has approved before their account is activated.
           </p>
         </header>
         <SignUpForm />

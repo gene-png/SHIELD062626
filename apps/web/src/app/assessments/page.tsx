@@ -14,7 +14,11 @@ export default function AssessmentsPage(): JSX.Element {
     <>
       <SkipToContent />
       <PublicHeader />
-      <main id="main-content" className="mx-auto max-w-6xl px-6 py-10">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-6xl px-6 py-10 outline-none"
+      >
         <AssessmentsView />
       </main>
       <PublicFooter />

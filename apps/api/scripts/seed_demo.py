@@ -64,6 +64,7 @@ from app.models import (  # noqa: E402  -- triggers metadata registration
     CapabilityList,
     CapabilityListStatus,
     Client,
+    ClientDomain,
     CsfAnswer,
     CsfAssessment,
     CsfAssessmentStatus,
@@ -80,6 +81,7 @@ from app.models import (  # noqa: E402  -- triggers metadata registration
 )
 from app.models._common import utcnow  # noqa: E402
 from app.models.capability import CapabilityDisposition  # noqa: E402
+from app.security.email_domains import domain_of  # noqa: E402
 from app.security.password import hash_password  # noqa: E402
 from app.storage.local import LocalFilesystemStorage  # noqa: E402
 from app.tech_debt.exporters import (  # noqa: E402
@@ -191,6 +193,38 @@ def _bootstrap_org(db: Session) -> tuple[User, User, Client]:
     return admin, client_user, org
 
 
+def _ensure_client_domain(db: Session, org: Client, admin: User) -> None:
+    """Approve the demo client's email domain (Work Order B1/B2).
+
+    A fresh stack has no approved domains, so a user self-registering with an
+    @atlas.example address hits the B1 "domain not approved" rejection instead
+    of auto-joining Atlas. Seed the approved row here, mirroring the admin
+    add-domain route's model usage.
+
+    Idempotent: a running stack may already carry this row from a UI session,
+    so we skip when it is present and never duplicate it (the table also
+    enforces a unique constraint on `domain`). Running the seed twice is a no-op
+    on the second pass.
+    """
+    domain = domain_of(CLIENT_EMAIL)
+    existing = db.execute(
+        select(ClientDomain).where(ClientDomain.domain == domain)
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+    db.add(ClientDomain(client_id=org.id, domain=domain, created_by=admin.id))
+    db.flush()
+    audit(
+        db,
+        action="client.domain.added",
+        target_type="client",
+        target_id=org.id,
+        actor_user_id=admin.id,
+        details={"domain": domain, "seed": True},
+    )
+    db.commit()
+
+
 def _write_artifact(
     db: Session,
     storage: LocalFilesystemStorage,
@@ -259,21 +293,12 @@ def _release(
         xlsx_artifact_id=xlsx_art.id,
         finalized_at=utcnow(),
         finalized_by=user.id,
-        released_to_client_at=utcnow(),
     )
     db.add(deliv)
     db.flush()
     audit(
         db,
         action=f"{stage}.finalized",
-        target_type="deliverable",
-        target_id=deliv.id,
-        actor_user_id=user.id,
-        details={"service_id": str(service.id), "demo": True},
-    )
-    audit(
-        db,
-        action=f"{stage}.released",
         target_type="deliverable",
         target_id=deliv.id,
         actor_user_id=user.id,
@@ -722,6 +747,7 @@ def main() -> None:
     engine = _engine()
     with Session(engine, future=True) as db:
         admin, client_user, org = _bootstrap_org(db)
+        _ensure_client_domain(db, org, admin)
         if db.execute(select(Service).limit(1)).scalar_one_or_none() is not None:
             print("Services already present; skipping seeding.")
             print("  admin: ", ADMIN_EMAIL)

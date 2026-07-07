@@ -26,7 +26,7 @@ if not config.get_main_option("sqlalchemy.url"):
 
 # Importing the models registers them against Base.metadata so that
 # autogenerate sees them and create_all in tests gets the full graph.
-import app.models  # noqa: F401  pylint: disable=unused-import
+import app.models  # noqa: E402,F401  pylint: disable=unused-import
 
 target_metadata = Base.metadata
 

@@ -30,6 +30,10 @@ x-api-env: &api-env
   SMTP_HOST: ${SMTP_HOST:-mailhog}
   SMTP_PORT: ${SMTP_PORT:-1025}
   SMTP_FROM: ${SMTP_FROM:-no-reply@shield.local}
+  # The api container only mounts ./apps/api at /app, so the zt-data seed files
+  # (repo packages/zt-data) are not reachable by walk-up. Mount them read-only
+  # (see the api service volumes) and point the unit test at them explicitly.
+  SHIELD_ZT_DATA_DIR: ${SHIELD_ZT_DATA_DIR:-/packages/zt-data/source}
 
 services:
   db:
@@ -154,6 +158,9 @@ services:
       - "8000:8000"
     volumes:
       - ./apps/api:/app
+      # zt-data seed corpus, read-only, for the questionnaire contract test
+      # (SHIELD_ZT_DATA_DIR points here). Not part of the app runtime.
+      - ./packages/zt-data:/packages/zt-data:ro
     # Apply pending migrations before serving so a newly-added revision can't
     # leave the persistent db volume behind the (hot-reloaded) model code.
     # Dev convenience only - in prod, migrations run as a discrete deploy step,

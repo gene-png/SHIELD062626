@@ -160,3 +160,62 @@ Opening commit lands directly on `main`. Push is deferred until the dev containe
   run under `pytest -m unit` in CI.
 
 **Ref:** Work Order Part F.
+
+## D-016 — Duplicate-email registration discloses existence (typed error copy)
+
+**2026-07-02 · auth**
+Self-registration surfaces a friendly, field-scoped error for a duplicate email
+("An account already exists for that email. Sign in instead.") rather than a
+generic enumeration-resistant message. The `/auth/register` endpoint returns a
+typed error envelope on every rejection — `error.reason` (machine code) plus
+`error.message` (human copy) — and the web sign-up form maps each `reason` to the
+right field: `email_exists` (409) and `email_domain_not_allowed` /
+`email_domain_not_approved` / `email_domain_unavailable` (422) attach to the email
+field; `password_policy` (422) attaches to the password field; a raw
+`RequestValidationError` (no `reason`) shows a plain-language form-level prompt
+instead of leaking the internal "Request validation failed." string.
+
+**Rationale:** Disclosure posture is kept **consistent with the pre-existing
+domain-rejection copy**, which already tells a caller whether their domain is
+approved. Registration is gated behind admin-approved email domains, so an
+attacker must already control an approved-domain mailbox to probe for account
+existence — the marginal enumeration surface a duplicate-email message adds over
+the domain-approval oracle is negligible, and the usability win (the user learns
+to sign in instead of retrying) is real. The **login** path keeps its stricter
+enumeration-resistant posture unchanged (generic "Invalid email or password." +
+constant-time dummy-hash compare, OWASP A07); the two surfaces differ
+deliberately because login is unauthenticated-probe-heavy while register is
+domain-gated. No new information beyond the existing domain oracle is disclosed.
+
+**Ref:** Master Spec §17 Q2, §4.5; SPRINT_1.md T4; OWASP A07 (login path unchanged).
+
+## D-017 — Fixture-mode AI serves deterministic runtime suggestions offline
+
+**2026-07-03 · ai**
+Fixture mode (`SHIELD_LLM_MODE=fixture`) now registers a deterministic,
+demo-plausible canned response for every one of the five AI job purposes
+(`mitre_map`, `zt_score`, `csf_score`, `extract.capabilities`,
+`risk_synthesize`) via a new `app/ai/fixtures.py` module. `_build_provider`
+returns a `RuntimeFixtureProvider` preloaded with those fixtures instead of a
+bare, empty `FixtureProvider`. Each fixture is payload-aware — it reads the
+redacted job payload (technique codes, capability codes, tiers/subcategories,
+findings) so the drafted suggestions line up with the live assessment and
+"Run AI" actually changes rows. The demo/dev stack is now fully exercisable
+OFFLINE with no provider API key.
+
+A missing fixture at runtime is surfaced as a typed configuration error mapped
+to HTTP 503 (`reason=ai_fixture_unavailable`, mirroring the D-016 / T4 typed-error
+pattern), never a raw 500 `KeyError`. The bare `FixtureProvider` keeps its loud
+`KeyError` for tests, and pytest's own dependency-override fixtures still take
+precedence over the runtime provider.
+
+**Rationale:** David-approved product decision (2026-07-03) after the T6 halt
+(Run-AI 500'd because the runtime provider had zero fixtures registered — only
+pytest registered them). "AI suggests, code computes" is preserved: fixtures
+only DRAFT values (statuses, stages, dimension scores, risk links); the
+deterministic engines still compute every total, tier, roll-up and roadmap. DoD
+ZTRA fixture values respect the framework's `<=3` stage clamp. Live-mode behavior
+is unchanged.
+
+**Ref:** Master Spec §4.4 (LLM env-configurable), §12 (redaction on egress);
+SPRINT_1.md T6b; DECISIONS D-016 (typed-error pattern reused for the 503).

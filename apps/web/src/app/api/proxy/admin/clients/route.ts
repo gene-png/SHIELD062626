@@ -1,5 +1,5 @@
 /**
- * GET /api/proxy/admin/clients - list all client tenants (admin/reviewer).
+ * GET /api/proxy/admin/clients - list all client tenants (admin).
  * POST /api/proxy/admin/clients - create a new client tenant (admin).
  *
  * These power the client-switcher dropdown in the top nav. The list view

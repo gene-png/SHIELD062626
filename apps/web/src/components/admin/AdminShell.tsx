@@ -102,7 +102,8 @@ export function AdminShell({
           </header>
           <main
             id="main-content"
-            className="mx-auto w-full max-w-6xl px-6 py-8"
+            tabIndex={-1}
+            className="mx-auto w-full max-w-6xl px-6 py-8 outline-none"
           >
             {children}
           </main>

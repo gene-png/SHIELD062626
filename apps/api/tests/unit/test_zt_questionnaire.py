@@ -15,7 +15,29 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-_PKG = Path(__file__).resolve().parents[4] / "packages" / "zt-data" / "source"
+
+def _resolve_zt_data_dir() -> Path | None:
+    """Locate the zt-data source dir across host and in-container layouts.
+
+    On the host the package sits at <repo>/packages/zt-data/source, but the api
+    container only mounts ./apps/api at /app, so a fixed parents[4] index
+    overflows. Resolve defensively: honor an explicit SHIELD_ZT_DATA_DIR
+    override (set for the container), else walk up from this file looking for
+    packages/zt-data/source. Return None when unavailable so callers can skip.
+    """
+    override = os.environ.get("SHIELD_ZT_DATA_DIR")
+    if override:
+        p = Path(override)
+        return p if p.is_dir() else None
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "packages" / "zt-data" / "source"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+_PKG = _resolve_zt_data_dir()
 
 
 # --- seed data integrity (no DB) -------------------------------------------
@@ -32,6 +54,10 @@ _PKG = Path(__file__).resolve().parents[4] / "packages" / "zt-data" / "source"
 def test_seed_files_have_twelve_well_formed_questions(
     filename: str, framework_key: str, framework: str
 ) -> None:
+    if _PKG is None:
+        pytest.skip(
+            "zt-data source dir not found; set SHIELD_ZT_DATA_DIR or mount packages/zt-data"
+        )
     data = json.loads((_PKG / filename).read_text(encoding="utf-8"))
     assert data["framework_key"] == framework_key
     assert data["framework"] == framework

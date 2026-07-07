@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Active-client dropdown for admin/reviewer roles.
+ * Active-client dropdown for the admin role.
  *
  * Loads the platform-wide client list from /api/proxy/admin/clients,
  * displays the currently-active tenant (read from the active_client_id

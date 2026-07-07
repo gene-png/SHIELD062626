@@ -4,7 +4,7 @@ import * as React from "react";
 
 /**
  * Aligns the active-client cookie to a workspace's owning tenant before its
- * children render. Admin/reviewer workspace data is tenant-scoped via
+ * children render. Admin workspace data is tenant-scoped via
  * X-Client-Id (the active-client cookie), but the workspace URL only carries a
  * serviceId. Without this, opening a workspace whose client isn't the one
  * currently selected in the switcher makes every tenant-scoped call 400/404.
