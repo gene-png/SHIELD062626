@@ -15,7 +15,7 @@ allowed-tools: Bash(git diff:*), Bash(git status:*), Read
 
 ## Review Instructions
 
-Review the changes above against these four principles. For each one, give a clear pass/fail and specific line references for any violations:
+Review the changes above against these four principles (defined in `CLAUDE.md` — they apply to Python and TypeScript alike). For each one, give a clear pass/fail and specific line references for any violations:
 
 ### 1. TDD — Tests written first
 - Is there a test for every new piece of behaviour?
@@ -24,10 +24,11 @@ Review the changes above against these four principles. For each one, give a cle
 
 ### 2. Fail Loudly — No silent failures
 Look specifically for:
-- `catch` blocks that swallow errors (`catch (e) { return null }`, `catch (e) { console.error(e) }` without re-throwing)
-- Functions that return `null`, `undefined`, or a default value on failure instead of throwing
+- `catch` blocks that swallow errors (`catch (e) { return null }`, `catch (e) { console.error(e) }` without re-throwing); in Python: bare `except:` or `except Exception: pass`
+- Functions that return `null`/`None`, or a default value on failure instead of throwing/raising
 - API calls or async operations with no error handling at all
-- Optional chaining (`?.`) used in places where a missing value is actually a bug, not an expected case
+- Optional chaining (`?.`) or `.get(..., default)` used where a missing value is actually a bug, not an expected case
+- API errors surfaced raw instead of as typed `{reason, message}` details (the D-016 pattern)
 
 ### 3. Simple Code
 - Are there any functions longer than ~20 lines that should be split?

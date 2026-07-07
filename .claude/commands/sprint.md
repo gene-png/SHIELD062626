@@ -14,10 +14,15 @@ $ARGUMENTS
 ## Stage 1 — Orient
 
 Read the current state of the project before anything else:
-- `CONTEXT.md` — what's done, what's next, lessons learned
-- `ARCHITECTURE.md` — overall structure
-- `CLAUDE.md` — project conventions
+- `CONTEXT.md` — state of main
+- `context/dave.md` + `context/gene.md` — what's in flight on both sides
+- `DELIVERY_PLAN.md` — the sprint roadmap
+- Open PRs: !`gh pr list --state open`
 - Recent git log: !`git log --oneline -10`
+
+(`CLAUDE.md` conventions are already loaded. For long autonomous sprints use
+`/loop-sprint-cron` with a staged queue instead — this command is the
+interactive, single-session variant.)
 
 Summarise what this sprint will deliver in 3–5 bullet points. If `$ARGUMENTS` was provided, use it to focus the scope. If not, derive the goal from `CONTEXT.md`'s "Important Next Steps."
 
@@ -50,10 +55,7 @@ Read `SPRINT.md` and identify the dependency graph before building anything:
 
 **For dependent functions:** build in dependency order, sequentially. A function cannot be started until its dependencies are green.
 
-After all subagents complete, run the full test suite to confirm nothing conflicts:
-```bash
-npx playwright test --reporter=line
-```
+After all subagents complete, run the full gate set to confirm nothing conflicts (commands in `CLAUDE.md`): `cd e2e && npx playwright test --reporter=line`, plus in-container pytest / tsc for the layers touched.
 
 ---
 

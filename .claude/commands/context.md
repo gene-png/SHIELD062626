@@ -1,54 +1,43 @@
 ---
-description: Read the current project state and overwrite CONTEXT.md with a complete status snapshot — what's done, what's next, lessons learned.
-allowed-tools: Read, Write, Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(find:*), Bash(npx playwright test:*)
+description: Snapshot project state into the right docs — CONTEXT.md (state of main, PR-scoped), your context/<name>.md (personal status), and CLAUDE.md (durable lessons). Run at end of session or before a PR.
+allowed-tools: Read, Write, Edit, Bash(git log:*), Bash(git status:*), Bash(git diff:*), Bash(git config:*), Bash(git branch:*), Bash(gh pr list:*)
 ---
 
-Generate a complete project context snapshot and write it to `CONTEXT.md` at the project root, overwriting whatever is there.
+Update the project's state docs. Since we split them by volatility, write to the RIGHT file — not everything goes in CONTEXT.md anymore.
 
 ## Gather context first
 
-Before writing anything, read:
-- The existing `CONTEXT.md` if it exists (for lessons learned history)
-- `CLAUDE.md` for project fundamentals
+- Who am I: !`git config user.name` — determines which `context/<name>.md` is mine
+- Current branch: !`git branch --show-current`
 - Recent git log: !`git log --oneline -15`
-- Current git status: !`git status --short`
-- Current diff of uncommitted work: !`git diff HEAD`
-- Any planning docs in `.claude/` or project root (`*.md` files)
-- Test files in `tests/` to understand what has been built and verified
+- Current status: !`git status --short`
+- Uncommitted diff: !`git diff HEAD --stat`
+- The existing `CONTEXT.md`, my `context/<name>.md`, and `CLAUDE.md`
 
-## Then write CONTEXT.md with this exact structure
+## Then route each kind of information to its home
 
-```markdown
-# Project Context
-_Last updated: [date and time]_
+### 1. `context/<my-name>.md` — ALWAYS update this
+My personal status file (never my collaborator's). Overwrite freely:
+- **Branch / in flight** — what branch, what it does, PR # if open
+- **Next steps** — ordered, actionable
+- **Personal todos** — human-only items on my plate
+- **Notes for [collaborator]** — anything they should know that isn't in a PR yet
 
-## What This Project Is
-[2–4 sentence plain-English description of the project purpose and current scope]
+### 2. `CLAUDE.md` — append durable lessons, if any were learned this session
+Only facts that outlive the current sprint: new environment gotchas, tooling
+traps, conventions decided. Add to the relevant existing section — don't
+duplicate what's already there, and don't add session-specific status.
 
-## Current State
-[Honest assessment: what is working, what is partially built, what is stubbed or missing]
+### 3. `CONTEXT.md` — update ONLY if this session's work ships in a PR
+CONTEXT.md describes the project as of `main` and changes as part of a PR
+(typically the end-of-sprint commit). If updating it, keep the established
+structure: Current state / Backlog / Needs a human / Test coverage status.
+Point at `SPRINT_<n>.md` and PR descriptions for detail rather than inlining
+sprint history. If this session's work is NOT heading into a PR yet, leave
+CONTEXT.md alone — my context file carries the in-flight state.
 
-## Just Completed
-[Bullet list of work finished in the most recent session or recent commits — be specific, reference files]
+### 4. `DECISIONS.md` — append a D-number entry if a real decision was made
+(disclosure posture, product behavior, architectural choice). Skip otherwise.
 
-## Active / In Progress
-[Anything started but not finished, with notes on where it was left]
-
-## Important Next Steps
-[Ordered list — most important first. Each item should be actionable, not vague]
-
-## Known Issues & Blockers
-[Anything broken, flaky, or deliberately deferred. If none, say so.]
-
-## Lessons Learned — This Codebase
-[Specific things discovered about this codebase that future sessions should know:
-- Gotchas, quirks, things that broke unexpectedly
-- Patterns that worked well
-- Things to avoid
-Preserve lessons from previous CONTEXT.md versions — do not discard history here]
-
-## Test Coverage Status
-[Which features have Playwright tests, which don't, and any known flaky tests]
-```
-
-After writing the file, print a short confirmation: what changed vs. the previous version, and flag anything that looks like a risk or blocker that I should know about.
+After writing, print a short confirmation: which files changed, what the key
+updates were, and flag anything that looks like a risk or blocker.

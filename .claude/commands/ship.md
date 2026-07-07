@@ -23,10 +23,12 @@ Check all uncommitted changes against the four project principles:
 
 ## Stage 2 — Test
 
-Run `/test` inline.
+Run `/test` inline — the real gates from `CLAUDE.md`, per layer touched:
 
 ```bash
-npx playwright test --reporter=line
+cd e2e && npx playwright test --reporter=line                 # browser flows (force-recreate web first if apps/web changed)
+docker compose exec -T api pytest -m unit -q                  # if API code changed (PATH export first)
+docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"   # if web TS changed
 ```
 
 All tests must be green before proceeding. Fix any failures — fix the code, not the tests.
@@ -48,7 +50,7 @@ This stage ensures nothing slips through that `/review` and `/test` missed.
 Run `/audit` inline.
 
 Check for:
-- `npm audit` critical and high vulnerabilities
+- `pnpm audit` (root) and `npm audit` (in `e2e/`) critical and high vulnerabilities
 - Hardcoded secrets or API keys
 - OWASP Top 10 patterns
 
@@ -68,7 +70,7 @@ Stage all changes and write a conventional commit message based on the diff. Sho
 
 Run `/context` inline.
 
-Update `CONTEXT.md` with the current state, what was just completed, and clear next steps for the next session.
+Route updates to the right docs: always my `context/<name>.md` (personal status + next steps); `CLAUDE.md` for any durable lessons learned; `CONTEXT.md` only if this work is going into a PR.
 
 ---
 

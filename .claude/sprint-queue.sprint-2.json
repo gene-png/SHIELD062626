@@ -1,0 +1,265 @@
+{
+  "sprint": "sprint-2-findings-burndown",
+  "cron_job_id": null,
+  "cron_schedule": "*/10 * * * *",
+  "checkpoint_cadence": 4,
+  "checkpoint_count": 0,
+  "last_checkpoint_at": 0,
+  "working_dir": "c:\\GitProjects\\Spearhead\\SHIELD062626",
+  "expected_gh_user": "SpearheadAnalytica",
+  "expected_gcloud_config": "kentro-cloudmod",
+  "branch": "fix/findings-burndown-sprint-2",
+  "sprint_doc": "SPRINT_2.md",
+  "current_task_id": null,
+  "started_at": null,
+  "halt": {
+    "active": false,
+    "reason": null
+  },
+  "scratch": "Sprint 2 queue seeded 2026-07-03, NOT YET LAUNCHED. Read SPRINT_2.md launch checklist first: branch fix/findings-burndown-sprint-2 must exist (created from qa/smoke-sweep-sprint-1 or from main post-merge) BEFORE the first fire, and David's SMOKE_TEST section-10/14 checks should happen before T2 wipes the demo DB. Prior sprint state: sprint-1 (13/13 done, final commit 108832e) archived at .claude/sprint-queue.sprint-1.done.json; its full scratch history and lessons are in CONTEXT.md.",
+  "gates": [
+    "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q",
+    "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T web sh -lc \"cd /app && pnpm -F web exec tsc --noEmit\""
+  ],
+  "notes_global": "e2e specs run on the HOST: cd e2e && npx playwright test [file]; base URL http://localhost:3000; full suite ~17min; known flake = dev-server cold-compile timeouts under load, re-run clears. Docker CLI needs the PATH export in every shell. After ANY apps/web source edit: docker compose up -d --force-recreate web BEFORE e2e (bind-mount hot-reload does not fire). New python module under app/ needs docker compose restart api. After editing apps/web/package.json, reinstall INSIDE the web container (docker compose exec web pnpm install or up -d --build web). pytest -m unit: run detached, poll log for PYTEST_EXIT=; 3min alone, 13-16min under load; run gates sequentially. LLM is fixture-mode, fully offline and deterministic (D-017). Admin login admin@kentro.example / DemoPass!2026; client client@atlas.example / DemoPass!2026; spec-created users need unique timestamped emails. Playwright gotchas: getByRole name matching is SUBSTRING (exact:true near siblings); click()+waitForResponse not check() on auto-save checkboxes; assert post-Run-AI state after page.reload(); no body click before first Tab in skip-link tests. Seeded Atlas ids are in CONTEXT.md but T1 REMOVES all hardcoded-UUID reliance - after T1, always resolve ids via e2e/helpers/ids.ts.",
+  "tasks": [
+    {
+      "id": "T0",
+      "title": "Dependency bump: next@14.2.15 CRITICAL + high/critical transitive advisories",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "medium",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "apps/web/package.json",
+        "package.json",
+        "pnpm-lock.yaml"
+      ],
+      "verify": [
+        "pnpm audit --audit-level high exits with no critical and no high advisories (or each remaining one is documented in the commit body as no-non-breaking-fix)",
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && docker compose exec -T web sh -lc \"cd /app && pnpm -F web build\"",
+        "cd e2e && npx playwright test"
+      ],
+      "notes": "See SPRINT_2.md T0. Bump next to the LATEST 14.2.x patch (stay on the 14 App-Router line; NO 15.x this sprint). Remaining high/critical transitives: targeted bumps or pnpm.overrides in root package.json; document deliberately-open moderates/lows in the commit body. Install flow: edit package.json on host, then reinstall INSIDE the web container - inspect docker-compose.yml/web Dockerfile first to see how node_modules is provisioned (named volume vs image layer) and pick pnpm install in-container vs up -d --build web accordingly; then force-recreate web. FULL e2e suite is the App-Router regression net and the point of running it here; also run next build in-container (CI runs it too). The queue gates (pytest/tsc) still apply. If the audit cannot reach 0 critical without a Next 15 jump, HALT with the diagnosis rather than upgrading majors."
+    },
+    {
+      "id": "T1",
+      "title": "De-brittle hardcoded seeded UUIDs: runtime id resolution helper for 8 specs",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "e2e/helpers/ids.ts",
+        "e2e/smoke/s4-techdebt.spec.ts",
+        "e2e/smoke/s5-attack.spec.ts",
+        "e2e/smoke/s6-zt.spec.ts",
+        "e2e/smoke/s7-csf-playbook.spec.ts",
+        "e2e/smoke/s8-risk-register.spec.ts",
+        "e2e/smoke/s9-messaging.spec.ts",
+        "e2e/smoke/s11-staleness.spec.ts",
+        "e2e/smoke/s13-isolation.spec.ts"
+      ],
+      "verify": [
+        "! grep -rE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' e2e/smoke e2e/helpers",
+        "cd e2e && npx playwright test"
+      ],
+      "notes": "See SPRINT_2.md T1. s9-messaging.spec.ts:42 atlasClientId() is the model: GET /api/proxy/admin/clients, match legal_name ~ /atlas/i (BEWARE many QA-* junk clients exist; match Atlas specifically). New e2e/helpers/ids.ts: atlasClientId(page) + atlasServiceId(page, serviceType) with per-file caching (suite is serialized). Service resolution: admin has NO list-services endpoint; the client-side list is GET /api/proxy/intake/assessments (upstream /intake/engagements) scoped by the active-client cookie - POST /api/active-client {clientId} first (page.request shares the cookie jar), then GET the intake list and match service_type. Verify this admin+cookie path actually returns Atlas services before refactoring all eight files; fall back to a client-login resolution if not. Refactor s9 onto the shared helper too. The no-UUID grep in verify is the contract: zero hardcoded ids left under e2e/."
+    },
+    {
+      "id": "T2",
+      "title": "Fresh-stack proof: down -v, reseed, full suite green; document bring-up in e2e/README.md",
+      "status": "pending",
+      "depends_on": [
+        "T0",
+        "T1"
+      ],
+      "risk": "medium",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "e2e/README.md",
+        "e2e/smoke/s7-csf-playbook.spec.ts",
+        "e2e/smoke/s8-risk-register.spec.ts",
+        "e2e/smoke/s13-isolation.spec.ts"
+      ],
+      "verify": [
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && curl -sf http://localhost:8000/health",
+        "cd e2e && npx playwright test"
+      ],
+      "notes": "See SPRINT_2.md T2 AND the launch-checklist warning: this task DESTROYS local demo data by design (docker compose down -v). The queue scratch confirms David was warned pre-launch. Sequence: down -v, up -d, wait for :8000/health (Keycloak is the slow one), run seed_demo.py, force-recreate web, FULL e2e suite. Expect and fix residual seeded-state assumptions (candidates: artifact/register version numbers in s7/s8 - they claim to delta-assert, verify; the s13 beacon.example find-or-create; anything expecting the QA-* junk clients gone/present). expected_paths lists the likely spec fixes - widen in scratch if others surface. Write e2e/README.md with the canonical fresh-stack sequence (env vars, health waits, seed command, run command) - T3 turns it into the CI script. Suite must pass on the fresh DB; run it twice if the first pass needed fixes. The reseed itself is not a commit; only README + spec fixes are."
+    },
+    {
+      "id": "T3",
+      "title": "CI: e2e job in GitHub Actions (composed stack + Playwright + artifacts)",
+      "status": "pending",
+      "depends_on": [
+        "T2"
+      ],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        ".github/workflows/ci.yml"
+      ],
+      "verify": [
+        "actionlint .github/workflows/ci.yml if actionlint is installed, else a line-by-line review against the existing python/web jobs' conventions",
+        "the job's run-steps reproduced locally end-to-end match e2e/README.md (proven by T2)"
+      ],
+      "notes": "See SPRINT_2.md T3. Add an e2e job to the existing ci.yml (keep the python/web/secret-scan jobs untouched): checkout, docker compose up -d (the repo compose file - runner has docker), health-wait loop on :8000/health with generous timeout (Keycloak cold start), seed via docker compose exec -T api python scripts/seed_demo.py, npm ci in e2e/, npx playwright install --with-deps chromium, npx playwright test, always() upload of playwright-report/ + test-results/ as artifacts, job timeout-minutes: 30. Trigger on the same push-main/PR events as the other jobs. NEXTAUTH_SECRET etc: mirror the web job's ci-only env or the compose defaults - check what docker-compose.yml requires from .env and inline ci-safe values. HONESTY REQUIREMENT: the first real run needs a push, which is review-required - state in the commit body that CI-proof is pending the PR push. Do not add axe here; T4 extends the same suite."
+    },
+    {
+      "id": "T4",
+      "title": "Runtime axe sweep spec (s16) across public/client/admin surfaces",
+      "status": "pending",
+      "depends_on": [
+        "T2"
+      ],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "e2e/package.json",
+        "e2e/package-lock.json",
+        "e2e/smoke/s16-axe.spec.ts"
+      ],
+      "verify": [
+        "cd e2e && npx playwright test smoke/s16-axe.spec.ts"
+      ],
+      "notes": "See SPRINT_2.md T4. npm i -D @axe-core/playwright in e2e/ (commit lockfile). s16-axe.spec.ts: AxeBuilder runs on home, /sign-in, /sign-up (signed out); /assessments + one CSF self-assessment questionnaire (client login); admin dashboard + one workspace (admin login). Assert zero WCAG A/AA violations (withTags ['wcag2a','wcag2aa','wcag21a','wcag21aa']). Triage findings: fix cheap ones (labels, contrast, aria attrs) inline IF within expected_paths scope - if a fix needs apps/web changes, widen expected_paths in scratch and keep the fix minimal, or document the violation as a disabled rule with an inline comment naming the follow-up. KNOWN: heatmap scope=row lands in T6 - if T6 is not done yet, exclude that specific rule on the risk page with a comment pointing at T6; if T6 is done, no exclusions expected. Deliberately-excluded rules must each carry an inline justification comment."
+    },
+    {
+      "id": "T5",
+      "title": "Import IG Core/Supporting cross-reference metadata so CSF Rules 2/5 fire",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "medium",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "apps/api/app/routes/csf.py",
+        "apps/api/app/csf/catalog.py",
+        "apps/api/tests/unit/test_csf_ig_metadata.py"
+      ],
+      "verify": [
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q",
+        "cd e2e && npx playwright test smoke/s7-csf-playbook.spec.ts"
+      ],
+      "notes": "See SPRINT_2.md T5. routes/csf.py:980-990 passes safe defaults (is_core_primary=False, is_supporting_or_supplemental=False, is_core=False) into blended_priority()/gap_priority() (csf/playbook.py:114-190), so Rule 2 (Core+Primary strict floor) and Rule 5 (Supporting/Supplemental override) NEVER fire and gap_priority skews low. Source the IG Core/Supporting cross-reference mapping from reference-docs/SHIELDv2_Master_Spec.txt (grep 'IG Core', 'Supporting', 'cross-reference'); study how packages/zt-data packages catalog data for the established pattern and where the CSF subcategory catalog actually lives (expected_paths guesses catalog.py - locate the real module first and correct expected_paths in scratch). Additive only (C0 pattern): subcategories absent from the mapping keep safe defaults; older persisted assessments must parse unchanged; any migration stays SQLite-safe (batch_alter_table). New unit tests: Rule 2 fires on a known Core+Primary subcategory, Rule 5 fires on a known Supporting one, absent-from-mapping falls back to defaults. s7 e2e re-run guards the Playbook surface (fixture determinism may shift gap priorities - if s7's P1/P2/P3 assertions move, update them WITH a comment explaining the Rule 2/5 activation). This is catalog data feeding the deterministic engine - no LLM involvement."
+    },
+    {
+      "id": "T6",
+      "title": "a11y: roving tabindex on TierPicker/ZtStagePicker + heatmap scope=row",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "apps/web/src/components/csf/TierPicker.tsx",
+        "apps/web/src/components/zt/ZtStagePicker.tsx",
+        "apps/web/src/components/risk/RiskHeatmap.tsx",
+        "e2e/smoke/s12-a11y-nav.spec.ts",
+        "e2e/smoke/s8-risk-register.spec.ts"
+      ],
+      "verify": [
+        "cd e2e && npx playwright test smoke/s12-a11y-nav.spec.ts smoke/s8-risk-register.spec.ts smoke/s3-selfassessment.spec.ts smoke/s6-zt.spec.ts"
+      ],
+      "notes": "See SPRINT_2.md T6. (a) WAI-ARIA radiogroup roving tabindex in TierPicker + ZtStagePicker: selected radio (or first if none) is the only tabIndex=0; ArrowRight/ArrowDown -> next, ArrowLeft/ArrowUp -> previous, wrapping; moving focus SELECTS (standard radio behavior) OR keeps select-on-Space if the auto-save PATCH semantics make focus-selection too chatty - pick one, comment why, and keep s3/s6 auto-save flows green (they use click+Space today). (b) tbody th likelihood labels in the risk heatmap get scope=\"row\" so Chromium's a11y tree yields rowheader. Component file paths in expected_paths are best-guess - locate the real files (grep TierPicker/ZtStagePicker/heatmap under apps/web/src) and correct in scratch. Extend s12: focus a TierPicker radio, ArrowRight moves focus AND aria-checked/tabindex follow the pattern. Update s8's heatmap assertion from the anchored-text workaround to getByRole('rowheader'). Force-recreate web before e2e (bind-mount gotcha). If T4 exists and carries a scope-row exclusion, remove it here."
+    },
+    {
+      "id": "T7",
+      "title": "CSF draft-exists guard on POST assessments (+ update fresh-draft-dependent specs)",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "medium",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "apps/api/app/routes/csf.py",
+        "apps/api/tests/unit/test_csf_draft_guard.py",
+        "e2e/smoke/s7-csf-playbook.spec.ts",
+        "e2e/smoke/s9-messaging.spec.ts",
+        "e2e/smoke/s11-staleness.spec.ts"
+      ],
+      "verify": [
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q",
+        "cd e2e && npx playwright test"
+      ],
+      "notes": "See SPRINT_2.md T7. POST /csf/services/<id>/assessments currently increments a new draft version on EVERY call - unbounded. Guard: if an unsubmitted draft exists for the service, return it instead of minting (prefer 200-with-existing for idempotency; if the route contract makes that ambiguous, 409 with typed {reason:'draft_exists', message} per the D-016 pattern - and then every caller must handle it). DECIDE SCOPE FIRST: check whether the equivalent attack/zt/tech-debt mint routes share the pattern - this task guards CSF ONLY (the documented backlog item); note others in scratch for backlog if unguarded. SPEC FALLOUT IS THE RISK: s7 relies on always-fresh drafts, s9's ensureCsfAssessment() mints on 404, s11 and others mint via page.request in setup - grep e2e/smoke for every POST .../assessments call and update each to accept the existing-draft path (fixture Run-AI is deterministic per assessment, so reuse holds). FULL e2e suite is the gate. Widen expected_paths in scratch to whichever specs actually change."
+    },
+    {
+      "id": "T8",
+      "title": "Coverage gaps: /admin/management UI spec (s2) + CSF verbatim interview prompts (C8)",
+      "status": "pending",
+      "depends_on": [
+        "T1"
+      ],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "e2e/smoke/s2-management.spec.ts",
+        "e2e/smoke/s3-selfassessment.spec.ts",
+        "SMOKE_TEST.md"
+      ],
+      "verify": [
+        "cd e2e && npx playwright test smoke/s2-management.spec.ts smoke/s3-selfassessment.spec.ts"
+      ],
+      "notes": "See SPRINT_2.md T8. (a) s2-management.spec.ts drives the /admin/management UI (NOT the admin API): create client (unique timestamped legal name), approve a domain (use .example TLD), both reflected in the rendered list; remove the domain; removal reflected. If T9 landed, also assert the reserved-TLD rejection copy on a .test attempt. (b) C8 verbatim prompts: grep reference-docs/SHIELDv2_Master_Spec.txt for the CSF interview prompt text; pick 2-3 subcategories and assert the rendered questionnaire text matches VERBATIM (inline expected strings with a comment citing the spec section). Add to s3 or a focused new describe block in it. Then check off SMOKE_TEST §2 and the §3 verbatim-prompts clause, annotated with spec filenames, per the sprint-1 honesty convention: only check what a green spec proves."
+    },
+    {
+      "id": "T9",
+      "title": "Reject reserved/special-use TLDs at domain-approval time",
+      "status": "pending",
+      "depends_on": [],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "apps/api/app/routes/admin.py",
+        "apps/api/tests/unit/test_domain_approval_tld.py",
+        "apps/api/scripts/seed_demo.py",
+        "DECISIONS.md"
+      ],
+      "verify": [
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q",
+        "cd e2e && npx playwright test smoke/s13-isolation.spec.ts"
+      ],
+      "notes": "See SPRINT_2.md T9. The admin add-domain route accepts domains the email validator will later 422 (special-use/reserved TLDs: .test/.invalid/.localhost - note .example PASSES the validator), stranding approved-but-unregistrable domains like the seeded beacon.test. Fix at approval: typed 422 {reason:'domain_reserved_tld', message} (D-016 pattern) from the SAME check email-validator applies - reuse its special-use logic (try validate_email on a probe address and catch the reserved-name error, or use its underlying list) rather than hand-rolling a TLD list that can drift. Locate the real route file (expected_paths guesses routes/admin.py - correct in scratch). seed_demo.py: if it still seeds beacon.test, change to beacon.example idempotently (s13 already find-or-creates beacon.example, so verify s13 stays green). Friendly copy in the Management UI form only if the form surfaces API errors already - do not build new UI; note in scratch either way. Log the posture in DECISIONS.md (next D-number). Unit tests: .test rejected, .example accepted, existing rows unaffected."
+    },
+    {
+      "id": "T10",
+      "title": "Docs refresh (BUILD_REPORT, CHANGELOG) + SMOKE_TEST sync + CONTEXT snapshot",
+      "status": "pending",
+      "depends_on": [
+        "T0",
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8",
+        "T9"
+      ],
+      "risk": "low",
+      "attempts": 0,
+      "commit": null,
+      "expected_paths": [
+        "BUILD_REPORT.md",
+        "CHANGELOG.md",
+        "SMOKE_TEST.md",
+        "CONTEXT.md"
+      ],
+      "verify": [
+        "cd e2e && npx playwright test",
+        "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q"
+      ],
+      "notes": "See SPRINT_2.md T10. BUILD_REPORT.md + CHANGELOG.md are stuck at Phase 2: rewrite to v3.0.0 reality - v2 work order (PR #1, migrations 0015-0025), sprint-1 smoke suite, this sprint's changes (dep bump, runtime ids, CI e2e+axe jobs, IG metadata, draft guard, TLD guard, a11y fixes). CHANGELOG: proper dated entries per sprint; BUILD_REPORT: current gate set including the new CI jobs. SMOKE_TEST.md final sync per the honesty convention (only green-spec-backed checkboxes, annotated). Full e2e + pytest are the exit gates. Overwrite CONTEXT.md with the end-of-sprint snapshot in the established format: what shipped (task -> commit sha), backlog found-not-fixed, needs-David (unchanged items: §10 eyeball, §14 live-AI, PR pushes), environment notes carried forward, lessons learned appended to the preserved history."
+    }
+  ]
+}

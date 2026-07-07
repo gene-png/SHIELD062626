@@ -3,15 +3,14 @@ description: Plan all functions needed for the current sprint. Produces a SPRINT
 allowed-tools: Read, Write, Bash(find:*)
 ---
 
-Plan every function needed for the current sprint and write the plan to `SPRINT.md`.
+Plan every function needed for the current sprint and write the plan to the next `SPRINT_<n>.md` (one higher than the latest existing).
 
 ## Read first
 
 Before planning anything, read:
 - `CONTEXT.md` — current state and next steps
-- `ARCHITECTURE.md` — overall structure and data model
-- `CLAUDE.md` — project conventions
-- Existing source files to understand what already exists and what patterns are in use: !`find . -type f \( -name "*.ts" -o -name "*.js" \) -not -path "*/node_modules/*" | head -30`
+- `docs/architecture.md` — overall structure and data model
+- Existing source files to understand what already exists and what patterns are in use (`apps/api/app/`, `apps/web/src/`, `e2e/`)
 
 ## Identify the function list
 

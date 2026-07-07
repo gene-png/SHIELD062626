@@ -25,7 +25,7 @@ onboarding flows) and surfaced the first defects — see CONTEXT.md.
 - "AI suggests, code computes" is inviolable: no fix may move scoring into
   prompts or fixtures into human-reachable paths.
 
-## Sprint 1 — Smoke-test automation sweep + defect burn-down (ACTIVE)
+## Sprint 1 — Smoke-test automation sweep + defect burn-down (COMPLETE 2026-07-03)
 
 Goal: every automatable section of SMOKE_TEST.md (§0–§9, §11–§13, §15) has a
 passing Playwright spec; defects found so far are fixed. Branch:
@@ -48,13 +48,16 @@ Known defects going in (from the 2026-07-02 interactive session):
    (Fixed already: seed_demo.py crash on dropped A1 column — parked on
    `fix/seed-demo-a1-drift` awaiting PR access.)
 
-## Sprint 2 — Findings burn-down + CI hardening
+## Sprint 2 — Findings burn-down + CI hardening (PLANNED 2026-07-03, not launched)
 
-Goal: fix everything Sprint 1's specs surface; wire the e2e suite and runtime
-axe/Pa11y into GitHub CI (needs a built-app harness per PR_DESCRIPTION); import
-IG Core/Supporting cross-reference metadata so CSF roll-up Rules 2/5 and
-`is_core` stop using safe defaults; refresh stale docs (README, BUILD_REPORT,
-CHANGELOG). Scope firms up from Sprint 1 output.
+Goal: fix everything Sprint 1's specs surfaced; wire the e2e suite and runtime
+axe into GitHub CI; import IG Core/Supporting cross-reference metadata so CSF
+roll-up Rules 2/5 and `is_core` stop using safe defaults; refresh stale docs
+(BUILD_REPORT, CHANGELOG; README was fixed in Sprint 1 T10). Detail:
+`SPRINT_2.md` (11 tasks T0-T10). Queue staged at
+`.claude/sprint-queue.sprint-2.json` — see the SPRINT_2.md launch checklist
+(branch creation, queue swap, demo-DB wipe warning) before invoking
+`/loop-sprint-cron`.
 
 ## Sprint 3 — Production runway
 
