@@ -17,7 +17,10 @@
   /* ----- Ink (text) ----- */
   --ink-primary: #0e1220;
   --ink-secondary: #475063;
-  --ink-tertiary: #8b94a6;
+  /* Darkened from #8b94a6 (only 2.7-3.0:1) so tertiary text clears WCAG 2.1 AA
+     4.5:1 on every light surface, incl. the worst case surface-sunken #eef2f7
+     (now ~4.8:1) and white (~5.4:1). Verified by the s16-axe runtime sweep. */
+  --ink-tertiary: #616a7c;
   --ink-on-accent: #ffffff;
   --ink-disabled: #b2b9c6;
 
