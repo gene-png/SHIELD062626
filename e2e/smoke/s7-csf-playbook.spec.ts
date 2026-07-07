@@ -168,13 +168,11 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   ]);
   expect(runBody.changed.some((c) => dimFields.has(c.field))).toBeTruthy();
   // ...and so was the narrative (what_we_found).
-  expect(
-    runBody.changed.some((c) => c.field === "what_we_found"),
-  ).toBeTruthy();
+  expect(runBody.changed.some((c) => c.field === "what_we_found")).toBeTruthy();
   // The panel echoes the what-changed summary.
-  await expect(page.locator("p", { hasText: /AI updated/ }).first()).toBeVisible(
-    { timeout: 30000 },
-  );
+  await expect(
+    page.locator("p", { hasText: /AI updated/ }).first(),
+  ).toBeVisible({ timeout: 30000 });
 
   // --- Dimension editor: live total/level/cap math --------------------------
   // High tier is the default tab; the first subcategory is auto-selected.
@@ -204,7 +202,8 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   }
   // No evidence: Implementation is clamped to 1 (total 9, not 10) AND the
   // level is capped at L2 even though a total of 9 would otherwise be L4.
-  const totalLine = (re: RegExp) => page.locator("span", { hasText: re }).first();
+  const totalLine = (re: RegExp) =>
+    page.locator("span", { hasText: re }).first();
   await expect(totalLine(/Total\s*9\s*·\s*Level\s*L2/)).toBeVisible({
     timeout: 30000,
   });
@@ -283,9 +282,7 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   // roll-up rule #, our L5 target, a gap, and a computed priority. The row has
   // no evidence, so its level caps at <= 2 -> the L5 target guarantees a gap;
   // HIGH tier in play + not-core => P2 by the CSF_Flow_Spec section 8 table.
-  const row = enterprise.subcategories.find(
-    (s) => s.subcategory_code === code,
-  );
+  const row = enterprise.subcategories.find((s) => s.subcategory_code === code);
   expect(row).toBeTruthy();
   expect(Object.keys(row!.tier_levels).sort()).toEqual([
     "high",
@@ -331,9 +328,9 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   for (const artifact of exported.artifacts) {
     // The panel renders a working download link per artifact...
-    await expect(
-      page.getByRole("link", { name: artifact.label }),
-    ).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("link", { name: artifact.label })).toBeVisible({
+      timeout: 30000,
+    });
     // ...and the link's proxy endpoint streams the file (200 + content-type).
     const download: APIResponse = await page.request.get(
       `/api/proxy/artifacts/${artifact.artifact_id}/download`,

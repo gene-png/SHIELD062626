@@ -30,7 +30,9 @@ test("duplicate-email registration shows friendly copy on the email field", asyn
   await register(page, "Dupe Second", email, PASSWORD);
 
   await expect(
-    page.getByText("An account already exists for that email. Sign in instead."),
+    page.getByText(
+      "An account already exists for that email. Sign in instead.",
+    ),
   ).toBeVisible();
   // The raw upstream validation string must never reach the user.
   await expect(page.getByText(/request validation failed/i)).toHaveCount(0);

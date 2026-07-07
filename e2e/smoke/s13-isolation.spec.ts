@@ -5,12 +5,7 @@ import {
   type Page,
 } from "@playwright/test";
 
-import {
-  ADMIN_EMAIL,
-  ADMIN_PASSWORD,
-  register,
-  signIn,
-} from "../helpers/auth";
+import { ADMIN_EMAIL, ADMIN_PASSWORD, register, signIn } from "../helpers/auth";
 
 /**
  * SMOKE_TEST.md section 13 (T9): multi-tenant isolation.

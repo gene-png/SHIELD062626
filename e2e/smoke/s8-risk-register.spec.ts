@@ -100,9 +100,7 @@ test("register is locked with only ATT&CK and unlocks once a ZT assessment exist
   await expect(page.getByText("Risk Register is locked")).toBeVisible({
     timeout: 60000,
   });
-  await expect(
-    page.getByText(/a CSF or Zero Trust assessment/),
-  ).toBeVisible();
+  await expect(page.getByText(/a CSF or Zero Trust assessment/)).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Generate|Regenerate/ }),
   ).toHaveCount(0);
@@ -157,9 +155,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       r.ok(),
     { timeout: 120000 },
   );
-  await page
-    .getByRole("button", { name: /^(Generate|Regenerate)$/ })
-    .click();
+  await page.getByRole("button", { name: /^(Generate|Regenerate)$/ }).click();
   const register = (await (await generated).json()) as RiskRegisterResponse;
   expect(register.version).toBe(priorVersion + 1);
   expect(register.entries.length).toBeGreaterThan(0);
@@ -187,9 +183,11 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
     `/api/proxy/attack/services/${ATLAS_ATTACK_SERVICE_ID}/assessments/latest`,
   );
   expect(attackLatest.ok()).toBeTruthy();
-  const coverage = ((await attackLatest.json()) as {
-    coverage: Array<{ technique_code: string }>;
-  }).coverage;
+  const coverage = (
+    (await attackLatest.json()) as {
+      coverage: Array<{ technique_code: string }>;
+    }
+  ).coverage;
   const ownTechniques = new Set(coverage.map((c) => c.technique_code));
   for (const e of register.entries) {
     for (const t of e.linked_techniques) {
@@ -237,9 +235,9 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
     ).toBeVisible();
   }
   // The High x Catastrophic cell counts exactly the entries that land there.
-  await expect(
-    page.locator('td[title="High × Catastrophic"]'),
-  ).toHaveText(String(highCat.length));
+  await expect(page.locator('td[title="High × Catastrophic"]')).toHaveText(
+    String(highCat.length),
+  );
 
   // --- Regenerate bumps the version -------------------------------------------
   const regenerated = page.waitForResponse(
@@ -264,9 +262,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       r.ok(),
     { timeout: 180000 },
   );
-  await page
-    .getByRole("button", { name: "Export XLSX / PDF / Word" })
-    .click();
+  await page.getByRole("button", { name: "Export XLSX / PDF / Word" }).click();
   const withArtifacts = (await (await exported).json()) as RiskRegisterResponse;
 
   const downloads: Array<{

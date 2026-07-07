@@ -49,9 +49,7 @@ async function startAssessment(
   await expect(
     page.getByRole("heading", { name: "My assessments" }),
   ).toBeVisible({ timeout: 20000 });
-  await page
-    .getByRole("button", { name: "+ Start a new assessment" })
-    .click();
+  await page.getByRole("button", { name: "+ Start a new assessment" }).click();
   await page
     .getByRole("combobox", { name: "Assessment type" })
     .selectOption(opts.type);
@@ -95,9 +93,9 @@ test("self-assessment surfaces use 'assessment' terminology, never 'engagement'"
 
   // And the self-assessment workspace itself.
   await startAssessment(page, { type: "nist_csf", tier: 3, profile: "LOW" });
-  await expect(page.getByRole("heading", { name: /self-assessment/i })).toBeVisible(
-    { timeout: 30000 },
-  );
+  await expect(
+    page.getByRole("heading", { name: /self-assessment/i }),
+  ).toBeVisible({ timeout: 30000 });
   const workspaceText = (await page.locator("main").innerText()).toLowerCase();
   expect(workspaceText).toContain("assessment");
   expect(workspaceText).not.toContain("engagement");

@@ -30,10 +30,7 @@ test("home response carries the full security-header set", async ({ page }) => {
   expect(headers["x-content-type-options"]).toBe("nosniff");
 
   // Referrer policy is present (strict-origin-when-cross-origin in config).
-  expect(
-    headers["referrer-policy"],
-    "Referrer-Policy missing",
-  ).toBeTruthy();
+  expect(headers["referrer-policy"], "Referrer-Policy missing").toBeTruthy();
   expect(headers["referrer-policy"]).toContain("strict-origin");
 
   // HSTS: long max-age with subdomains + preload.

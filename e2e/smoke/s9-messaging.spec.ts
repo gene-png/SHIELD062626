@@ -87,9 +87,7 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
   try {
     // --- Client posts on their assessment thread -------------------------
     await signIn(clientPage, CLIENT_EMAIL, CLIENT_PASSWORD);
-    await clientPage.goto(
-      `/self-assessment/${CSF_SERVICE_ID}?type=nist_csf`,
-    );
+    await clientPage.goto(`/self-assessment/${CSF_SERVICE_ID}?type=nist_csf`);
     const clientBox = clientPage.getByRole("textbox", {
       name: "Write a message",
     });
@@ -138,7 +136,9 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
       timeout: 30000,
     });
 
-    const adminBox = adminPage.getByRole("textbox", { name: "Write a message" });
+    const adminBox = adminPage.getByRole("textbox", {
+      name: "Write a message",
+    });
     await expect(adminBox).toBeVisible({ timeout: 15000 });
     await adminBox.fill(ADMIN_MSG);
     const adminPosted = adminPage.waitForResponse(
@@ -150,7 +150,9 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     );
     await adminPage.getByRole("button", { name: "Send", exact: true }).click();
     await adminPosted;
-    await expect(adminPage.getByText(ADMIN_MSG)).toBeVisible({ timeout: 15000 });
+    await expect(adminPage.getByText(ADMIN_MSG)).toBeVisible({
+      timeout: 15000,
+    });
 
     // --- Opening the thread cleared the unread count ---------------------
     // Reopen the inbox (fresh fetch). The row's preview is now the analyst's

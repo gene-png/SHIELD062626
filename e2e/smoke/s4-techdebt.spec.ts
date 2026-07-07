@@ -56,11 +56,14 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
       r.request().method() === "POST",
     { timeout: 120000 },
   );
-  await page.locator('input[type="file"]').first().setInputFiles({
-    name: "inventory.csv",
-    mimeType: "text/csv",
-    buffer: Buffer.from(INVENTORY_CSV),
-  });
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "inventory.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(INVENTORY_CSV),
+    });
   await extractDone;
 
   // The extraction produced a fresh editable draft (never "Released vN").

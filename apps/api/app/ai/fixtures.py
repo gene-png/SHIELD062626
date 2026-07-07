@@ -128,9 +128,7 @@ def _fixture_mitre_map(payload: dict[str, Any]) -> LLMResponse:
             "Fixture-mode ATT&CK coverage draft. Statuses and tool citations are "
             "deterministic placeholders for offline demo; confirm before release."
         ),
-        "top_blind_spots": [
-            t["technique_code"] for t in techniques if t["status"] == "gap"
-        ][:5],
+        "top_blind_spots": [t["technique_code"] for t in techniques if t["status"] == "gap"][:5],
     }
     return _resp(body)
 
@@ -154,9 +152,7 @@ def _fixture_zt_score(payload: dict[str, Any]) -> LLMResponse:
         target = min(current + 2, max_stage)  # DoD caps at 3, CISA at 4
         capabilities.append({"code": code, "current": current, "target": target})
         pillar = code.split(".", 1)[0] if "." in code else code[:2]
-        pillar_narratives.setdefault(
-            pillar, f"Fixture-mode narrative for the {pillar} pillar."
-        )
+        pillar_narratives.setdefault(pillar, f"Fixture-mode narrative for the {pillar} pillar.")
     body: dict[str, Any] = {
         "capabilities": capabilities,
         "pillar_narratives": pillar_narratives,
@@ -188,15 +184,11 @@ def _fixture_csf_score(payload: dict[str, Any]) -> LLMResponse:
             row: dict[str, Any] = {"tier": tier, "subcategory_code": code}
             for di, dim in enumerate(_CSF_DIMENSIONS):
                 row[dim] = (base + di) % 3  # deterministic 0/1/2
-            row["what_we_found"] = (
-                f"Fixture-mode finding for {code} in the {tier} tier profile."
-            )
+            row["what_we_found"] = f"Fixture-mode finding for {code} in the {tier} tier profile."
             scores.append(row)
     body: dict[str, Any] = {
         "scores": scores,
-        "executive_summary": (
-            "Fixture-mode NIST CSF draft across the seeded working profile."
-        ),
+        "executive_summary": ("Fixture-mode NIST CSF draft across the seeded working profile."),
     }
     return _resp(body)
 
@@ -308,9 +300,7 @@ def _fixture_risk_synthesize(payload: dict[str, Any]) -> LLMResponse:
             entries.append(
                 {
                     "title": f"Gap: {label}",
-                    "description": (
-                        "Fixture-mode candidate risk entry drafted from the finding."
-                    ),
+                    "description": ("Fixture-mode candidate risk entry drafted from the finding."),
                     "axis": _RISK_AXIS_CYCLE[i % len(_RISK_AXIS_CYCLE)],
                     "linked_techniques": linked_techniques,
                     "linked_controls": linked_controls,
