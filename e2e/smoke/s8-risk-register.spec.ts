@@ -225,13 +225,12 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       page.getByRole("columnheader", { name: impact, exact: true }),
     ).toBeVisible();
   }
-  // Likelihood row labels are tbody <th>s without scope=row, so Chromium does
-  // not expose them as rowheaders — assert on the th text instead. Anchored
-  // regexes keep "High" from matching "Very High".
+  // Likelihood row labels are tbody <th scope="row"> (T6), so Chromium's a11y
+  // tree exposes them as rowheaders. `exact` keeps "High" from matching
+  // "Very High".
   for (const likelihood of ["Very High", "High", "Medium", "Low", "Very Low"]) {
-    const escaped = likelihood.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     await expect(
-      page.locator("th", { hasText: new RegExp(`^${escaped}$`) }).first(),
+      page.getByRole("rowheader", { name: likelihood, exact: true }),
     ).toBeVisible();
   }
   // The High x Catastrophic cell counts exactly the entries that land there.
