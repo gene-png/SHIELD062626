@@ -7,6 +7,7 @@ import {
   CLIENT_PASSWORD,
   signIn,
 } from "../helpers/auth";
+import { resolveBaseUrl } from "../helpers/baseUrl";
 import { atlasClientId, atlasServiceId } from "../helpers/ids";
 
 /**
@@ -30,7 +31,7 @@ import { atlasClientId, atlasServiceId } from "../helpers/ids";
  * service title) so the shared, mutating seed DB can't confuse the rows.
  */
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL = resolveBaseUrl();
 
 const UNREAD_BADGE = /^\d+ new$/;
 

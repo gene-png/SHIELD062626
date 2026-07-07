@@ -190,7 +190,11 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:3000"
+      # Host port is machine-local config (.env WEB_PORT) so a dev box whose
+      # :3000 is taken can rebind without touching committed defaults. When
+      # overriding, set NEXTAUTH_URL to the same port; host-run e2e follows
+      # WEB_PORT automatically (e2e/helpers/baseUrl.ts). CI stays on 3000.
+      - "${WEB_PORT:-3000}:3000"
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages

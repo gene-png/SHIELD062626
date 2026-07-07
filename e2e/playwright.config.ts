@@ -1,10 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
+import { resolveBaseUrl } from "./helpers/baseUrl";
 
 /**
  * SHIELD smoke-test config. Specs run on the HOST against the Docker stack's
- * web app at http://localhost:3000. The specs share one seeded database, so
- * they must not run in parallel (fullyParallel: false, single worker) to keep
- * DB-mutating flows deterministic.
+ * web app — canonically http://localhost:3000; override with E2E_BASE_URL or
+ * a WEB_PORT line in the repo-root .env (see helpers/baseUrl.ts). The specs
+ * share one seeded database, so they must not run in parallel
+ * (fullyParallel: false, single worker) to keep DB-mutating flows
+ * deterministic.
  */
 export default defineConfig({
   testDir: ".",
@@ -17,7 +20,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: resolveBaseUrl(),
     trace: "on-first-retry",
   },
   projects: [
