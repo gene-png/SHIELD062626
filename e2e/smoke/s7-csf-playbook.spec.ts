@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 7 (T7): the NIST CSF 2.0 full Playbook (Work Order D4).
@@ -22,9 +23,6 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  *      download links stream real bytes (HTTP 200 + correct content-type).
  *      Each file is saved to e2e/artifacts/ for David's section-10 eyeball.
  */
-
-// Seeded Atlas Defense "NIST CSF 2.0" service (scripts/seed_demo.py).
-const CSF_SERVICE_ID = "55eb8797-0b7a-4fe6-95cd-76b5e692cfe6";
 
 const ARTIFACTS_DIR = path.resolve(__dirname, "..", "artifacts");
 
@@ -57,7 +55,9 @@ async function openWorkspaceOnDraft(
   opts: { fresh?: boolean } = {},
 ): Promise<void> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${CSF_SERVICE_ID}/csf`);
+  // Seeded Atlas Defense "NIST CSF 2.0" service (scripts/seed_demo.py).
+  const csfServiceId = await atlasServiceId(page, "nist_csf");
+  await page.goto(`/admin/services/${csfServiceId}/csf`);
   await expect(
     page.getByRole("heading", { name: "NIST CSF 2.0 Assessment" }),
   ).toBeVisible({ timeout: 30000 });
@@ -73,7 +73,7 @@ async function openWorkspaceOnDraft(
     // rows: mint a fresh draft via the proxy (the active-client cookie is
     // already set by EnsureActiveClient).
     const created = await page.request.post(
-      `/api/proxy/csf/services/${CSF_SERVICE_ID}/assessments`,
+      `/api/proxy/csf/services/${csfServiceId}/assessments`,
     );
     expect(created.ok()).toBeTruthy();
     await page.reload();

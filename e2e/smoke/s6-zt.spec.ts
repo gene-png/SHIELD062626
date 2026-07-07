@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 6 (T6): the Zero Trust (DoD ZTRA) admin workspace.
@@ -18,13 +19,12 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * Atlas by EnsureActiveClient once the header renders — then reloads.
  */
 
-// Seeded Atlas Defense "Zero Trust (DoD ZTRA)" service (scripts/seed_demo.py).
-const ZT_DOD_SERVICE_ID = "0290f4e2-b615-451a-8b17-22351d9299ea";
-
 /** Sign in, open the DoD workspace, and layer a fresh draft assessment on top. */
 async function openFreshDraft(page: Page): Promise<void> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${ZT_DOD_SERVICE_ID}/zero-trust-dod`);
+  // Seeded Atlas Defense "Zero Trust (DoD ZTRA)" service (scripts/seed_demo.py).
+  const ztDodServiceId = await atlasServiceId(page, "zero_trust_dod");
+  await page.goto(`/admin/services/${ztDodServiceId}/zero-trust-dod`);
   await expect(
     page.getByRole("heading", {
       name: "Zero Trust Assessment — DoD Reference Architecture",
@@ -32,7 +32,7 @@ async function openFreshDraft(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 30000 });
 
   const created = await page.request.post(
-    `/api/proxy/zt/services/${ZT_DOD_SERVICE_ID}/assessments`,
+    `/api/proxy/zt/services/${ztDodServiceId}/assessments`,
   );
   expect(created.ok()).toBeTruthy();
 

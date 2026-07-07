@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 11 (T8): the C3 "documents are stale" nudge.
@@ -22,16 +23,18 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * React StrictMode double-loads.
  */
 
-// Seeded Atlas Defense "MITRE ATT&CK Coverage" service (scripts/seed_demo.py),
-// same constant s5-attack uses.
-const ATTACK_SERVICE_ID = "7c2ec112-2ed2-4b23-88b4-0d6a996ed46c";
-
 const NUDGE = /updated scores since the documents were last generated/i;
 
-/** Sign in, open the workspace, layer a fresh (non-stale) draft on top. */
-async function openFreshDraft(page: Page): Promise<void> {
+/**
+ * Sign in, open the workspace, layer a fresh (non-stale) draft on top, and
+ * return the resolved Atlas ATT&CK service id (the test body reuses it).
+ */
+async function openFreshDraft(page: Page): Promise<string> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${ATTACK_SERVICE_ID}/attack-coverage`);
+  // Seeded Atlas Defense "MITRE ATT&CK Coverage" service (scripts/seed_demo.py),
+  // the same service s5-attack drives.
+  const attackServiceId = await atlasServiceId(page, "attack_coverage");
+  await page.goto(`/admin/services/${attackServiceId}/attack-coverage`);
   // The header only renders once EnsureActiveClient has aligned the
   // active-client cookie to Atlas, so the proxy POST below is tenant-scoped.
   await expect(
@@ -39,13 +42,14 @@ async function openFreshDraft(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 30000 });
 
   const created = await page.request.post(
-    `/api/proxy/attack/services/${ATTACK_SERVICE_ID}/assessments`,
+    `/api/proxy/attack/services/${attackServiceId}/assessments`,
   );
   expect(created.ok()).toBeTruthy();
 
   await page.reload();
   await expect(page.getByText(/Draft v\d+/)).toBeVisible({ timeout: 30000 });
   await page.waitForLoadState("networkidle").catch(() => undefined);
+  return attackServiceId;
 }
 
 /** Click Run AI and wait for the run-ai POST to resolve. */
@@ -68,7 +72,7 @@ test("Run AI raises the stale-documents nudge; finalising the deliverable clears
   // Long flow (sign-in + mint + run + approve + finalise + two reloads) against
   // a next-dev server shared with the other smoke specs; triple the budget.
   test.slow();
-  await openFreshDraft(page);
+  const attackServiceId = await openFreshDraft(page);
 
   // A brand-new draft has never had an AI run, so the nudge is absent.
   await expect(page.getByText(NUDGE)).toHaveCount(0);
@@ -87,7 +91,7 @@ test("Run AI raises the stale-documents nudge; finalising the deliverable clears
   // endpoints the workspace's own Approve/Finalize buttons call, so this is a
   // faithful exercise of the clear path without re-testing s7's export UI.
   const latest = await page.request.get(
-    `/api/proxy/attack/services/${ATTACK_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/attack/services/${attackServiceId}/assessments/latest`,
   );
   expect(latest.ok()).toBeTruthy();
   const assessmentId = ((await latest.json()) as { id: string }).id;
@@ -98,7 +102,7 @@ test("Run AI raises the stale-documents nudge; finalising the deliverable clears
   expect(approved.ok()).toBeTruthy();
 
   const finalized = await page.request.post(
-    `/api/proxy/attack/services/${ATTACK_SERVICE_ID}/deliverables/finalize`,
+    `/api/proxy/attack/services/${attackServiceId}/deliverables/finalize`,
   );
   expect(finalized.ok()).toBeTruthy();
 

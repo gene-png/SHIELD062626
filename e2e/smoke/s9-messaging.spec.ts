@@ -7,6 +7,7 @@ import {
   CLIENT_PASSWORD,
   signIn,
 } from "../helpers/auth";
+import { atlasClientId, atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 9 (T8): the per-assessment message thread + admin inbox.
@@ -31,37 +32,23 @@ import {
 
 const BASE_URL = "http://localhost:3000";
 
-// Seeded Atlas Defense "NIST CSF 2.0 Assessment" service (scripts/seed_demo.py).
-// nist_csf is one of the self-assessment page's known types, so the client can
-// open its thread; the CSF admin workspace renders the same thread.
-const CSF_SERVICE_ID = "55eb8797-0b7a-4fe6-95cd-76b5e692cfe6";
-
 const UNREAD_BADGE = /^\d+ new$/;
-
-/** Resolve the Atlas tenant's client id from the admin clients list. */
-async function atlasClientId(page: Page): Promise<string> {
-  const res = await page.request.get("/api/proxy/admin/clients");
-  expect(res.ok()).toBeTruthy();
-  const { clients } = (await res.json()) as {
-    clients: Array<{ id: string; legal_name: string }>;
-  };
-  const atlas = clients.find((c) => /atlas/i.test(c.legal_name));
-  expect(atlas, "Atlas tenant must exist in the seed").toBeTruthy();
-  return (atlas as { id: string }).id;
-}
 
 /**
  * Guarantee the admin CSF workspace can render its MessageThread: the thread is
  * gated behind an assessment existing for the service. If the seed left none,
  * mint a fresh draft and reload.
  */
-async function ensureCsfAssessment(page: Page): Promise<void> {
+async function ensureCsfAssessment(
+  page: Page,
+  csfServiceId: string,
+): Promise<void> {
   const latest = await page.request.get(
-    `/api/proxy/csf/services/${CSF_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/csf/services/${csfServiceId}/assessments/latest`,
   );
   if (!latest.ok()) {
     const created = await page.request.post(
-      `/api/proxy/csf/services/${CSF_SERVICE_ID}/assessments`,
+      `/api/proxy/csf/services/${csfServiceId}/assessments`,
     );
     expect(created.ok()).toBeTruthy();
     await page.reload();
@@ -85,9 +72,18 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
   const adminPage = await adminCtx.newPage();
 
   try {
+    // Resolve the seeded Atlas ids up front via the admin proxy: nist_csf is one
+    // of the self-assessment page's known types (so the client can open its
+    // thread) and the CSF admin workspace renders the same thread. Signing the
+    // analyst in first is harmless — unread is cleared by OPENING the thread, not
+    // by logging in.
+    await signIn(adminPage, ADMIN_EMAIL, ADMIN_PASSWORD);
+    const csfServiceId = await atlasServiceId(adminPage, "nist_csf");
+    const atlasId = await atlasClientId(adminPage);
+
     // --- Client posts on their assessment thread -------------------------
     await signIn(clientPage, CLIENT_EMAIL, CLIENT_PASSWORD);
-    await clientPage.goto(`/self-assessment/${CSF_SERVICE_ID}?type=nist_csf`);
+    await clientPage.goto(`/self-assessment/${csfServiceId}?type=nist_csf`);
     const clientBox = clientPage.getByRole("textbox", {
       name: "Write a message",
     });
@@ -95,7 +91,7 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     await clientBox.fill(CLIENT_MSG);
     const clientPosted = clientPage.waitForResponse(
       (r) =>
-        r.url().includes(`/services/${CSF_SERVICE_ID}/messages`) &&
+        r.url().includes(`/services/${csfServiceId}/messages`) &&
         r.request().method() === "POST" &&
         r.ok(),
       { timeout: 60000 },
@@ -107,8 +103,6 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     });
 
     // --- Admin sees an unread badge in the /admin/messages inbox ---------
-    await signIn(adminPage, ADMIN_EMAIL, ADMIN_PASSWORD);
-    const atlasId = await atlasClientId(adminPage);
     const switched = await adminPage.request.post("/api/active-client", {
       data: { clientId: atlasId },
     });
@@ -126,10 +120,10 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     // --- Admin opens the thread (clears unread) and replies --------------
     await inboxRow.click();
     await adminPage.waitForURL(
-      new RegExp(`/admin/services/${CSF_SERVICE_ID}/csf`),
+      new RegExp(`/admin/services/${csfServiceId}/csf`),
       { timeout: 30000 },
     );
-    await ensureCsfAssessment(adminPage);
+    await ensureCsfAssessment(adminPage, csfServiceId);
 
     // The client's message is present in the admin workspace thread.
     await expect(adminPage.getByText(CLIENT_MSG)).toBeVisible({
@@ -143,7 +137,7 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     await adminBox.fill(ADMIN_MSG);
     const adminPosted = adminPage.waitForResponse(
       (r) =>
-        r.url().includes(`/services/${CSF_SERVICE_ID}/messages`) &&
+        r.url().includes(`/services/${csfServiceId}/messages`) &&
         r.request().method() === "POST" &&
         r.ok(),
       { timeout: 60000 },
@@ -164,7 +158,7 @@ test("client message reaches the admin inbox + workspace, reply returns, and ope
     await expect(clearedRow.getByText(UNREAD_BADGE)).toHaveCount(0);
 
     // --- Client sees the analyst's reply ---------------------------------
-    await clientPage.goto(`/self-assessment/${CSF_SERVICE_ID}?type=nist_csf`);
+    await clientPage.goto(`/self-assessment/${csfServiceId}?type=nist_csf`);
     await expect(clientPage.getByText(ADMIN_MSG)).toBeVisible({
       timeout: 30000,
     });
