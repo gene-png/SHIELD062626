@@ -34,8 +34,11 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
-    "ruff>=0.6",
-    "black>=24.8",
+    # Lint/format pinned to a major: CI installs whatever these allow, and a
+    # new black major re-flags the whole repo (black 26 would reformat 107
+    # files that are 25.x-clean).
+    "ruff>=0.15,<0.16",
+    "black>=25,<26",
     "mypy>=1.11",
     "bandit[toml]>=1.7",
 ]
