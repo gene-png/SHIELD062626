@@ -30,14 +30,14 @@ documents, live AI). Work top-to-bottom in one sitting.
 
 ## 2. Admin management (B2)
 
-- [ ] `/admin/management`: create another client + add/remove a domain; list reflects changes. (PARTIAL: client creation + domain approval exercised via the same admin API the UI calls, in s13-isolation.spec.ts setup. The `/admin/management` UI itself, domain REMOVAL, and list-reflects-changes are NOT exercised — needs a human pass or a follow-up spec.)
+- [x] `/admin/management`: create another client + add/remove a domain; list reflects changes. (s2-management.spec.ts drives the `/admin/management` UI ITSELF, not the admin API: creates a timestamped client via the form, approves a `.example` domain, asserts both reflected in the rendered list, removes the domain, asserts the removal reflected.)
 - [x] Client switcher works; the active client scopes what admin sees. (s13-isolation.spec.ts — the active-client switch is driven via the `/api/active-client` cookie API, not the UI widget; the scoping itself — X-Client-Id data plane — is fully asserted)
 
 ## 3. Intake & client self-assessment (C6, C8, A2, A4)
 
 - [x] As a client, run intake; UI says "**assessment**" everywhere (not "engagement") (A2). (s3-selfassessment.spec.ts)
 - [x] Open a CSF self-assessment; fill a few, **Save-and-exit**, return → answers persist. (s3-selfassessment.spec.ts persist test — reopens the exact created draft)
-- [ ] CSF questions are the **verbatim** interview prompts (C8). (NOT asserted by any spec — comparing rendered text to the master-spec prompt source needs a human eye or a follow-up fixture)
+- [x] CSF questions are the **verbatim** interview prompts (C8). (s3-selfassessment.spec.ts — "CSF questionnaire renders the verbatim subcategory outcome prompts" asserts the rendered GV.OC-01/02/03 outcome text matches the catalog VERBATIM. Source of record: apps/api/app/csf/catalog.py SUBCATEGORIES — the deterministic CSF catalog the questionnaire renders from, transcribing the canonical NIST CSF 2.0 Final outcome statements; SHIELDv2_Master_Spec.txt §7 defines the subcategory model, not the per-item text.)
 - [x] **DoD ZT shows only 3 levels** (A4). (s3-selfassessment.spec.ts — DoD ZtStagePicker asserts exactly 3 radios. NOTE: only the DoD client questionnaire is run; a CISA *client self-assessment* pass is not exercised — CISA is covered admin-side in s6-zt.spec.ts.)
 - [x] Submit a self-assessment → status moves to submitted / under review. (s3-selfassessment.spec.ts submit test)
 
