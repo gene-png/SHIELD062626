@@ -220,7 +220,7 @@ is unchanged.
 **Ref:** Master Spec §4.4 (LLM env-configurable), §12 (redaction on egress);
 SPRINT_1.md T6b; DECISIONS D-016 (typed-error pattern reused for the 503).
 
-## D-018 — Reject reserved/special-use TLDs at domain-approval time
+## D-019 — Reject reserved/special-use TLDs at domain-approval time
 
 **2026-07-07 · admin**
 The admin add-domain route (`POST /admin/clients/{cid}/domains`) now rejects

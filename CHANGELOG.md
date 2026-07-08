@@ -2,7 +2,99 @@
 
 All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the phase template in AI Prompt §9.
 
-## [Unreleased]
+## [3.0.1] — Sprint 2 · findings burn-down — 2026-07-07
+
+Branch `fix/findings-burndown-sprint-2`. Ten tasks (T0–T9) burning down the
+defect + coverage backlog Sprint 1 surfaced, plus this docs refresh (T10). All
+exit gates green: the full 16-file / 32-test Playwright suite, `pytest -m unit`,
+and web `tsc --noEmit`.
+
+- **Dependency bump (T0, `f580a3b`):** `next` → latest 14.2.x patch (14.2.35;
+  stayed on the 14 App-Router line, no 15.x jump). `pnpm audit` clean of
+  criticals; the 5 remaining high advisories are 15.x-only fixes documented in
+  the commit body as no-non-breaking-fix.
+- **Runtime e2e id resolution (T1, `1e6640a`):** new `e2e/helpers/ids.ts`
+  (`atlasClientId` / `atlasServiceId`, per-file cached) replaces every hardcoded
+  seeded UUID across 8 specs so the suite survives a re-seeded DB. Zero
+  hardcoded UUIDs remain under `e2e/` (grep-enforced).
+- **Fresh-stack proof + bring-up doc (T2, `64d5b95`):** `down -v` → reseed →
+  full suite green on a pristine DB; `e2e/README.md` documents the canonical
+  bring-up that T3's CI job automates.
+- **CI e2e job (T3, `f0475ce`):** `.github/workflows/ci.yml` gains an `e2e` job
+  — composed stack up, fail-loud health waits on `:8000` + web, seed, `npm ci` +
+  chromium, `playwright test`, `always()` upload of report/traces, 30-min
+  timeout — alongside the untouched python/web/secret-scan jobs. First real run
+  is pending the review-required branch push (Dave-manual).
+- **Runtime axe sweep (T4, `7603799`):** `@axe-core/playwright` + new
+  `s16-axe.spec.ts` runs a WCAG A/AA sweep over public/client/admin surfaces
+  (zero violations, no rule exclusions). Triage found one recurring contrast
+  miss — the `--ink-tertiary` token (2.7–3.0:1) — darkened to ~4.8:1 in
+  `packages/design-system/src/tokens.css`.
+- **IG Core/Supporting metadata (T5, `ec59f1d`):** imported the real
+  per-subcategory Core / Supporting / Alignment classification (108 codes, from
+  the Working Profile reference workbook) into `app/csf/catalog.py` as additive
+  metadata, threaded into `routes/csf.py` so CSF Playbook Rules 2 (Core+Primary
+  floor) and 5 (Supporting/Supplemental override) finally fire. Additive/C0:
+  absent codes keep safe defaults; no migration (flags computed at roll-up).
+- **a11y roving tabindex + heatmap semantics (T6, `137727b`):** WAI-ARIA
+  radiogroup roving tabindex on `TierPicker` / `ZtStagePicker` (arrow keys move
+  focus with wrap; select stays on Space/Enter/click to avoid auto-save PATCH
+  flooding); risk heatmap `tbody th` gains `scope="row"` so Chromium exposes
+  rowheaders.
+- **CSF draft-exists guard (T7, `efa87b8`):** `POST
+  /csf/services/{id}/assessments` now returns the open draft idempotently (HTTP
+  200) instead of minting an unbounded new version; a new v+1 is only cut once
+  the prior draft closes. CSF-scoped; the attack/zt mint routes share the
+  pattern and are backlogged.
+- **Coverage gaps (T8, `9dbb83f`):** new `s2-management.spec.ts` drives the
+  `/admin/management` UI itself (create client, approve/remove domain); `s3`
+  gains verbatim CSF outcome-prompt assertions (C8). SMOKE_TEST §2 + §3-verbatim
+  checked off.
+- **Reserved-TLD guard (T9, `1cdfa89`):** admin add-domain route rejects
+  special-use / reserved TLDs (`.test` / `.invalid` / `.localhost`) with a typed
+  422 (`domain_reserved_tld`, D-016 envelope), reusing email-validator's own
+  reserved-name check rather than a hand-rolled list. The web Management client
+  now surfaces the typed `error.message`. See DECISIONS.md **D-019**.
+- **Docs refresh (T10, this entry):** BUILD_REPORT.md + CHANGELOG.md brought to
+  v3.0.x reality; SMOKE_TEST.md synced (§12 roving-tabindex note); CONTEXT.md
+  end-of-sprint snapshot; DECISIONS D-018 → **D-019** renumber to clear a
+  D-number collision with the unmerged `chore/dependabot-policy` branch (which
+  owns D-018 for its majors-suppressed policy).
+
+## [3.0.0] — Sprint 1 · smoke sweep — 2026-07-06
+
+Branch `qa/smoke-sweep-sprint-1` (PR #16). A green Playwright smoke suite now
+backs `SMOKE_TEST.md`, plus the runtime defects the sweep surfaced and fixed.
+
+- 14-file / 27-test Playwright suite under `e2e/smoke/` covering SMOKE_TEST
+  sections 0–15 (home, signup errors, self-assessment, tech-debt, ATT&CK, ZT,
+  CSF Playbook, risk register, messaging, staleness, a11y nav, not-found,
+  tenant isolation, security headers).
+- **D-017 — fixture-mode AI:** deterministic offline suggestions for all five
+  AI purposes (`mitre_map`, `zt_score`, `csf_score`, `extract.capabilities`,
+  `risk_synthesize`) so the demo stack is fully exercisable with no provider key.
+- **D-016 — typed registration errors:** `{reason, message}` envelope mapped to
+  field-scoped friendly copy on the sign-up form.
+- Missing ATT&CK coverage PATCH proxy route added; assorted runtime fixes the
+  sweep found. Full detail in `SPRINT_1.md` and the PR #16 description.
+
+## [3.0.0] — v2 work order (Parts A–F) — merged via PR #1
+
+The v2 work order (migrations 0015–0025) shipped all four assessment services
+end-to-end, multi-tenant consultant-led onboarding, the AI job registry behind
+the single redacting egress client, and the deterministic engines (CSF Playbook
+`app/csf/playbook.py`, Risk Register `app/risk/engine.py`, ZT scoring
+`app/zt/scoring.py`) — "AI suggests, code computes." Part F added the hardening
+pass (synchronous AI runs, dependency audits + Dependabot, cross-tenant
+isolation tests, production Dockerfiles). See DECISIONS.md D-015 (Part F) and
+the granular history below.
+
+## Earlier build history — v0.x foundation → v2 work order
+
+The phase-by-phase log below (Phases 1–3, `v0.x`) records the original
+autonomous build and the incremental v2 evolution (multi-tenant, D-015) that
+the Parts A–F work order completed and PR #1 merged as `v3.0.0`. `[Unreleased]`
+labels in this section are historical.
 
 ### Multi-tenant: allow many clients per deployment — 2026-05-21
 

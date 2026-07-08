@@ -109,14 +109,19 @@ The part only a human can do — confirm the documents actually _look_ right.
 
 - [ ] Every admin + client page has top-nav; **no 404s** clicking around.
 - [x] **Tab** from page load → first focusable is **"Skip to content"**; activating it jumps to `#main-content` (test on admin + on `/account`, `/messages`, `/assessments`). (s12-a11y-nav.spec.ts — asserts hash becomes `#main-content` AND focus lands ON the landmark; the final-audit pass added `tabindex="-1"` to every `<main id=main-content>` per WAI-ARIA skip-link practice)
-- [x] Keyboard-navigate a workspace (radios, selects, buttons all reachable/operable). (s12-a11y-nav.spec.ts — spot-check: CSF radio Space-to-answer + submit button enabled; `select` controls are not keyboard-driven by the spec)
+- [x] Keyboard-navigate a workspace (radios, selects, buttons all reachable/operable). (s12-a11y-nav.spec.ts — CSF radio Space-to-answer + submit button enabled, plus arrow-key roving-tabindex on the TierPicker radiogroup (ArrowRight moves focus + follows `tabindex`, wraps at the ends) added in S2 T6; `select` controls are not keyboard-driven by the spec)
 - [x] Each terminal state has an onward link (no dead ends). (s12-notfound.spec.ts — 404 recovery links asserted; the admin not-authorized state renders onward links via `admin/layout.tsx` with its copy asserted in s13; other terminal states are not enumerated)
 
-> **Minor a11y gap logged as backlog** (specs assert the real, shipped behavior
-> and are green): TierPicker / ZtStagePicker radios are individually
-> Tab-reachable and Space/Enter-operable but lack arrow-key roving-tabindex
-> within the radiogroup. (The skip-link landmark-focus gap noted here previously
-> was FIXED in the final-audit pass: `tabindex=-1` on every `main#main-content`.)
+> **a11y roving-tabindex — FIXED in S2 T6** (`137727b`; asserted green by
+> s12-a11y-nav.spec.ts): `TierPicker` / `ZtStagePicker` now implement WAI-ARIA
+> radiogroup roving-tabindex — the selected radio (or the first, if none) is the
+> sole `tabIndex=0` and Arrow Right/Down / Left/Up move focus with wrap. Focus
+> movement does NOT auto-select (select stays on Space/Enter/click) so the
+> auto-save PATCH is not flooded — see the inline comment in the components. The
+> risk heatmap likelihood labels also gained `scope="row"` so Chromium exposes
+> them as `rowheader` (s8 asserts `getByRole('rowheader')`). (The earlier
+> skip-link landmark-focus gap was FIXED in the final-audit pass: `tabindex=-1`
+> on every `main#main-content`.)
 
 ## 13. Access control & tenant isolation (F)
 
