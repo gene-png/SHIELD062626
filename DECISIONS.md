@@ -233,7 +233,7 @@ hand-rolled TLD list — the exact check pydantic's `EmailStr` runs at
 registration. `.example` is NOT reserved and still approves.
 
 **Rationale:** Before this guard, the email validator 422'd special-use TLDs at
-self-registration *before* the domain-approval check, so an admin could approve a
+self-registration _before_ the domain-approval check, so an admin could approve a
 domain (e.g. the demo's `beacon.test`) that no user could ever register on —
 approved-but-unregistrable, a silent dead end. Rejecting at approval time fails
 loudly at the point of the mistake. The web Management client (`_detail`) was

@@ -106,11 +106,15 @@ test("DoD questionnaire renders by pillar and current/target stages are settable
   // auto-save PATCHes aren't flooded, so aria-checked must NOT change on arrow.
   const stageRadios = maturity.getByRole("radio");
   const stageCount = await stageRadios.count();
-  expect(stageCount, "ZtStagePicker exposes multiple radios").toBeGreaterThan(1);
+  expect(stageCount, "ZtStagePicker exposes multiple radios").toBeGreaterThan(
+    1,
+  );
 
   // ArrowRight: focus + roving stop move from the first radio to the second.
   await stageRadios.nth(0).focus();
-  const stageCheckedBefore = await stageRadios.nth(1).getAttribute("aria-checked");
+  const stageCheckedBefore = await stageRadios
+    .nth(1)
+    .getAttribute("aria-checked");
   await page.keyboard.press("ArrowRight");
   await expect(stageRadios.nth(1)).toBeFocused();
   await expect(stageRadios.nth(1)).toHaveAttribute("tabindex", "0");
@@ -130,7 +134,10 @@ test("DoD questionnaire renders by pillar and current/target stages are settable
   // Wrap-around: ArrowLeft from the first radio lands on the last.
   await page.keyboard.press("ArrowLeft");
   await expect(stageRadios.nth(stageCount - 1)).toBeFocused();
-  await expect(stageRadios.nth(stageCount - 1)).toHaveAttribute("tabindex", "0");
+  await expect(stageRadios.nth(stageCount - 1)).toHaveAttribute(
+    "tabindex",
+    "0",
+  );
 });
 
 test("Run AI clamps DoD suggestions to <= 3 and the roadmap groups gaps by month", async ({

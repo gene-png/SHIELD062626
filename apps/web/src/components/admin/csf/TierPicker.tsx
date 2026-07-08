@@ -24,7 +24,9 @@ export function TierPicker({
 }: TierPickerProps): JSX.Element {
   const radioRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const count = TIER_SHORT_LABELS.length;
-  const selectedIndex = TIER_SHORT_LABELS.findIndex(({ tier }) => tier === value);
+  const selectedIndex = TIER_SHORT_LABELS.findIndex(
+    ({ tier }) => tier === value,
+  );
 
   // Roving tabindex: exactly one radio is a Tab stop — the selected one, or the
   // first when nothing is selected. Arrow keys move focus (and the roving stop)

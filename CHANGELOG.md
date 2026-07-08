@@ -42,8 +42,7 @@ and web `tsc --noEmit`.
   flooding); risk heatmap `tbody th` gains `scope="row"` so Chromium exposes
   rowheaders.
 - **CSF draft-exists guard (T7, `efa87b8`):** `POST
-  /csf/services/{id}/assessments` now returns the open draft idempotently (HTTP
-  200) instead of minting an unbounded new version; a new v+1 is only cut once
+/csf/services/{id}/assessments` now returns the open draft idempotently (HTTP 200) instead of minting an unbounded new version; a new v+1 is only cut once
   the prior draft closes. CSF-scoped; the attack/zt mint routes share the
   pattern and are backlogged.
 - **Coverage gaps (T8, `9dbb83f`):** new `s2-management.spec.ts` drives the

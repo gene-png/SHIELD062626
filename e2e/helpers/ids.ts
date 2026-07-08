@@ -86,7 +86,10 @@ export async function atlasServiceId(
   for (const e of engagements) serviceIdCache.set(e.service_type, e.service_id);
 
   const id = serviceIdCache.get(serviceType);
-  expect(id, `Atlas ${serviceType} service must exist in the seed`).toBeTruthy();
+  expect(
+    id,
+    `Atlas ${serviceType} service must exist in the seed`,
+  ).toBeTruthy();
   return id as string;
 }
 

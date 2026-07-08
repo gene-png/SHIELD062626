@@ -35,21 +35,21 @@ Highlights:
 Sprint 2 (findings burn-down) complete. Sprint 3 = infra (blocked on David's
 cloud/account/region decisions).**
 
-| Milestone | Status | Reference |
-| --- | --- | --- |
-| Phase 1 — Foundation (`v0.1.0`) | Complete | CHANGELOG (earlier history) |
-| Phase 2 — Intake (`v0.2.0`) | Complete | CHANGELOG (earlier history) |
-| Phase 3 — Tech Debt service (`v0.3.x`) | Complete | CHANGELOG (earlier history) |
-| v2 work order Parts A–F (`v3.0.0`, migrations 0015–0025) | **Complete (PR #1)** | DECISIONS D-015 (Part F) |
-| Sprint 1 — smoke sweep (`qa/smoke-sweep-sprint-1`, PR #16) | **Complete** | `SPRINT_1.md` |
-| Sprint 2 — findings burn-down (`fix/findings-burndown-sprint-2`) | **Complete (this branch)** | `SPRINT_2.md`, CHANGELOG `[3.0.1]` |
-| Sprint 3 — infra (terraform, MFA/email-verify, FedRAMP LLM connector) | **Next (needs-David)** | `DELIVERY_PLAN.md` |
+| Milestone                                                             | Status                     | Reference                          |
+| --------------------------------------------------------------------- | -------------------------- | ---------------------------------- |
+| Phase 1 — Foundation (`v0.1.0`)                                       | Complete                   | CHANGELOG (earlier history)        |
+| Phase 2 — Intake (`v0.2.0`)                                           | Complete                   | CHANGELOG (earlier history)        |
+| Phase 3 — Tech Debt service (`v0.3.x`)                                | Complete                   | CHANGELOG (earlier history)        |
+| v2 work order Parts A–F (`v3.0.0`, migrations 0015–0025)              | **Complete (PR #1)**       | DECISIONS D-015 (Part F)           |
+| Sprint 1 — smoke sweep (`qa/smoke-sweep-sprint-1`, PR #16)            | **Complete**               | `SPRINT_1.md`                      |
+| Sprint 2 — findings burn-down (`fix/findings-burndown-sprint-2`)      | **Complete (this branch)** | `SPRINT_2.md`, CHANGELOG `[3.0.1]` |
+| Sprint 3 — infra (terraform, MFA/email-verify, FedRAMP LLM connector) | **Next (needs-David)**     | `DELIVERY_PLAN.md`                 |
 
 ## Product surface at `v3.0.0`
 
 - **Four assessment services:** Technical Debt Review, Zero Trust (CISA ZTMM 2.0
-  + DoD ZTRA), NIST CSF 2.0 (10-step Playbook), MITRE ATT&CK coverage (full
-  Enterprise matrix per D-007).
+  - DoD ZTRA), NIST CSF 2.0 (10-step Playbook), MITRE ATT&CK coverage (full
+    Enterprise matrix per D-007).
 - **Risk Register** (5×5 NIST 800-30) synthesized from the four services; tier
   is code-derived, never prompted.
 - **Multi-tenant** consultant-led onboarding (shared DB + `client_id`, D-015).
@@ -61,13 +61,13 @@ cloud/account/region decisions).**
 
 The repo-wide gates enforced this sprint (and encoded in the sprint queue):
 
-| Gate | Command | Where |
-| --- | --- | --- |
-| Backend unit tests | `docker compose exec -T api pytest -m unit -q` | api container |
-| Web typecheck | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"` | web container |
-| Full e2e smoke suite | `cd e2e && npx playwright test` (16 spec files / 32 tests) | host → composed stack |
-| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite) | host → composed stack |
-| Dependency audit | `pnpm audit` (root) / `npm audit` (`e2e/`) | host |
+| Gate                  | Command                                                                        | Where                 |
+| --------------------- | ------------------------------------------------------------------------------ | --------------------- |
+| Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                 | api container         |
+| Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"` | web container         |
+| Full e2e smoke suite  | `cd e2e && npx playwright test` (16 spec files / 32 tests)                     | host → composed stack |
+| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                          | host → composed stack |
+| Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                     | host                  |
 
 ### CI jobs (`.github/workflows/ci.yml`)
 
@@ -76,7 +76,7 @@ Four jobs gate every push / PR to `main`:
 1. **python** — ruff, black, bandit, `pytest -m unit`.
 2. **web** — prettier, eslint (incl. static `jsx-a11y`), tsc, `next build`.
 3. **secret-scan** — gitleaks.
-4. **e2e** *(new this sprint, T3)* — `docker compose up`, fail-loud health waits
+4. **e2e** _(new this sprint, T3)_ — `docker compose up`, fail-loud health waits
    on `:8000` + web, seed, `npm ci` + chromium, `playwright test` (includes the
    axe sweep, T4), `always()` upload of `playwright-report/` + `test-results/`,
    30-min timeout.
@@ -99,18 +99,18 @@ sprint serves web on **:3001**; Playwright resolves the port via
 
 ## OWASP Top 10 cumulative review (as of `v3.0.0`)
 
-| ID | Category | Status |
-| --- | --- | --- |
-| A01 | Broken Access Control | PASS — `current_user` + `require_role`; multi-tenant `X-Client-Id` scoping returns 404 on cross-tenant access (no existence oracle); admin layout double-checks server-side |
-| A02 | Cryptographic Failures | PASS — Argon2id + HS256 JWT; placeholder secret refused in prod; sha256 on every upload; S3 SSE=KMS in prod |
-| A03 | Injection | PASS — SQLAlchemy parameterized queries only; app-generated storage keys; filename sanitization |
-| A04 | Insecure Design | PASS — append-only audit log (two layers); MIME allowlist + size cap; redaction disclosure before upload; explicit service-request lifecycle |
-| A05 | Security Misconfiguration | PASS — `assert_safe_for_runtime`; HSTS + CSP + X-Frame-Options + Permissions-Policy + Referrer-Policy at the edge (asserted by `s15-headers.spec.ts`) |
-| A06 | Vulnerable Components | PASS — pip-audit + `pnpm audit` in CI, Dependabot opens fix PRs; `next` on latest 14.2.x (T0). Remaining highs are 15.x-only, documented |
-| A07 | ID & Auth Failures | PARTIAL — email+password + Argon2id + lockout + account-existence oracle defense + typed reg errors (D-016); MFA + email verification deferred per Master Spec §2 (compensating controls listed) |
-| A08 | Software & Data Integrity | PASS — audit rows immutable by contract; sha256 stored + audited on upload |
-| A09 | Logging & Monitoring | PASS — structured JSON + correlation IDs; audit + notification fan-out on state change; `llm_calls` rows record redacted-count only |
-| A10 | SSRF | PASS — LLM endpoint env-configured only; no user-supplied URLs |
+| ID  | Category                  | Status                                                                                                                                                                                           |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A01 | Broken Access Control     | PASS — `current_user` + `require_role`; multi-tenant `X-Client-Id` scoping returns 404 on cross-tenant access (no existence oracle); admin layout double-checks server-side                      |
+| A02 | Cryptographic Failures    | PASS — Argon2id + HS256 JWT; placeholder secret refused in prod; sha256 on every upload; S3 SSE=KMS in prod                                                                                      |
+| A03 | Injection                 | PASS — SQLAlchemy parameterized queries only; app-generated storage keys; filename sanitization                                                                                                  |
+| A04 | Insecure Design           | PASS — append-only audit log (two layers); MIME allowlist + size cap; redaction disclosure before upload; explicit service-request lifecycle                                                     |
+| A05 | Security Misconfiguration | PASS — `assert_safe_for_runtime`; HSTS + CSP + X-Frame-Options + Permissions-Policy + Referrer-Policy at the edge (asserted by `s15-headers.spec.ts`)                                            |
+| A06 | Vulnerable Components     | PASS — pip-audit + `pnpm audit` in CI, Dependabot opens fix PRs; `next` on latest 14.2.x (T0). Remaining highs are 15.x-only, documented                                                         |
+| A07 | ID & Auth Failures        | PARTIAL — email+password + Argon2id + lockout + account-existence oracle defense + typed reg errors (D-016); MFA + email verification deferred per Master Spec §2 (compensating controls listed) |
+| A08 | Software & Data Integrity | PASS — audit rows immutable by contract; sha256 stored + audited on upload                                                                                                                       |
+| A09 | Logging & Monitoring      | PASS — structured JSON + correlation IDs; audit + notification fan-out on state change; `llm_calls` rows record redacted-count only                                                              |
+| A10 | SSRF                      | PASS — LLM endpoint env-configured only; no user-supplied URLs                                                                                                                                   |
 
 ## Open items / deferred (needs-David or Sprint 3)
 
