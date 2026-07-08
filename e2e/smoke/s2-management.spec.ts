@@ -16,10 +16,9 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * timestamped-unique to survive accumulation (no reliance on list order or on
  * being the only client present).
  *
- * NOTE: T9 (reserved-TLD rejection copy) has not landed yet, so this spec does
- * NOT assert any .test/.invalid rejection copy — it approves a `.example`
- * domain, which the email validator accepts. Add the rejection assertion here
- * once T9 lands.
+ * T9 (D-018): a reserved/special-use TLD (.test/.invalid/.localhost) is
+ * rejected at approval with a typed 422 whose friendly copy surfaces in the
+ * card; a `.example` domain (accepted by the email validator) still approves.
  */
 
 /**
@@ -65,10 +64,28 @@ test("management UI: create client, approve + remove a domain, list reflects eac
     await expect(clientCard).toBeVisible({ timeout: 10000 });
   }).toPass({ timeout: 45000 });
 
-  // --- Approve (add) a domain, scoped to our client's card ------------------
   const domainInput = clientCard.getByLabel(`New domain for ${legalName}`);
   const addBtn = clientCard.getByRole("button", { name: "Add domain" });
 
+  // --- T9: a reserved/special-use TLD is rejected with friendly copy --------
+  // `.test` passes the format check but the email validator 422s it, so no user
+  // could ever register on it. The route rejects it (reason=domain_reserved_tld,
+  // D-018) and the Management UI surfaces the typed message — never a chip.
+  const reservedDomain = `qa-mgmt-${stamp}.test`;
+  await expect(async () => {
+    await domainInput.fill(reservedDomain);
+    await expect(addBtn).toBeEnabled();
+    await addBtn.click();
+    await expect(
+      clientCard.getByText(/reserved or special-use domain/i),
+    ).toBeVisible({ timeout: 10000 });
+  }).toPass({ timeout: 30000 });
+  // The rejected domain never becomes an approved chip.
+  await expect(
+    clientCard.getByText(reservedDomain, { exact: true }),
+  ).toHaveCount(0);
+
+  // --- Approve (add) a valid domain, scoped to our client's card ------------
   await expect(async () => {
     await domainInput.fill(domain);
     await expect(addBtn).toBeEnabled();

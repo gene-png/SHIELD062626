@@ -8,6 +8,8 @@ organization the person belongs to).
 
 from __future__ import annotations
 
+from email_validator import EmailNotValidError, validate_email
+
 # Consumer mailbox providers. A person at one of these could belong to any
 # organization (or none), so we never auto-join them to a client by domain.
 GENERIC_EMAIL_PROVIDERS: frozenset[str] = frozenset(
@@ -48,3 +50,22 @@ def domain_of(email: str) -> str:
 
 def is_generic_provider(domain: str) -> bool:
     return domain.lower() in GENERIC_EMAIL_PROVIDERS
+
+
+def is_reserved_domain(domain: str) -> bool:
+    """True when `domain` is a special-use / reserved name (RFC 2606/6761 —
+    e.g. `.test`, `.invalid`, `.localhost`) that the email validator refuses.
+
+    A user can never register an address on such a domain, so approving one
+    strands it as approved-but-unregistrable (the seeded `beacon.test` problem,
+    Sprint 2 T9). We reuse email-validator's own reserved-name check — the very
+    check pydantic's `EmailStr` applies at registration — by probing a throwaway
+    address, rather than maintaining a hand-rolled TLD list that would drift as
+    the RFCs evolve. `.example` is NOT reserved by the validator and returns
+    False here, matching what registration accepts.
+    """
+    try:
+        validate_email(f"probe@{domain}", check_deliverability=False)
+    except EmailNotValidError:
+        return True
+    return False
