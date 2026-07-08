@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Iterable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,9 @@ from app.csf.catalog import (
     FUNCTIONS,
     SUBCATEGORIES,
     all_codes,
+    is_core,
+    is_core_primary,
+    is_supporting_or_supplemental,
     min_profile_for_category,
     subcategory_by_code,
 )
@@ -57,6 +60,7 @@ from app.csf.playbook import (
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
 from app.dependencies import current_client, current_user, require_role
+from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -113,6 +117,8 @@ from app.tenant import (
 )
 
 router = APIRouter(prefix="/csf", tags=["csf"])
+
+_log = get_logger(__name__)
 
 _admin_required = Depends(require_role(UserRole.ADMIN))
 
@@ -349,12 +355,29 @@ def get_catalog(
 )
 def create_assessment(
     service_id: uuid.UUID,
+    response: Response,
     user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
 ) -> CsfAssessmentResponse:
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
     prior = _latest_assessment(db, svc.id)
+    # Draft-exists guard (SPRINT_2 T7): this route used to mint a new version on
+    # EVERY call, so a client hammering "start assessment" produced unbounded
+    # v2, v3, v4… drafts. If an unsubmitted draft is already open, return it
+    # idempotently (HTTP 200) instead of minting. A new version is only cut once
+    # the prior draft has moved on (submitted/approved/released). This mirrors
+    # the approve route's idempotent-200 shape rather than a 409, so callers
+    # that expect a usable assessment back keep working unchanged.
+    if prior is not None and prior.status == CsfAssessmentStatus.DRAFT:
+        _log.info(
+            "csf_assessment_create_reused_open_draft",
+            assessment_id=str(prior.id),
+            version=prior.version,
+            service_id=str(svc.id),
+        )
+        response.status_code = status.HTTP_200_OK
+        return _serialize_assessment(db, prior)
     version = (prior.version + 1) if prior else 1
     assessment = CsfAssessment(
         service_id=svc.id,
@@ -384,6 +407,12 @@ def create_assessment(
     )
     db.commit()
     db.refresh(assessment)
+    _log.info(
+        "csf_assessment_created",
+        assessment_id=str(assessment.id),
+        version=version,
+        service_id=str(svc.id),
+    )
     return _serialize_assessment(db, assessment)
 
 
@@ -977,17 +1006,18 @@ def _enterprise_subcategories(
         }
         rollup = weighted_floor_rollup(
             {Tier(t): lvl for t, lvl in tier_levels.items()},
-            # IG core/supporting metadata isn't in the catalog yet; defaults keep
-            # the roll-up on rules 1/3/4/6 until the IG import lands.
-            is_core_primary=False,
-            is_supporting_or_supplemental=False,
+            # Real IG Core/Supporting classification from the catalog (T5).
+            # Absent subcategories return safe defaults, keeping older
+            # assessments on rules 1/3/4/6 unchanged (C0 additive pattern).
+            is_core_primary=is_core_primary(code),
+            is_supporting_or_supplemental=is_supporting_or_supplemental(code),
         )
         targets = [row.target_level for row in tier_rows.values() if row.target_level]
         target = max(targets) if targets else None
         gap = is_gap(rollup.score, target) if target is not None else False
         priority = (
             gap_priority(
-                is_core=False,
+                is_core=is_core(code),
                 high_tier=Tier.HIGH.value in tier_rows,
                 multi_system=len(tier_rows) > 1,
             )

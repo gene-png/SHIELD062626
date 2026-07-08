@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 6 (T6): the Zero Trust (DoD ZTRA) admin workspace.
@@ -18,13 +19,12 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * Atlas by EnsureActiveClient once the header renders — then reloads.
  */
 
-// Seeded Atlas Defense "Zero Trust (DoD ZTRA)" service (scripts/seed_demo.py).
-const ZT_DOD_SERVICE_ID = "0290f4e2-b615-451a-8b17-22351d9299ea";
-
 /** Sign in, open the DoD workspace, and layer a fresh draft assessment on top. */
 async function openFreshDraft(page: Page): Promise<void> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${ZT_DOD_SERVICE_ID}/zero-trust-dod`);
+  // Seeded Atlas Defense "Zero Trust (DoD ZTRA)" service (scripts/seed_demo.py).
+  const ztDodServiceId = await atlasServiceId(page, "zero_trust_dod");
+  await page.goto(`/admin/services/${ztDodServiceId}/zero-trust-dod`);
   await expect(
     page.getByRole("heading", {
       name: "Zero Trust Assessment — DoD Reference Architecture",
@@ -32,7 +32,7 @@ async function openFreshDraft(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 30000 });
 
   const created = await page.request.post(
-    `/api/proxy/zt/services/${ZT_DOD_SERVICE_ID}/assessments`,
+    `/api/proxy/zt/services/${ztDodServiceId}/assessments`,
   );
   expect(created.ok()).toBeTruthy();
 
@@ -98,6 +98,46 @@ test("DoD questionnaire renders by pillar and current/target stages are settable
   await targetSelect.selectOption("3");
   await targetSaved;
   await expect(targetSelect).toHaveValue("3");
+
+  // Arrow-key roving tabindex on the ZtStagePicker radiogroup (WAI-ARIA pattern,
+  // T6 — identical semantics to the CSF TierPicker asserted in s12, backfilled
+  // here so the DoD stage picker has its own regression net). Arrows move focus
+  // and the roving Tab stop (tabindex=0) only; selection stays on Space/Enter so
+  // auto-save PATCHes aren't flooded, so aria-checked must NOT change on arrow.
+  const stageRadios = maturity.getByRole("radio");
+  const stageCount = await stageRadios.count();
+  expect(stageCount, "ZtStagePicker exposes multiple radios").toBeGreaterThan(
+    1,
+  );
+
+  // ArrowRight: focus + roving stop move from the first radio to the second.
+  await stageRadios.nth(0).focus();
+  const stageCheckedBefore = await stageRadios
+    .nth(1)
+    .getAttribute("aria-checked");
+  await page.keyboard.press("ArrowRight");
+  await expect(stageRadios.nth(1)).toBeFocused();
+  await expect(stageRadios.nth(1)).toHaveAttribute("tabindex", "0");
+  await expect(stageRadios.nth(0)).toHaveAttribute("tabindex", "-1");
+  // The arrow did not toggle selection on the newly focused radio.
+  await expect(stageRadios.nth(1)).toHaveAttribute(
+    "aria-checked",
+    stageCheckedBefore ?? "false",
+  );
+
+  // ArrowLeft: move back to the first radio; the roving stop follows.
+  await page.keyboard.press("ArrowLeft");
+  await expect(stageRadios.nth(0)).toBeFocused();
+  await expect(stageRadios.nth(0)).toHaveAttribute("tabindex", "0");
+  await expect(stageRadios.nth(1)).toHaveAttribute("tabindex", "-1");
+
+  // Wrap-around: ArrowLeft from the first radio lands on the last.
+  await page.keyboard.press("ArrowLeft");
+  await expect(stageRadios.nth(stageCount - 1)).toBeFocused();
+  await expect(stageRadios.nth(stageCount - 1)).toHaveAttribute(
+    "tabindex",
+    "0",
+  );
 });
 
 test("Run AI clamps DoD suggestions to <= 3 and the roadmap groups gaps by month", async ({

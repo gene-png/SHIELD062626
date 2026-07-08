@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasClientId, atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 8 (T7): the Risk Register (Work Order E).
@@ -19,10 +20,6 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  *   4. Export streams XLSX/PDF/Word (HTTP 200 + content-type), saved to
  *      e2e/artifacts/ for David's section-10 eyeball.
  */
-
-// Seeded Atlas Defense tenant + its ATT&CK service (scripts/seed_demo.py).
-const ATLAS_CLIENT_ID = "1b9c80e3-4ad2-4d5a-ae5a-ab310aff58fd";
-const ATLAS_ATTACK_SERVICE_ID = "7c2ec112-2ed2-4b23-88b4-0d6a996ed46c";
 
 const ARTIFACTS_DIR = path.resolve(__dirname, "..", "artifacts");
 
@@ -130,7 +127,10 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
   test.slow();
   test.setTimeout(300_000);
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await setActiveClient(page, ATLAS_CLIENT_ID);
+  // Seeded Atlas Defense tenant + its ATT&CK service (scripts/seed_demo.py).
+  const atlasClientIdValue = await atlasClientId(page);
+  const atlasAttackServiceId = await atlasServiceId(page, "attack_coverage");
+  await setActiveClient(page, atlasClientIdValue);
 
   await page.goto("/admin/risk-register");
   await expect(
@@ -141,7 +141,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
   // Version assertions are delta-based: the shared DB may already hold a
   // register from earlier runs.
   const latest = await page.request.get(
-    `/api/proxy/risk/clients/${ATLAS_CLIENT_ID}/register/latest`,
+    `/api/proxy/risk/clients/${atlasClientIdValue}/register/latest`,
   );
   const priorVersion = latest.ok()
     ? ((await latest.json()) as RiskRegisterResponse).version
@@ -180,7 +180,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
 
   // Cited technique links only reference the client's OWN ATT&CK assessment.
   const attackLatest = await page.request.get(
-    `/api/proxy/attack/services/${ATLAS_ATTACK_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/attack/services/${atlasAttackServiceId}/assessments/latest`,
   );
   expect(attackLatest.ok()).toBeTruthy();
   const coverage = (
@@ -225,13 +225,12 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       page.getByRole("columnheader", { name: impact, exact: true }),
     ).toBeVisible();
   }
-  // Likelihood row labels are tbody <th>s without scope=row, so Chromium does
-  // not expose them as rowheaders — assert on the th text instead. Anchored
-  // regexes keep "High" from matching "Very High".
+  // Likelihood row labels are tbody <th scope="row"> (T6), so Chromium's a11y
+  // tree exposes them as rowheaders. `exact` keeps "High" from matching
+  // "Very High".
   for (const likelihood of ["Very High", "High", "Medium", "Low", "Very Low"]) {
-    const escaped = likelihood.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     await expect(
-      page.locator("th", { hasText: new RegExp(`^${escaped}$`) }).first(),
+      page.getByRole("rowheader", { name: likelihood, exact: true }),
     ).toBeVisible();
   }
   // The High x Catastrophic cell counts exactly the entries that land there.

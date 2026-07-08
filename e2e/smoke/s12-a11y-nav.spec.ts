@@ -187,6 +187,40 @@ test("workspace controls are keyboard-reachable and operable", async ({
   await saved;
   await expect(firstRadio).toHaveAttribute("aria-checked", "true");
 
+  // Arrow-key roving tabindex (WAI-ARIA radiogroup pattern, T6). ArrowRight/Down
+  // move focus to the next radio and the roving Tab stop (tabindex=0) follows;
+  // ArrowLeft/Up move to the previous, wrapping at the ends. Arrows move focus
+  // only — selection stays on Space/Enter so auto-save PATCHes aren't flooded
+  // (see TierPicker comment), hence aria-checked does NOT change on arrow.
+  const group = page.getByRole("radiogroup").first();
+  const radios = group.getByRole("radio");
+  const radioCount = await radios.count();
+  expect(radioCount, "TierPicker exposes multiple radios").toBeGreaterThan(1);
+
+  // ArrowRight: focus + roving stop move from the first to the second radio.
+  await radios.nth(0).focus();
+  const checkedBefore = await radios.nth(1).getAttribute("aria-checked");
+  await page.keyboard.press("ArrowRight");
+  await expect(radios.nth(1)).toBeFocused();
+  await expect(radios.nth(1)).toHaveAttribute("tabindex", "0");
+  await expect(radios.nth(0)).toHaveAttribute("tabindex", "-1");
+  // Arrow did not toggle selection on the newly focused radio.
+  await expect(radios.nth(1)).toHaveAttribute(
+    "aria-checked",
+    checkedBefore ?? "false",
+  );
+
+  // ArrowLeft: move back to the first radio; the roving stop follows.
+  await page.keyboard.press("ArrowLeft");
+  await expect(radios.nth(0)).toBeFocused();
+  await expect(radios.nth(0)).toHaveAttribute("tabindex", "0");
+  await expect(radios.nth(1)).toHaveAttribute("tabindex", "-1");
+
+  // Wrap-around: ArrowLeft from the first radio lands on the last.
+  await page.keyboard.press("ArrowLeft");
+  await expect(radios.nth(radioCount - 1)).toBeFocused();
+  await expect(radios.nth(radioCount - 1)).toHaveAttribute("tabindex", "0");
+
   // A primary action button in the same workspace is reachable + operable.
   await expect(
     page.getByRole("button", { name: "Submit for review" }),

@@ -56,7 +56,15 @@ export interface DomainRow {
 
 async function _detail(res: Response): Promise<string> {
   try {
-    const body = (await res.json()) as { detail?: string };
+    // The API surfaces errors through the D-016 envelope
+    // ({error: {message, reason?}}); older/plain routes use {detail}. Prefer
+    // the typed message so friendly copy (e.g. the reserved-TLD rejection)
+    // reaches the Management UI instead of a bare "Request failed".
+    const body = (await res.json()) as {
+      detail?: string;
+      error?: { message?: string };
+    };
+    if (body?.error?.message) return body.error.message;
     if (body?.detail) return body.detail;
   } catch {
     /* keep default */

@@ -219,3 +219,30 @@ is unchanged.
 
 **Ref:** Master Spec §4.4 (LLM env-configurable), §12 (redaction on egress);
 SPRINT_1.md T6b; DECISIONS D-016 (typed-error pattern reused for the 503).
+
+## D-019 — Reject reserved/special-use TLDs at domain-approval time
+
+**2026-07-07 · admin**
+The admin add-domain route (`POST /admin/clients/{cid}/domains`) now rejects
+reserved / special-use domains — RFC 2606/6761 names like `.test`, `.invalid`,
+`.localhost` — with a typed 422 (`reason=domain_reserved_tld`, plus friendly
+`message`), following the D-016 dict-detail envelope. The check reuses
+email-validator's own reserved-name logic (a throwaway `validate_email` probe
+via the new `app/security/email_domains.is_reserved_domain` helper) rather than a
+hand-rolled TLD list — the exact check pydantic's `EmailStr` runs at
+registration. `.example` is NOT reserved and still approves.
+
+**Rationale:** Before this guard, the email validator 422'd special-use TLDs at
+self-registration _before_ the domain-approval check, so an admin could approve a
+domain (e.g. the demo's `beacon.test`) that no user could ever register on —
+approved-but-unregistrable, a silent dead end. Rejecting at approval time fails
+loudly at the point of the mistake. The web Management client (`_detail`) was
+also reading the wrong error field (`detail` vs the D-016 `error.message`); it now
+prefers the typed message so the rejection copy actually surfaces in the form.
+The guard is add-time only: rows approved before it (legacy reserved domains)
+still list and remove unchanged (C0/additive). `seed_demo.py` was checked — it
+only seeds `atlas.example` and never created `beacon.test`, so no seed migration
+was needed (s13 find-or-creates `beacon.example` itself).
+
+**Ref:** SPRINT_2.md T9; DECISIONS D-016 (typed-error pattern); D-004/B1
+(domain-gated registration); `email-validator` `SPECIAL_USE_DOMAIN_NAMES`.

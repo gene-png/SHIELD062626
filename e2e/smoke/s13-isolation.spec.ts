@@ -6,6 +6,12 @@ import {
 } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, register, signIn } from "../helpers/auth";
+import {
+  adminApiToken,
+  API_BASE,
+  atlasClientIdViaApi,
+  atlasServiceIdsViaApi,
+} from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 13 (T9): multi-tenant isolation.
@@ -37,19 +43,9 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, register, signIn } from "../helpers/auth";
 const PASSWORD = "correct horse battery staple!";
 const BEACON_DOMAIN = "beacon.example";
 
-// Seeded Atlas Defense tenant + services (scripts/seed_demo.py; ids are stable
-// constants the other smoke specs also hardcode).
-const ATLAS_CLIENT_ID = "1b9c80e3-4ad2-4d5a-ae5a-ab310aff58fd";
-const ATLAS_ATTACK_SERVICE_ID = "7c2ec112-2ed2-4b23-88b4-0d6a996ed46c";
-const ATLAS_SERVICE_IDS = new Set([
-  "7c2ec112-2ed2-4b23-88b4-0d6a996ed46c", // attack_coverage
-  "0290f4e2-b615-451a-8b17-22351d9299ea", // zero_trust_dod
-  "2a2c1b0d-a969-4852-bccd-cffe90c0e28d", // zero_trust_cisa
-  "55eb8797-0b7a-4fe6-95cd-76b5e692cfe6", // nist_csf
-  "3c73a6cb-802a-4fd8-937b-69d9af0fe6de", // tech_debt
-]);
-
-const API_BASE = "http://localhost:8000";
+// Seeded Atlas Defense tenant + services (scripts/seed_demo.py). Resolved at
+// runtime via the admin API so a reseeded DB (new uuids) can't break isolation
+// coverage — see resolveAtlas() below and e2e/helpers/ids.ts.
 
 interface Client {
   id: string;
@@ -61,12 +57,10 @@ interface Client {
  * domain, using the admin API directly (the endpoints the Management UI calls).
  * Returns the Beacon client id. Idempotent against the shared seeded DB.
  */
-async function ensureBeaconTenant(request: APIRequestContext): Promise<string> {
-  const login = await request.post(`${API_BASE}/auth/login`, {
-    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-  });
-  expect(login.ok()).toBeTruthy();
-  const token = ((await login.json()) as { access_token: string }).access_token;
+async function ensureBeaconTenant(
+  request: APIRequestContext,
+  token: string,
+): Promise<string> {
   const auth = { Authorization: `Bearer ${token}` };
 
   const listed = await request.get(`${API_BASE}/admin/clients`, {
@@ -114,12 +108,41 @@ async function setActiveClient(page: Page, clientId: string): Promise<void> {
   expect(res.ok()).toBeTruthy();
 }
 
+/**
+ * Resolve the seeded Atlas tenant id, its ATT&CK service id, and the full set of
+ * its service ids — via the admin API directly (bearer). Runtime resolution so a
+ * reseeded DB (fresh uuids) can't strand this isolation coverage.
+ */
+async function resolveAtlas(
+  request: APIRequestContext,
+  token: string,
+): Promise<{
+  clientId: string;
+  attackServiceId: string;
+  serviceIds: Set<string>;
+}> {
+  const clientId = await atlasClientIdViaApi(request, token);
+  const byType = await atlasServiceIdsViaApi(request, token, clientId);
+  const attackServiceId = byType.get("attack_coverage");
+  expect(
+    attackServiceId,
+    "Atlas attack_coverage service must exist in the seed",
+  ).toBeTruthy();
+  return {
+    clientId,
+    attackServiceId: attackServiceId as string,
+    serviceIds: new Set(byType.values()),
+  };
+}
+
 test("a Beacon-tenant client is denied admin URLs and sees no Atlas data", async ({
   page,
   request,
 }) => {
   test.slow();
-  await ensureBeaconTenant(request);
+  const token = await adminApiToken(request);
+  await ensureBeaconTenant(request, token);
+  const atlas = await resolveAtlas(request, token);
 
   // A real Beacon client self-registers on the approved Beacon domain.
   await register(page, "Bob Beacon", beaconEmail(), PASSWORD);
@@ -149,14 +172,14 @@ test("a Beacon-tenant client is denied admin URLs and sees no Atlas data", async
   const services = (await mine.json()) as Array<{ service_id: string }>;
   for (const svc of services) {
     expect(
-      ATLAS_SERVICE_IDS.has(svc.service_id),
+      atlas.serviceIds.has(svc.service_id),
       `Atlas service ${svc.service_id} must not appear in a Beacon client's list`,
     ).toBe(false);
   }
 
   // 2b. A direct fetch of an Atlas service is refused (not served as data).
   const crossTenant = await page.request.get(
-    `/api/proxy/attack/services/${ATLAS_ATTACK_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/attack/services/${atlas.attackServiceId}/assessments/latest`,
   );
   expect(crossTenant.status(), "Beacon client fetching Atlas service").toBe(
     404,
@@ -178,7 +201,9 @@ test("an admin scoped to Beacon gets 404 (not data) for an Atlas service", async
   request,
 }) => {
   test.slow();
-  const beaconId = await ensureBeaconTenant(request);
+  const token = await adminApiToken(request);
+  const beaconId = await ensureBeaconTenant(request, token);
+  const atlas = await resolveAtlas(request, token);
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
   // NOTE: navigating the admin *workspace URL* itself (/admin/services/<id>/...)
@@ -192,7 +217,7 @@ test("an admin scoped to Beacon gets 404 (not data) for an Atlas service", async
   // Admin active client = Beacon -> an Atlas service's data 404s.
   await setActiveClient(page, beaconId);
   const scopedToBeacon = await page.request.get(
-    `/api/proxy/attack/services/${ATLAS_ATTACK_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/attack/services/${atlas.attackServiceId}/assessments/latest`,
   );
   expect(
     scopedToBeacon.status(),
@@ -201,9 +226,9 @@ test("an admin scoped to Beacon gets 404 (not data) for an Atlas service", async
 
   // Control: switching the active client to Atlas serves the SAME URL (200),
   // proving the 404 above was tenant isolation, not a broken endpoint.
-  await setActiveClient(page, ATLAS_CLIENT_ID);
+  await setActiveClient(page, atlas.clientId);
   const scopedToAtlas = await page.request.get(
-    `/api/proxy/attack/services/${ATLAS_ATTACK_SERVICE_ID}/assessments/latest`,
+    `/api/proxy/attack/services/${atlas.attackServiceId}/assessments/latest`,
   );
   expect(
     scopedToAtlas.status(),
