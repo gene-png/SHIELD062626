@@ -263,7 +263,7 @@ def add_client_domain(
         )
     # Reserved/special-use TLDs (.test/.invalid/.localhost) pass the format
     # check but the email validator 422s them at registration, so a user could
-    # never sign up on them (the beacon.test trap, D-018). Reject at approval
+    # never sign up on them (the beacon.test trap, D-019). Reject at approval
     # with a typed reason (D-016) the Management UI maps to friendly copy.
     if is_reserved_domain(domain):
         raise HTTPException(

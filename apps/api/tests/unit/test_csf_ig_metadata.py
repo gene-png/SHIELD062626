@@ -35,6 +35,7 @@ from app.csf.playbook import Tier, gap_priority, weighted_floor_rollup
 _CORE_PRIMARY = "GV.SC-01"  # Core / Primary
 _CORE_SUPPORTING = "DE.CM-02"  # Core / Supporting
 _SUPPLEMENTAL_SUPPORTING = "GV.OC-02"  # Supplemental / Supporting
+_SUPPLEMENTAL_PRIMARY = "GV.OC-01"  # Supplemental / Primary
 _ABSENT = "ZZ.ZZ-99"  # not in the mapping (nor the catalog)
 
 
@@ -89,6 +90,35 @@ def test_rule_5_fires_for_supplemental_subcategory() -> None:
         {Tier.HIGH: 5, Tier.LOW: 3},
         is_core_primary=is_core_primary(_SUPPLEMENTAL_SUPPORTING),
         is_supporting_or_supplemental=is_supporting_or_supplemental(_SUPPLEMENTAL_SUPPORTING),
+    )
+    assert res.rule == 5
+    assert res.score == 5
+
+
+@pytest.mark.unit
+def test_supplemental_primary_triggers_rule_5_via_the_class_clause() -> None:
+    """A Supplemental+Primary code satisfies Rule 5 SOLELY through the
+    ``core_class is SUPPLEMENTAL`` clause of is_supporting_or_supplemental.
+
+    GV.OC-02 (the other Supplemental fixture) is *also* Supporting, so it
+    short-circuits on the alignment operand and never proves the class clause.
+    GV.OC-01 is Supplemental with PRIMARY alignment: alignment is NOT Supporting,
+    so True here can only come from the Supplemental class check. This guards
+    the ``or core_class is SUPPLEMENTAL`` branch from silent removal.
+    """
+    meta = ig_metadata_for(_SUPPLEMENTAL_PRIMARY)
+    assert meta is not None
+    assert meta.core_class is CoreClass.SUPPLEMENTAL
+    assert meta.alignment is Alignment.PRIMARY  # NOT Supporting
+    # Supplemental is not Core, so despite PRIMARY alignment this is not Rule 2.
+    assert is_core(_SUPPLEMENTAL_PRIMARY) is False
+    assert is_core_primary(_SUPPLEMENTAL_PRIMARY) is False
+    # ...yet it is still a Rule 5 override candidate via the Supplemental class.
+    assert is_supporting_or_supplemental(_SUPPLEMENTAL_PRIMARY) is True
+    res = weighted_floor_rollup(
+        {Tier.HIGH: 5, Tier.LOW: 3},
+        is_core_primary=is_core_primary(_SUPPLEMENTAL_PRIMARY),
+        is_supporting_or_supplemental=is_supporting_or_supplemental(_SUPPLEMENTAL_PRIMARY),
     )
     assert res.rule == 5
     assert res.score == 5
