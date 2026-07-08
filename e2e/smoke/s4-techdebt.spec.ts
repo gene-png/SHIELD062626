@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 4 (T6): the Tech Debt admin workspace.
@@ -18,9 +19,6 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * new editable DRAFT version on top; fetchLatestList always returns our fresh
  * four-row draft, keeping the "AI 60%" row deterministic across re-runs.
  */
-
-// Seeded Atlas Defense "Tech Debt Review" service (scripts/seed_demo.py).
-const TECH_DEBT_SERVICE_ID = "3c73a6cb-802a-4fd8-937b-69d9af0fe6de";
 
 // A tiny inventory. The fixture extractor reads the redacted rows and stamps a
 // deterministic confidence per row (60, 70, 80, 90) — so exactly one row is
@@ -40,7 +38,9 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
   // seconds, so triple the budget.
   test.slow();
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${TECH_DEBT_SERVICE_ID}/tech-debt`);
+  // Resolve the seeded Atlas Tech Debt service at runtime (scripts/seed_demo.py).
+  const techDebtServiceId = await atlasServiceId(page, "tech_debt");
+  await page.goto(`/admin/services/${techDebtServiceId}/tech-debt`);
 
   // EnsureActiveClient aligns the active tenant to Atlas before the workspace
   // renders its header.

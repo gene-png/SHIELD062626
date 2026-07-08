@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 5 (T6): the MITRE ATT&CK Coverage admin workspace.
@@ -26,9 +27,6 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  * initial load renders straight from the committed DB state.
  */
 
-// Seeded Atlas Defense "MITRE ATT&CK Coverage" service (scripts/seed_demo.py).
-const ATTACK_SERVICE_ID = "7c2ec112-2ed2-4b23-88b4-0d6a996ed46c";
-
 interface RunAiBody {
   tools_available: number;
   changed: Array<{ technique_code: string; field: string }>;
@@ -43,7 +41,9 @@ interface RunAiBody {
 /** Sign in, open the workspace, and layer a fresh draft assessment on top. */
 async function openFreshDraft(page: Page): Promise<void> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${ATTACK_SERVICE_ID}/attack-coverage`);
+  // Seeded Atlas Defense "MITRE ATT&CK Coverage" service (scripts/seed_demo.py).
+  const attackServiceId = await atlasServiceId(page, "attack_coverage");
+  await page.goto(`/admin/services/${attackServiceId}/attack-coverage`);
   // The header only renders once EnsureActiveClient has set the active-client
   // cookie to Atlas, so the proxy POST below is correctly tenant-scoped.
   await expect(
@@ -51,7 +51,7 @@ async function openFreshDraft(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 30000 });
 
   const created = await page.request.post(
-    `/api/proxy/attack/services/${ATTACK_SERVICE_ID}/assessments`,
+    `/api/proxy/attack/services/${attackServiceId}/assessments`,
   );
   expect(created.ok()).toBeTruthy();
 

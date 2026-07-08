@@ -44,7 +44,7 @@ from app.schemas.admin import (
     FulfillServiceRequestResponse,
 )
 from app.schemas.intake import ClientProfileResponse
-from app.security.email_domains import domain_of, is_generic_provider
+from app.security.email_domains import domain_of, is_generic_provider, is_reserved_domain
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -260,6 +260,23 @@ def add_client_domain(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Generic email providers can't be approved as a client domain.",
+        )
+    # Reserved/special-use TLDs (.test/.invalid/.localhost) pass the format
+    # check but the email validator 422s them at registration, so a user could
+    # never sign up on them (the beacon.test trap, D-019). Reject at approval
+    # with a typed reason (D-016) the Management UI maps to friendly copy.
+    if is_reserved_domain(domain):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": "domain_reserved_tld",
+                "message": (
+                    "That's a reserved or special-use domain (like .test, "
+                    ".invalid, or .localhost) that no one can register a real "
+                    "email address on. Approve the organization's actual "
+                    "domain instead."
+                ),
+            },
         )
     existing = db.execute(
         select(ClientDomain).where(ClientDomain.domain == domain)

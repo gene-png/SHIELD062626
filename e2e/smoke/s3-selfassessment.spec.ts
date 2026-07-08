@@ -184,6 +184,56 @@ test("CSF answers persist across save-and-exit, and submit moves the status", as
   });
 });
 
+/**
+ * SMOKE_TEST.md section 3, C8: the rendered CSF questionnaire prompts must be
+ * the VERBATIM subcategory outcome statements, not a paraphrase or a truncated
+ * label. Each question card renders `subcategory.outcome` (the "outcome
+ * statement assessors score against") beneath the short name.
+ *
+ * Source of record for the verbatim text: apps/api/app/csf/catalog.py
+ * SUBCATEGORIES — the deterministic CSF catalog the questionnaire renders from
+ * ("AI suggests, code computes"), transcribing the canonical NIST CSF 2.0
+ * Final (Feb 2024) outcome statements. The master spec
+ * (reference-docs/SHIELDv2_Master_Spec.txt §7, ~line 1413) defines the
+ * subcategory model (GV.OC-01, GV.OC-02, …) but not the per-item outcome text,
+ * so catalog.py is the authoritative verbatim source. This test asserts the
+ * DOM text equals these literals exactly, guarding against UI truncation /
+ * reformatting or catalog drift.
+ *
+ * GV.OC-* are chosen because GOVERN is the default (first) function tab and
+ * GV.OC (Organizational Context) is in scope at every impact profile,
+ * including LOW — so all three render on initial load with no tab switching.
+ */
+const CSF_VERBATIM_PROMPTS: Record<string, string> = {
+  "GV.OC-01":
+    "The organizational mission is understood and informs cybersecurity risk management.",
+  "GV.OC-02":
+    "Internal and external stakeholders are understood, and their needs and expectations regarding cybersecurity are considered.",
+  "GV.OC-03":
+    "Legal, regulatory, and contractual requirements regarding cybersecurity are understood and managed.",
+};
+
+test("CSF questionnaire renders the verbatim subcategory outcome prompts (C8)", async ({
+  page,
+}) => {
+  await registerAtlasClient(page);
+  await startAssessment(page, { type: "nist_csf", tier: 3, profile: "LOW" });
+
+  await expect(
+    page.getByRole("heading", { name: "CSF 2.0 questionnaire" }),
+  ).toBeVisible({ timeout: 30000 });
+
+  // GOVERN is the default tab; assert each GV.OC prompt renders VERBATIM.
+  for (const [code, prompt] of Object.entries(CSF_VERBATIM_PROMPTS)) {
+    // The subcategory code label anchors us to the right card.
+    await expect(page.getByText(code, { exact: true }).first()).toBeVisible({
+      timeout: 30000,
+    });
+    // Exact-match the outcome text so a paraphrase or truncation would fail.
+    await expect(page.getByText(prompt, { exact: true }).first()).toBeVisible();
+  }
+});
+
 test("DoD Zero Trust self-assessment maturity scale shows exactly 3 levels", async ({
   page,
 }) => {

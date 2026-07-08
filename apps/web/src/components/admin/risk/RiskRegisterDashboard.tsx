@@ -74,7 +74,10 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
         <tbody>
           {rows.map((lk) => (
             <tr key={lk}>
-              <th className="whitespace-nowrap p-2 text-right font-medium text-ink-secondary">
+              <th
+                scope="row"
+                className="whitespace-nowrap p-2 text-right font-medium text-ink-secondary"
+              >
                 {titleCase(lk)}
               </th>
               {IMPACTS.map((im) => {

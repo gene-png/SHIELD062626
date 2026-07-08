@@ -1,39 +1,37 @@
 # Dave — current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-07-07_
+_Last updated: 2026-07-08_
 
 ## Branch / in flight
 
-- **Sprint 2 loop RUNNING** — `fix/findings-burndown-sprint-2` (from `main`
-  post-#16/#18), queue `.claude/sprint-queue.json` (11 tasks T0–T10),
-  driver `/loop-sprint-cron`. Heads-up: T2 does `docker compose down -v` —
-  local demo DB state is disposable until it completes.
-- `chore/dependabot-policy` — dependabot majors-ignore + grouping (D-018),
-  CONTEXT/DECISIONS/context refresh. Pushed; PR open for review.
+- **Sprint 2 MERGED** (PR #19, 2026-07-08): all 11 tasks + shutdown audit, full
+  gates green, first real CI e2e run passed on the PR.
+- `chore/dependabot-policy` — **PR #20**, conflict-resolved against post-#19
+  `main` (D-018 + D-019 coexist; CONTEXT snapshot merged). Awaiting merge.
+- Dependabot triage: 7 majors closed (D-018), 5 Actions bumps merged.
+  Remaining: #7 autoprefixer, #13 next-auth, #14 prettier — rebase + merge
+  after PR #20 (Claude handles it; #14 needs a reformat commit because
+  prettier 3.9.4 formats differently than 3.8.3).
 
 ## Next steps
 
-1. **Dependabot triage (needs my personal-account gh auth — the Kentro EMU
-   account is blocked from writing to Gene's repo).** One-time:
-   `gh auth login` → github.com → HTTPS → login as **SpearheadAnalytica**.
-   Then:
-   - `foreach ($n in 1,2,3,4,5,7,13,14) { gh pr comment $n --body "@dependabot rebase" }`
-     (their CI failures are stale 07-03 runs from before the pnpm double-pin
-     fix `f65e36f`; rebase re-runs CI on green main)
-   - after checks go green: merge #1–#5 (Actions) then #7, #13, #14 one at a
-     time (`gh pr merge <n> --squash`; dependabot auto-rebases the lockfile
-     conflicts between the npm ones)
-   - close the majors: `foreach ($n in 6,8,9,10,11,12,15) { gh pr close $n --comment "Closing per D-018: majors are sprint-planned; the framework bundle (Next 15/16, React 19, Tailwind 4, ESLint 10, Node 22) lands after e2e is in CI." }`
-2. Review/merge the `chore/dependabot-policy` PR.
-3. Monitor the sprint loop (`.claude/scheduler-debug.log`); when the queue
-   completes, push the branch + open the PR (that push is also T3's first
-   real CI e2e run).
+1. Merge PR #20.
+2. Let the session finish the 3 npm dependabot merges.
+3. Plan Sprint 3 (`DELIVERY_PLAN.md`): infra decisions (cloud/account/region),
+   MFA/email-verify flags, FedRAMP LLM connector; candidate carry-overs: the
+   framework-major bundle (Next 15/16, React 19, Tailwind 4, ESLint 10,
+   Node 22), attack/zt mint-route guards (T7 pattern), duplicate D-015 cleanup.
 
 ## Personal todos (human-only)
 
-- SMOKE_TEST §10: eyeball the 8 export documents in `e2e/artifacts/`
-  (host files — survive the T2 wipe).
+- SMOKE_TEST §10: eyeball the 8 export documents in `e2e/artifacts/`.
 - SMOKE_TEST §14: one live-AI run (`ANTHROPIC_API_KEY` +
-  `SHIELD_LLM_MODE=live`) — now planned AGAINST THE RESEEDED DB after T2
-  (accepted the wipe 2026-07-07; no need to beat T2 to it).
+  `SHIELD_LLM_MODE=live`), confirm redacted `llm_calls`, no PII.
+
+## Notes for Gene
+
+- This box runs SHIELD web on **:3001** (machine-local `.env WEB_PORT`);
+  canonical/CI port stays 3000 — see CONTEXT.md machine-local facts.
+- Loop-agent gate gap found in Sprint 2: in-container gates don't run the
+  host prettier `format:check` — add it to the sprint-3 queue gates.

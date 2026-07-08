@@ -880,3 +880,188 @@ def subcategories_for_function(code: str | FunctionCode) -> tuple[Subcategory, .
 
 def all_codes() -> frozenset[str]:
     return frozenset(s.code for s in SUBCATEGORIES)
+
+
+# ---------------------------------------------------------------------------
+# IG metric cross-reference (Core/Supplemental + Primary/Supporting alignment)
+# ---------------------------------------------------------------------------
+# Spec section 8 ("IG metric metadata"): per subcategory, which IG metric(s) it
+# maps to, Core vs. Supplemental, and Primary vs. Supporting alignment. This
+# data ships in the "Reference Data" tab of the Step 2.x Working Profile XLSX
+# toolkit (columns "Core / Supp" and "Alignment"); imported here verbatim and
+# consistent across the HIGH/MODERATE/LOW workbooks.
+#
+# It feeds the deterministic weighted-floor roll-up (app.csf.playbook):
+#   - Rule 2 (strict floor)  needs is_core_primary  = Core AND Primary.
+#   - Rule 5 (LOW override)   needs is_supporting_or_supplemental
+#                                  = Supporting alignment OR Supplemental class.
+#   - gap_priority            needs is_core          = Core class.
+#
+# ADDITIVE (C0 pattern): a subcategory absent from this map returns the safe
+# pre-import defaults (not core, not primary, not supporting), so older
+# persisted assessments roll up exactly as before. "AI suggests, code
+# computes" - this is static catalog data; the LLM is never involved.
+
+
+class CoreClass(enum.StrEnum):
+    CORE = "Core"
+    SUPPLEMENTAL = "Supplemental"
+
+
+class Alignment(enum.StrEnum):
+    PRIMARY = "Primary"
+    SUPPORTING = "Supporting"
+
+
+@dataclass(frozen=True)
+class IgMetadata:
+    core_class: CoreClass
+    alignment: Alignment
+
+
+_IG_METADATA: dict[str, IgMetadata] = {
+    # DETECT
+    "DE.AE-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "DE.AE-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "DE.AE-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "DE.AE-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.AE-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.AE-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.AE-07": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.AE-08": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "DE.CM-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "DE.CM-02": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.CM-03": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.CM-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "DE.CM-09": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    # GOVERN
+    "GV.OC-01": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.OC-02": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.SUPPORTING),
+    "GV.OC-03": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.OC-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.OC-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.OV-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.OV-02": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.OV-03": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.PO-01": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.PO-02": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.SUPPORTING),
+    "GV.RM-01": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RM-02": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RM-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.RM-04": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RM-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.RM-06": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.RM-07": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.SUPPORTING),
+    "GV.RR-01": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RR-02": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RR-03": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "GV.RR-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.SC-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-04": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-05": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-06": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-07": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-08": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "GV.SC-09": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "GV.SC-10": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    # IDENTIFY
+    "ID.AM-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.AM-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.AM-03": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.AM-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.AM-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.AM-07": IgMetadata(CoreClass.SUPPLEMENTAL, Alignment.PRIMARY),
+    "ID.AM-08": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.IM-01": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.IM-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.IM-03": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.IM-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-01": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-02": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.RA-04": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.RA-05": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.RA-06": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "ID.RA-07": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-08": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-09": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "ID.RA-10": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    # PROTECT
+    "PR.AA-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.AA-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.AA-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.AA-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.AA-05": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.AA-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.AT-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.AT-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.DS-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.DS-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.DS-10": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.DS-11": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.IR-01": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.IR-02": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.IR-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.IR-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.PS-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.PS-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "PR.PS-03": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.PS-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.PS-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "PR.PS-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    # RECOVER
+    "RC.CO-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RC.CO-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RC.RP-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RC.RP-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RC.RP-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RC.RP-04": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RC.RP-05": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RC.RP-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    # RESPOND
+    "RS.AN-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.AN-06": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RS.AN-07": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RS.AN-08": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RS.CO-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.CO-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MA-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MA-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MA-03": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MA-04": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MA-05": IgMetadata(CoreClass.CORE, Alignment.SUPPORTING),
+    "RS.MI-01": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+    "RS.MI-02": IgMetadata(CoreClass.CORE, Alignment.PRIMARY),
+}
+
+
+def ig_metadata_for(code: str) -> IgMetadata | None:
+    """The IG Core/alignment classification for a subcategory, or None if the
+    subcategory is not in the imported mapping (additive/safe-default)."""
+    return _IG_METADATA.get(code)
+
+
+def is_core(code: str) -> bool:
+    """True iff the subcategory maps to a Core IG metric (gap_priority input)."""
+    meta = _IG_METADATA.get(code)
+    return meta is not None and meta.core_class is CoreClass.CORE
+
+
+def is_core_primary(code: str) -> bool:
+    """True iff Core AND Primary alignment - the weighted-floor Rule 2 trigger."""
+    meta = _IG_METADATA.get(code)
+    return (
+        meta is not None
+        and meta.core_class is CoreClass.CORE
+        and meta.alignment is Alignment.PRIMARY
+    )
+
+
+def is_supporting_or_supplemental(code: str) -> bool:
+    """True iff Supporting-aligned OR Supplemental - the Rule 5 override trigger."""
+    meta = _IG_METADATA.get(code)
+    if meta is None:
+        return False
+    return meta.alignment is Alignment.SUPPORTING or meta.core_class is CoreClass.SUPPLEMENTAL

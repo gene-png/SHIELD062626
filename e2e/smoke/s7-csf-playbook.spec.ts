@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
 import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
+import { atlasServiceId } from "../helpers/ids";
 
 /**
  * SMOKE_TEST.md section 7 (T7): the NIST CSF 2.0 full Playbook (Work Order D4).
@@ -22,9 +23,6 @@ import { ADMIN_EMAIL, ADMIN_PASSWORD, signIn } from "../helpers/auth";
  *      download links stream real bytes (HTTP 200 + correct content-type).
  *      Each file is saved to e2e/artifacts/ for David's section-10 eyeball.
  */
-
-// Seeded Atlas Defense "NIST CSF 2.0" service (scripts/seed_demo.py).
-const CSF_SERVICE_ID = "55eb8797-0b7a-4fe6-95cd-76b5e692cfe6";
 
 const ARTIFACTS_DIR = path.resolve(__dirname, "..", "artifacts");
 
@@ -57,7 +55,9 @@ async function openWorkspaceOnDraft(
   opts: { fresh?: boolean } = {},
 ): Promise<void> {
   await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
-  await page.goto(`/admin/services/${CSF_SERVICE_ID}/csf`);
+  // Seeded Atlas Defense "NIST CSF 2.0" service (scripts/seed_demo.py).
+  const csfServiceId = await atlasServiceId(page, "nist_csf");
+  await page.goto(`/admin/services/${csfServiceId}/csf`);
   await expect(
     page.getByRole("heading", { name: "NIST CSF 2.0 Assessment" }),
   ).toBeVisible({ timeout: 30000 });
@@ -68,12 +68,31 @@ async function openWorkspaceOnDraft(
       .first(),
   ).toBeVisible({ timeout: 30000 });
 
-  if (opts.fresh || !(await page.getByText(/Draft v\d+/).isVisible())) {
-    // The seeded assessment is RELEASED (read-only), and re-runs need clean
-    // rows: mint a fresh draft via the proxy (the active-client cookie is
+  const draftVisible = await page.getByText(/Draft v\d+/).isVisible();
+  if (opts.fresh) {
+    // The seeded assessment is RELEASED (read-only) and re-runs need clean
+    // rows. T7 added a draft-exists guard: POST now REUSES an open draft
+    // instead of minting a new version, so a plain POST would hand back the
+    // previous run's already-seeded/AI-drafted draft. Close any open draft
+    // first (self-assessment/submit moves it out of DRAFT; a 404/409 when
+    // there's nothing open is expected and ignored), so the following POST
+    // cuts a genuinely fresh v+1 with empty rows.
+    await page.request.post(
+      `/api/proxy/csf/services/${csfServiceId}/self-assessment/submit`,
+      { data: {} },
+    );
+    const created = await page.request.post(
+      `/api/proxy/csf/services/${csfServiceId}/assessments`,
+    );
+    expect(created.ok()).toBeTruthy();
+    await page.reload();
+    await expect(page.getByText(/Draft v\d+/)).toBeVisible({ timeout: 30000 });
+  } else if (!draftVisible) {
+    // No open draft yet: mint one. The T7 guard makes any later POST reuse it,
+    // so this stays idempotent across re-runs (the active-client cookie is
     // already set by EnsureActiveClient).
     const created = await page.request.post(
-      `/api/proxy/csf/services/${CSF_SERVICE_ID}/assessments`,
+      `/api/proxy/csf/services/${csfServiceId}/assessments`,
     );
     expect(created.ok()).toBeTruthy();
     await page.reload();
@@ -280,8 +299,14 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
 
   // Server truth for the edited row: 3 tier levels, an enterprise level, a
   // roll-up rule #, our L5 target, a gap, and a computed priority. The row has
-  // no evidence, so its level caps at <= 2 -> the L5 target guarantees a gap;
-  // HIGH tier in play + not-core => P2 by the CSF_Flow_Spec section 8 table.
+  // no evidence, so its level caps at <= 2 -> the L5 target guarantees a gap.
+  // Priority: HIGH tier is always in play here (3 tiers), so gap_priority
+  // never yields P3 - it's P1 when this subcategory maps to a Core IG metric
+  // (Core + HIGH tier + multi-system), else P2. Before T5 the route hard-coded
+  // is_core=False so this row was always P2; now that the IG Core/Supporting
+  // metadata is imported (catalog.is_core), a Core subcategory correctly rolls
+  // up to P1. We assert against server truth + the {P1,P2} invariant rather
+  // than a stale constant so the check survives which subcategory is nth(1).
   const row = enterprise.subcategories.find((s) => s.subcategory_code === code);
   expect(row).toBeTruthy();
   expect(Object.keys(row!.tier_levels).sort()).toEqual([
@@ -294,13 +319,13 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   expect(row!.rollup_rule).toBeGreaterThanOrEqual(1);
   expect(row!.target_level).toBe(5);
   expect(row!.gap).toBe(true);
-  expect(row!.priority).toBe("P2");
+  expect(["P1", "P2"]).toContain(row!.priority);
 
-  // And the roll-up table renders that row: rule # + priority pill.
+  // And the roll-up table renders that row: rule # + the server's priority pill.
   const tableRow = page.getByRole("row").filter({ hasText: code! }).first();
   await expect(tableRow).toBeVisible({ timeout: 30000 });
   await expect(tableRow).toContainText(`#${row!.rollup_rule}`);
-  await expect(tableRow).toContainText("P2");
+  await expect(tableRow).toContainText(row!.priority!);
   await expect(tableRow).toContainText(`L${row!.enterprise_level}`);
 
   // --- Export: 5 files, each link streaming the right content-type ---------
