@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Iterable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,7 @@ from app.ai.llm import LLMClient
 from app.audit import audit
 from app.db.session import get_db
 from app.dependencies import current_client, current_user, require_role
+from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
@@ -70,6 +71,7 @@ from app.schemas.zt import (
     ZtServiceCreateRequest,
     ZtServiceResponse,
 )
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
     SERVICE_SLUG_ZT_CISA,
@@ -96,6 +98,8 @@ from app.zt.scoring import compute as compute_score
 router = APIRouter(prefix="/zt", tags=["zt"])
 
 _admin_required = Depends(require_role(UserRole.ADMIN))
+
+_log = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +345,7 @@ def run_ai(
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> ZtRunAiResponse:
     """The ZT 'Run AI'. Suggests a current and target maturity level per
     capability (on the framework's own scale) plus per-pillar narratives. AI
@@ -401,6 +406,7 @@ def run_ai(
         },
         requested_by=user.id,
         service_id=svc.id,
+        client_id=client.id,
         client_org_name=client_org,
     )
     data = result.data if isinstance(result.data, dict) else {}
@@ -470,6 +476,7 @@ def run_ai(
 )
 def create_assessment(
     service_id: uuid.UUID,
+    response: Response,
     user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
@@ -484,6 +491,21 @@ def create_assessment(
     cat_fw = _to_catalog_framework(framework)
 
     prior = _latest_assessment(db, svc.id)
+    # Draft-exists guard (SPRINT_3 T1, ported from CSF T7): this route used to
+    # mint a new version on EVERY call and pre-seed ~87 capability rows per
+    # mint, so a client hammering "start assessment" produced unbounded v2, v3,
+    # v4… drafts. If an unsubmitted draft is already open, return it
+    # idempotently (HTTP 200) instead of minting. A new version is only cut
+    # once the prior draft has moved on (submitted/approved/released).
+    if prior is not None and prior.status == ZtAssessmentStatus.DRAFT:
+        _log.info(
+            "zt_assessment_create_reused_open_draft",
+            assessment_id=str(prior.id),
+            version=prior.version,
+            service_id=str(svc.id),
+        )
+        response.status_code = status.HTTP_200_OK
+        return _serialize_assessment(db, prior)
     version = (prior.version + 1) if prior else 1
     assessment = ZtAssessment(
         service_id=svc.id,

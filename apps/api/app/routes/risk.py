@@ -49,7 +49,9 @@ from app.schemas.risk import (
     RiskGateStatus,
     RiskRegisterResponse,
 )
+from app.security.rate_limit import RateLimiter, get_rate_limiter
 from app.storage import StorageBackend
+from app.tech_debt.filename import SERVICE_SLUG_RISK_REGISTER, deliverable_filename
 
 router = APIRouter(prefix="/risk", tags=["risk-register"])
 
@@ -192,7 +194,12 @@ def generate(
     admin: Annotated[User, _admin_required],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> RiskRegisterResponse:
+    # Per-client throttle on the most expensive egress (cross-assessment
+    # synthesis). Risk pins the tenant via the path `cid`, not X-Client-Id,
+    # so we key on it directly rather than via the current_client dependency.
+    limiter.enforce_ai(cid)
     client = _require_client(db, cid)
     g = _gate(db, cid)
     if not g.unlocked:
@@ -213,6 +220,7 @@ def generate(
             "valid_controls": sorted(valid_controls),
         },
         requested_by=admin.id,
+        client_id=cid,
         client_org_name=client_org,
     )
     data = result.data if isinstance(result.data, dict) else {}
@@ -329,13 +337,24 @@ def export(
     )
     org = None if client.legal_name == "(pending intake)" else client.legal_name
     ctx = risk_exporters.build_context(client_legal_name=org, version=reg.version, entries=entries)
-    base = f"Risk_Register_v{reg.version}"
+    today = utcnow().date()
+
+    def _rr_name(extension: str) -> str:
+        # §15.5: {Company}_Risk_Register{MMDDYY}[_v{n}].ext
+        return deliverable_filename(
+            company=org,
+            service_slug=SERVICE_SLUG_RISK_REGISTER,
+            extension=extension,
+            day=today,
+            version=reg.version,
+        )
+
     xlsx = _write_artifact(
         db,
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.xlsx",
+        filename=_rr_name("xlsx"),
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=risk_exporters.render_xlsx(ctx),
     )
@@ -344,7 +363,7 @@ def export(
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.pdf",
+        filename=_rr_name("pdf"),
         mime_type="application/pdf",
         data=risk_exporters.render_pdf(ctx),
     )
@@ -353,7 +372,7 @@ def export(
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.docx",
+        filename=_rr_name("docx"),
         mime_type=DOCX_MIME,
         data=risk_exporters.render_docx(ctx),
     )

@@ -106,8 +106,10 @@ from app.schemas.csf import (
     ProfileSeedRequest,
 )
 from app.schemas.tech_debt import DeliverableResponse
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
+    SERVICE_SLUG_CSF_PLAYBOOK,
     SERVICE_SLUG_NIST_CSF,
     deliverable_filename,
 )
@@ -1060,6 +1062,7 @@ def run_ai(
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> CsfRunAiResponse:
     """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
     + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
@@ -1095,6 +1098,25 @@ def run_ai(
         return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
 
     before = _snap()
+    # Ground the suggestion in the client's interview answers + evidence flags,
+    # the way ZT's run-ai does (routes/zt.py). Before Sprint 3 T0 the payload
+    # carried only tier/subcategory codes even though the prompt claimed the
+    # answers were supplied. Only answers with actual signal are sent (a scored
+    # tier, notes, or attached evidence) so the model sees what the analyst
+    # captured rather than ~106 empty rows. The payload goes through the
+    # redactor (nested note strings included) as designed.
+    answer_rows = (
+        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
+    )
+    answers = {
+        ans.subcategory_code: {
+            "maturity_tier": ans.maturity_tier,
+            "notes": ans.notes,
+            "has_evidence": ans.evidence_artifact_id is not None,
+        }
+        for ans in answer_rows
+        if ans.maturity_tier is not None or ans.notes or ans.evidence_artifact_id is not None
+    }
     client_org = None if client.legal_name == "(pending intake)" else client.legal_name
     result = run_job(
         db,
@@ -1103,9 +1125,11 @@ def run_ai(
         inputs={
             "tiers": sorted({r.tier for r in rows.values()}),
             "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+            "answers": answers,
         },
         requested_by=user.id,
         service_id=svc.id,
+        client_id=client.id,
         client_org_name=client_org,
     )
     data = result.data if isinstance(result.data, dict) else {}
@@ -1130,6 +1154,18 @@ def run_ai(
     db.flush()
     after = _snap()
     diffs = diff_keyed_rows(before, after, list(_RUN_FIELDS), locked_keys=locked_keys)
+    if not diffs:
+        # FAIL LOUDLY: a run that parsed but changed nothing is the exact
+        # symptom of the T0 schema-drift bug (a compliant response silently
+        # discarded). Surface it — a re-run that suggests identical values also
+        # trips this, which is still worth a "did this do anything?" signal.
+        _log.warning(
+            "csf_run_ai_no_changes",
+            service_id=str(svc.id),
+            assessment_id=str(a.id),
+            suggestions=len(data.get("scores", [])),
+            unlocked_rows=len(rows) - len(locked_keys),
+        )
     changes: list[CsfDimensionChange] = []
     for d in diffs:
         tier, _, code = d.key.partition("|")
@@ -1199,16 +1235,27 @@ def export_playbook(
 
     org = None if client.legal_name == "(pending intake)" else client.legal_name
     name = org or "Client"
-    base = f"CSF_Playbook_v{a.version}"
+    today = utcnow().date()
     on = utcnow().strftime("%Y-%m-%d")
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     pdf_mime = "application/pdf"
+
+    def _pb_name(extension: str, variant: str | None = None) -> str:
+        # §15.5: {Company}_CSF_Playbook{MMDDYY}[_v{n}][_variant].ext
+        return deliverable_filename(
+            company=org,
+            service_slug=SERVICE_SLUG_CSF_PLAYBOOK,
+            extension=extension,
+            day=today,
+            version=a.version,
+            variant=variant,
+        )
 
     specs = [
         (
             "xlsx",
             "Data workbook (XLSX)",
-            f"{base}.xlsx",
+            _pb_name("xlsx"),
             xlsx_mime,
             csf_playbook_export.render_xlsx(
                 client_name=name,
@@ -1220,7 +1267,7 @@ def export_playbook(
         (
             "exec_pdf",
             "Executive briefing (PDF)",
-            f"{base}_Executive.pdf",
+            _pb_name("pdf", "Executive"),
             pdf_mime,
             csf_playbook_export.render_exec_pdf(
                 client_name=name,
@@ -1232,7 +1279,7 @@ def export_playbook(
         (
             "exec_docx",
             "Executive briefing (Word)",
-            f"{base}_Executive.docx",
+            _pb_name("docx", "Executive"),
             DOCX_MIME,
             csf_playbook_export.render_exec_docx(
                 client_name=name,
@@ -1244,7 +1291,7 @@ def export_playbook(
         (
             "full_pdf",
             "Full playbook (PDF)",
-            f"{base}_Full.pdf",
+            _pb_name("pdf", "Full"),
             pdf_mime,
             csf_playbook_export.render_full_pdf(
                 client_name=name,
@@ -1256,7 +1303,7 @@ def export_playbook(
         (
             "full_docx",
             "Full playbook (Word)",
-            f"{base}_Full.docx",
+            _pb_name("docx", "Full"),
             DOCX_MIME,
             csf_playbook_export.render_full_docx(
                 client_name=name,

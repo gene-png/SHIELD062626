@@ -45,6 +45,12 @@ class LLMCall(UUIDPKMixin, TimestampMixin, Base):
     service_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("services.id", ondelete="SET NULL")
     )
+    # Tenant attribution (Sprint 3 T5). Additive + nullable (C0): older rows and
+    # calls made without a client carry NULL. SET NULL so deleting a client does
+    # not erase the egress record — the audit row outlives the tenant.
+    client_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("client.id", ondelete="SET NULL")
+    )
     purpose: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)

@@ -12,7 +12,7 @@ Master Spec §15 Phase 2:
 
 Multi-tenant (post-0013): a CLIENT-role user is bound to their own
 `client_id` at registration. Intake reads/writes that specific Client
-row. Admins/reviewers (platform-wide) can run intake on a chosen client
+row. Admins (platform-wide) can run intake on a chosen client
 by passing X-Client-Id (the current_client dependency enforces this).
 """
 

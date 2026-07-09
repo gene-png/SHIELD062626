@@ -3,9 +3,9 @@
 Originally Master Spec §11 was single-tenant (one client row per deployment).
 Migration 0013 turned this into a multi-tenant model: many clients per
 deployment, every business row tagged with its `client_id`. Platform
-admin/reviewer users have `User.client_id = NULL` and can switch between
-clients via the X-Client-Id request header; client-role users are pinned
-to their `User.client_id`.
+admin users have `User.client_id = NULL` and can switch between clients
+via the X-Client-Id request header; client-role users are pinned to
+their `User.client_id`.
 """
 
 from __future__ import annotations

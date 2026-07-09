@@ -2,12 +2,75 @@
 
 All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the phase template in AI Prompt §9.
 
-## [3.0.1] — Sprint 2 · findings burn-down — 2026-07-07
+> **Version renumber (Sprint 3 docs truth pass):** two releases were both
+> headed `[3.0.0]`. The v2 work order (PR #1) keeps `[3.0.0]`; Sprint 1
+> (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
+> `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
+
+## [3.0.3] — Sprint 3 · audit correctness & honesty — 2026-07-09
+
+Branch `fix/audit-correctness-sprint-3`. Eight tasks (T0–T7) burning down the
+correctness, security, and truth-in-docs findings from the 2026-07-08 deep repo
+audit (`docs/audits/2026-07-08-repo-audit.md`). All exit gates green: the full
+Playwright suite (16 files / 34 tests), `pytest -m unit`, web `tsc --noEmit`,
+and the newly-mandatory repo-wide prettier `--check` (lockfile-pinned 3.9.4).
+
+- **CSF live-mode Run-AI fixed (T0, `03175f8`):** `_CSF_SCORE_PROMPT` asked the
+  model for a `{subcategories:[…]}` shape the route never parsed (it reads
+  `scores[]` keyed on tier + subcategory_code) — live mode silently discarded a
+  compliant response. Aligned the prompt to the parser's shape and grounded the
+  payload in the assessment's interview answers/evidence (mirroring ZT), with a
+  loud warning when a Run-AI parses to zero changes. Fixture determinism (D-017)
+  untouched; a contract test locks the schema.
+- **Draft-exists guard ported to ATT&CK + ZT (T1, `4056170`):** the attack mint
+  (~600 coverage rows/version) and zt mint (~87 rows) shared CSF's old
+  unbounded-version bug. Both now return the open DRAFT idempotently (HTTP 200)
+  and only cut v+1 after the prior draft closes; tech_debt has no equivalent
+  mint. Two new contract tests; s5/s6/s11 close-then-mint for a fresh grid.
+- **Auth compensating controls made honest (T2, `bc491b9`):** README/BUILD_REPORT
+  claimed daily forced re-auth + 30-min idle timeout that nothing enforced. Now
+  real: an `auth_time` claim rides refreshes and `/auth/refresh` returns a typed
+  401 `reauth_required` past `SHIELD_FORCED_REAUTH_SECONDS` (24h default);
+  refresh-token rotation via `users.active_refresh_jti` (migration 0026, C0) so a
+  replayed refresh token is rejected (`refresh_reused`); dead `require_mfa` /
+  `require_email_verify` flags now refuse boot instead of silently no-op'ing; web
+  shows a friendly session-expired banner. See DECISIONS **D-020**.
+- **Rate limiting on auth + run-AI (T3, `b48a39f`):** new `app/security/rate_limit.py`
+  — fixed-window Redis counters, per-IP + per-account on login/register (checked
+  before Argon2), per-client on the five run-AI endpoints. Over-limit → typed 429
+  `rate_limited` (D-016) + `Retry-After`; a Redis outage fails **open** with a
+  loud structlog warning (unit-tested). Redis finally earns its keep. Defaults
+  are generous so the serialized e2e suite never trips.
+- **Spec §15.5 export filenames (T4, `b14ccd5`):** the CSF Playbook 5-file export
+  and Risk Register export bypassed `deliverable_filename()`. Both now route
+  through it — e.g. `Atlas_Defense_Solutions_CSF_Playbook070926_v8_Executive.pdf`
+  — carrying Company + Service + `MMDDYY` + version (v1 carries no suffix).
+- **`llm_calls` tenant attribution (T5, `cea0c5a`):** added nullable
+  `llm_calls.client_id` (migration 0027, batch_alter_table + FK, C0) threaded
+  through all five call sites so the largest cross-assessment egress (risk
+  synthesis) is finally attributable to a tenant.
+- **Docs truth pass (T6, `aeac503`):** `docs/architecture.md` rewritten to the
+  real system (multi-tenant, no Celery/worker — AI runs synchronously in `api`,
+  Redis = rate limiting, two-layer append-only `audit_entries`, one-way redactor
+  with no unredact). README phantom runbooks/terraform marked planned-not-present;
+  real test matrix. DECISIONS append-only fixes: the duplicate `[3.0.0]` /
+  duplicate D-015 heading resolved (Part F → **D-021**, erratum **D-022**),
+  D-005/D-006 reviewer-role + release-flow supersession recorded (**D-023**).
+  Zero `reviewer` hits remain in `apps/api/app` docstrings/OpenAPI summaries.
+  ops/development docs de-fictionalized.
+- **Loop hygiene + wrap-up (T7, this entry):** host prettier `format:check` gate
+  documented in CLAUDE.md (the Sprint 2 loop shipped unformatted files CI caught);
+  SMOKE_TEST §14 flagged as now-meaningful post-T0 but left unchecked (needs
+  David's live key) and §10 artifact names synced to the §15.5 convention;
+  CONTEXT.md end-of-sprint snapshot.
+
+## [3.0.2] — Sprint 2 · findings burn-down — 2026-07-07
 
 Branch `fix/findings-burndown-sprint-2`. Ten tasks (T0–T9) burning down the
 defect + coverage backlog Sprint 1 surfaced, plus this docs refresh (T10). All
-exit gates green: the full 16-file / 32-test Playwright suite, `pytest -m unit`,
-and web `tsc --noEmit`.
+exit gates green: the full 16-file Playwright suite (34 tests — recorded as 32
+at the time, corrected in the Sprint 3 audit), `pytest -m unit`, and web
+`tsc --noEmit`.
 
 - **Dependency bump (T0, `f580a3b`):** `next` → latest 14.2.x patch (14.2.35;
   stayed on the 14 App-Router line, no 15.x jump). `pnpm audit` clean of
@@ -60,7 +123,7 @@ and web `tsc --noEmit`.
   D-number collision with the unmerged `chore/dependabot-policy` branch (which
   owns D-018 for its majors-suppressed policy).
 
-## [3.0.0] — Sprint 1 · smoke sweep — 2026-07-06
+## [3.0.1] — Sprint 1 · smoke sweep — 2026-07-06
 
 Branch `qa/smoke-sweep-sprint-1` (PR #16). A green Playwright smoke suite now
 backs `SMOKE_TEST.md`, plus the runtime defects the sweep surfaced and fixed.
@@ -85,7 +148,8 @@ the single redacting egress client, and the deterministic engines (CSF Playbook
 `app/csf/playbook.py`, Risk Register `app/risk/engine.py`, ZT scoring
 `app/zt/scoring.py`) — "AI suggests, code computes." Part F added the hardening
 pass (synchronous AI runs, dependency audits + Dependabot, cross-tenant
-isolation tests, production Dockerfiles). See DECISIONS.md D-015 (Part F) and
+isolation tests, production Dockerfiles). See DECISIONS.md D-021 (Part F;
+renumbered from a duplicate D-015 heading, erratum D-022) and
 the granular history below.
 
 ## Earlier build history — v0.x foundation → v2 work order

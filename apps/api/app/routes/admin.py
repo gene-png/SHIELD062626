@@ -5,8 +5,9 @@ Master Spec §15 Phase 2 acceptance:
     new-lead timestamp."
   - "All intake data round-trips correctly: client enters X, admin reads X."
 
-Phase 2 ships the read-only queue view. Phase 3+ adds the workflow surfaces
-(attach reviewer, mark final, release deliverable) on top of this.
+Phase 2 ships the read-only intake queue plus client-tenant management
+(create client, approve/remove email domains); later assessment workflow
+surfaces build on this.
 """
 
 from __future__ import annotations
@@ -141,7 +142,7 @@ def intake_queue(
 @router.get(
     "/clients",
     response_model=AdminClientListResponse,
-    summary="List all clients (admin/reviewer)",
+    summary="List all clients (admin)",
 )
 def list_clients(
     _admin: Annotated[User, _admin_required],
@@ -194,7 +195,7 @@ def create_client(
 @router.get(
     "/clients/{cid}",
     response_model=AdminClientSummary,
-    summary="Client detail (admin/reviewer)",
+    summary="Client detail (admin)",
 )
 def get_client(
     cid: uuid.UUID,

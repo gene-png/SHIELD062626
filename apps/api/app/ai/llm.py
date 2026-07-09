@@ -190,6 +190,7 @@ class LLMClient:
         payload: dict[str, Any],
         requested_by: uuid.UUID,
         service_id: uuid.UUID | None = None,
+        client_id: uuid.UUID | None = None,
         prompt_version: str = "v1",
         redaction_mode: RedactionMode | None = None,
         client_org_name: str | None = None,
@@ -210,6 +211,7 @@ class LLMClient:
 
         row = LLMCall(
             service_id=service_id,
+            client_id=client_id,
             purpose=purpose,
             prompt_version=prompt_version,
             provider=self.provider.name,

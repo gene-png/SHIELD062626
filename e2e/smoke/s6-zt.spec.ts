@@ -31,6 +31,21 @@ async function openFreshDraft(page: Page): Promise<void> {
     }),
   ).toBeVisible({ timeout: 30000 });
 
+  // Close any open draft first, then mint. SPRINT_3 T1 added a draft-exists
+  // guard: POST now REUSES an open draft instead of minting a new version, so a
+  // plain POST would hand back a previous run's already-AI-drafted draft and
+  // Run AI would diff to zero changes (the changed>0 assertion below needs a
+  // clean grid). Approving moves any open DRAFT out of DRAFT (ignored when
+  // nothing is open), so the following POST cuts a genuinely fresh v+1.
+  const prior = await page.request.get(
+    `/api/proxy/zt/services/${ztDodServiceId}/assessments/latest`,
+  );
+  if (prior.ok()) {
+    const p = (await prior.json()) as { id: string; status: string };
+    if (p.status === "draft") {
+      await page.request.post(`/api/proxy/zt/assessments/${p.id}/approve`);
+    }
+  }
   const created = await page.request.post(
     `/api/proxy/zt/services/${ztDodServiceId}/assessments`,
   );

@@ -163,6 +163,7 @@ def extract_capabilities(
     artifact: Artifact,
     requested_by: User,
     service_id: uuid.UUID,
+    client_id: uuid.UUID,
     client_org_name: str | None,
     name_hints: Iterable[str] = (),
     llm: LLMClient,
@@ -190,6 +191,7 @@ def extract_capabilities(
         inputs=payload,
         requested_by=requested_by.id,
         service_id=service_id,
+        client_id=client_id,
         client_org_name=client_org_name,
         name_hints=tuple(name_hints),
     )

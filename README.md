@@ -1,6 +1,6 @@
 # SHIELD by Kentro v2.0
 
-Enterprise cybersecurity assessment platform. Single-tenant per deployment, FedRAMP Moderate/High target, four-service engagement workflow:
+Enterprise cybersecurity assessment platform. Multi-tenant — one deployment serves many client organizations, every business row carries a `client_id` (DECISIONS.md D-015). FedRAMP Moderate/High target. Four assessment services plus a Risk Register (5x5, NIST 800-30) synthesized from them:
 
 1. **Technical Debt Review** — capability inventory, overlap analysis, consolidation plan.
 2. **Zero Trust Assessment** — CISA ZTMM 2.0 and DoD ZTRA, scored per pillar with current/target maturity.
@@ -27,9 +27,9 @@ packages/
   zt-data/          CISA + DoD questionnaire seed JSON
 infra/
   docker/           Runtime Dockerfiles (least-privilege, no sudo)
-  terraform/        IaC for AWS GovCloud / Azure Government
+  terraform/        Placeholder only (empty) - IaC is planned, not present
   keycloak/         Realm export imported on container start
-docs/               Architecture, security, data model, runbooks, guides
+docs/               Architecture, security, operations, development, guides
 scripts/            Seed loaders + dev helpers
 reference-docs/     Locked SHIELD v2 reference documents (spec, mockup, questionnaires)
 e2e/                Playwright end-to-end tests
@@ -90,7 +90,7 @@ Every variable in [`.env.example`](.env.example) is required. Summary:
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Runtime        | `ENVIRONMENT`, `LOG_LEVEL`                                                                                                                     |                                               |
 | Database       | `DATABASE_URL`                                                                                                                                 | Postgres 16, locked in Master Spec §2         |
-| Redis          | `REDIS_URL`                                                                                                                                    | Celery queue + ephemeral cache                |
+| Redis          | `REDIS_URL`                                                                                                                                    | Rate limiting (auth + run-AI); no queue       |
 | Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID`                                                              | MinIO in dev, S3+KMS in prod                  |
 | OIDC           | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`                                      |                                               |
 | NextAuth       | `NEXTAUTH_URL`, `NEXTAUTH_SECRET`                                                                                                              | Generate secret with `openssl rand -hex 32`   |
@@ -102,39 +102,49 @@ Every variable in [`.env.example`](.env.example) is required. Summary:
 
 ## Running tests
 
+The real test matrix (all of it runs in CI):
+
 ```bash
-# API unit tests
-docker compose exec api pytest -m unit
+# API unit tests (SQLite in-process; the whole backend suite)
+docker compose exec -T api pytest -m unit -q
 
-# API integration tests
-docker compose exec api pytest -m integration
+# Web typecheck
+docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
 
-# Web tests
-docker compose exec web pnpm test
+# Formatting (lockfile-pinned prettier; CI enforces it)
+npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
 
 # End-to-end (Playwright) - host-run against the running stack on :3000.
-# The e2e/ harness holds the sprint-1 smoke suite (14 spec files under
-# e2e/smoke/). Chromium only; needs the stack up and the demo seed loaded.
+# 16 spec files / 34 tests under e2e/smoke/. Chromium only, serialized;
+# needs the stack up and the demo seed loaded (scripts/seed_demo.py).
 cd e2e && npm install && npx playwright test          # whole suite
 cd e2e && npx playwright test smoke/s15-headers.spec.ts   # one spec
 ```
+
+There is no separate web unit-test runner (`pnpm test` does not exist) and no
+`pytest -m integration` suite — the marker is declared but unused; Playwright
+covers the integrated stack end-to-end.
 
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) - system architecture
 - [`docs/security.md`](docs/security.md) - OWASP review, redaction, audit
 - [`docs/development.md`](docs/development.md) - developer onboarding
-- [`docs/operations.md`](docs/operations.md) - deployment, monitoring, backup, key rotation
+- [`docs/operations.md`](docs/operations.md) - what runs today + planned production posture
 - [`docs/admin-guide.md`](docs/admin-guide.md) - Kentro consultant guide (filled across phases)
 - [`docs/client-guide.md`](docs/client-guide.md) - client-facing guide (filled across phases)
-- [`docs/runbooks/`](docs/runbooks/) - incident, backup, key rotation, DR
+
+Runbooks (incident, backup, key rotation, DR) are **planned, not written** —
+`docs/runbooks/` is currently empty. Terraform IaC is likewise planned
+(`infra/terraform/` is an empty placeholder); cloud/account/region decisions
+are pending.
 
 ## Risk acceptance log
 
 Per Master Spec §2, two risks are explicitly accepted for v1:
 
 1. **Commercial LLM provider may not be FedRAMP-authorized.** Egress may leave the FedRAMP boundary. Mandatory PII redaction (`apps/api/app/ai/redact.py`) is the primary control. See [`docs/security.md`](docs/security.md).
-2. **MFA and email verification deferred for v1.** Compensating controls: 15-minute JWT lifetime, 30-minute idle timeout, daily forced re-auth, account lockout after 10 failed attempts in 15 minutes. Feature flags (`SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`) enable both in v1.x with no code changes.
+2. **MFA and email verification deferred for v1.** Compensating controls that are actually enforced: 15-minute access-token lifetime; a 30-minute refresh-token TTL that functions as the idle timeout (an idle session cannot refresh past it); a daily (24h) forced re-auth ceiling enforced at `/auth/refresh` via an `auth_time` claim (typed 401 `reason=reauth_required`, tunable with `SHIELD_FORCED_REAUTH_SECONDS`); single-use refresh-token rotation (a replayed/rotated-out refresh token is rejected, `reason=refresh_reused`); and account lockout after 10 failed attempts in 15 minutes. The MFA and email-verification **flows do not exist yet** — the `SHIELD_AUTH_REQUIRE_MFA` / `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` flags therefore **fail loudly at startup** if set true (the app refuses to boot rather than silently pretend a control is active); wiring the flows up is planned for a later sprint.
 
 ## License
 

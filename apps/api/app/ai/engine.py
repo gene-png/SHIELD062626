@@ -88,6 +88,7 @@ def run_job(
     inputs: dict[str, Any],
     requested_by: uuid.UUID,
     service_id: uuid.UUID | None = None,
+    client_id: uuid.UUID | None = None,
     client_org_name: str | None = None,
     name_hints: Iterable[str] = (),
 ) -> JobResult:
@@ -100,6 +101,7 @@ def run_job(
         payload=inputs,
         requested_by=requested_by,
         service_id=service_id,
+        client_id=client_id,
         prompt_version=job.prompt_version,
         client_org_name=client_org_name,
         name_hints=tuple(name_hints),

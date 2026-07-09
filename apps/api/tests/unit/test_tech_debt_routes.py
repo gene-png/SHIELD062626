@@ -19,6 +19,7 @@ from alembic.config import Config
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
 from app.models.capability import CapabilityList
 from app.models.llm_call import LLMCall
+from app.models.service import Service
 from app.storage.local import LocalFilesystemStorage
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -224,6 +225,10 @@ def test_extract_runs_redacted_call_and_writes_capability_list(app_client) -> No
         assert call.redacted_counts["email"] == 2
         cap_list = db.execute(select(CapabilityList)).scalar_one()
         assert cap_list.service_id == _uuid.UUID(svc_id)
+        # T5: the extract call site (which does NOT go through run_job) still
+        # attributes the egress row to the owning tenant.
+        svc = db.execute(select(Service).where(Service.id == _uuid.UUID(svc_id))).scalar_one()
+        assert call.client_id == svc.client_id
         assert cap_list.version == 1
 
 

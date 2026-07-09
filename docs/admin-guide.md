@@ -1,21 +1,23 @@
 # Admin guide (Kentro consultant)
 
-> Filled in across phases. This file lands its first real content during Phase 2 (admin queue) and grows phase-by-phase. Current state: placeholder.
+> Skeleton — the full consultant guide is still to be written. What follows
+> matches the current product; there is no reviewer role and no
+> release-to-client gate (DECISIONS D-023).
 
 ## What an admin does
 
-The Admin (Kentro consultant) operates SHIELD on behalf of a client engagement:
+The Admin (Kentro consultant) is platform-wide and works across client
+tenants (picking the active client via the top-nav switcher):
 
-- Verifies the first registrant on a fresh deployment and attaches them as the client's Primary POC.
-- Receives notifications on new intake submissions.
-- Runs the four services (Tech Debt, ZT, CSF, ATT&CK) through their respective workspaces.
-- Approves deliverables for release; releases them to the client.
-- Attaches a reviewer (optional) when an external audit walk is required.
+- Creates client tenants and approves their email domains at
+  `/admin/management`; verifies the first registrant as the client's Primary
+  POC.
+- Watches the intake queue (`/admin/queue`) for new submissions.
+- Runs the four services (Tech Debt, ZT, CSF, ATT&CK) and the Risk Register
+  through their workspaces: uploads inventories, runs AI drafts, curates the
+  results (the deterministic engines compute all scores), and generates the
+  versioned deliverables.
+- Downloads deliverables (spec §15.5 filenames) to hand off to the client.
 
-## Pending phases
-
-- **Phase 2 (Intake):** admin queue, new-lead timestamp, intake reflection.
-- **Phase 3 (Tech Debt):** capability list workflow, overlap dashboard, consolidation plan.
-- **Phase 4 (CSF):** 10-step Playbook, tiered profiles, Enterprise Profile assembly.
-- **Phase 5 (ZT + ATT&CK):** ZT pillar scoring, ATT&CK Coverage workspace.
-- **Phase 6 (Polish):** admin docs completion, runbook references.
+A deliberate client-facing release step may return as a Sprint 5 feature; it
+does not exist today.

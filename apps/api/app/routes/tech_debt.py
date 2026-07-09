@@ -45,6 +45,7 @@ from app.schemas.tech_debt import (
     ServiceResponse,
     TopCostItemResponse,
 )
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.exporters import build_context, render_docx, render_pdf, render_xlsx
 from app.tech_debt.extract import (
@@ -153,6 +154,7 @@ def extract_capability_list(
     db: Annotated[Session, Depends(get_db)],
     storage: Annotated[StorageBackend, Depends(_storage_dep)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> CapabilityListResponse:
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.TECH_DEBT)
     artifact = require_artifact_in_tenant(db, body.artifact_id, client.id)
@@ -169,6 +171,7 @@ def extract_capability_list(
             artifact=artifact,
             requested_by=user,
             service_id=svc.id,
+            client_id=client.id,
             client_org_name=client_org_name_for_tenant(db, client.id),
             name_hints=name_hints_for_tenant(db, client.id),
             llm=llm,

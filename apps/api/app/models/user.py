@@ -1,10 +1,11 @@
 """User model.
 
 Two roles: admin (Kentro consultant, cross-client) and client (external
-company user, tied to one client by email domain). The earlier read-only
-reviewer role was collapsed into admin (Work Order A3): multiple admins
-all see and do the work, no separate reviewer gate. MFA enrollment column
-is present in v1 but the flag default-false until SHIELD_AUTH_REQUIRE_MFA
+company user, tied to one client by email domain). An earlier read-only
+second-consultant role was folded into admin (Work Order A3; see the
+DECISIONS.md D-005/D-006 supersession erratum): multiple admins all see
+and do the work, no separate approval gate. MFA enrollment column is
+present in v1 but the flag default-false until SHIELD_AUTH_REQUIRE_MFA
 flips on (spec §2 locked decisions).
 """
 
@@ -56,3 +57,10 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
     last_failed_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_until_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Refresh-token rotation (Sprint 3 T2): the jti of the single currently
+    # valid refresh token. Each /auth/refresh mints a new refresh token and
+    # overwrites this, so a replayed (already-rotated) refresh token no longer
+    # matches and is rejected. Nullable/additive (C0): pre-migration rows and
+    # any user who has not yet logged in simply have no active refresh token.
+    active_refresh_jti: Mapped[str | None] = mapped_column(String(36))

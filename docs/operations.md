@@ -1,58 +1,55 @@
 # Operations
 
-> Stub - populated during Phase 6 (Polish and harden). The contents below are the planned shape, not implemented detail.
+> Honest split: **"Running today"** is what actually exists (the Docker
+> Compose dev/demo stack). **"Planned production posture"** is direction, not
+> implemented detail — nothing in that section exists in this repo yet.
 
-## Deployment targets
+## Running today (dev/demo stack)
 
-- **AWS GovCloud** — Terraform plan under `infra/terraform/aws-govcloud/`.
-- **Azure Government** — Terraform plan under `infra/terraform/azure-gov/`.
-- No third-party CDNs. All assets served from the deployment's own origin.
+`docker-compose.yml` at the repo root runs the whole platform:
 
-## Runtime components
+| Service                 | Image / build                 | Notes                                                                                                                                    |
+| ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| db                      | postgres:16                   | Alembic migrations at `api` start                                                                                                        |
+| redis                   | redis:7                       | **Rate limiting only** (auth + run-AI, `app/security/rate_limit.py`); fails open with a loud warning on outage. No queue, no Celery      |
+| minio (+ createbuckets) | minio                         | S3-compatible artifact/deliverable storage; console `:9001`                                                                              |
+| keycloak                | keycloak 25                   | Realm imported from `infra/keycloak/`; scaffolding for future OIDC — the active login path is SHIELD-issued JWT via NextAuth Credentials |
+| mailhog                 | mailhog                       | SMTP capture UI `:8025`                                                                                                                  |
+| api                     | `apps/api` (uvicorn --reload) | FastAPI; **AI jobs run synchronously in-process** — there is no worker service                                                           |
+| web                     | `apps/web` (next dev)         | `:3000` (override with `WEB_PORT` in the root `.env`)                                                                                    |
 
-| Component      | Image                                                         | Notes                                                                       |
-| -------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| api            | `infra/docker/api.Dockerfile` (least-privilege user, no sudo) | uvicorn + workers per `WEB_CONCURRENCY`                                     |
-| worker         | same image as `api`, different entry                          | Celery worker                                                               |
-| web            | `infra/docker/web.Dockerfile`                                 | Next.js standalone output                                                   |
-| db             | managed Postgres 16 (RDS / Azure Database for Postgres)       | KMS-encrypted at rest; PITR enabled                                         |
-| redis          | managed Redis 7 (ElastiCache / Azure Cache)                   | Multi-AZ                                                                    |
-| object storage | S3 + KMS or Azure Blob + KMS                                  | Versioning ON; bucket-level encryption; deny anonymous; tight bucket policy |
-| OIDC           | Keycloak (self-hosted) or federated to customer IdP           | Realm export checked into `infra/keycloak/`                                 |
-| secrets        | AWS Secrets Manager or Azure Key Vault                        | Bootstrapped via Terraform; rotated quarterly                               |
+- Seed the demo data: `docker compose exec -T api python scripts/seed_demo.py`
+  (idempotent).
+- LLM defaults to `SHIELD_LLM_MODE=fixture` — deterministic offline responses
+  for all five AI purposes (DECISIONS D-017); live mode needs
+  `ANTHROPIC_API_KEY`.
+- Logs: structured JSON (structlog) to stdout with request correlation IDs —
+  `docker compose logs -f api`. There is no metrics/Prometheus endpoint.
+- Production-shaped Dockerfiles exist (`apps/api/Dockerfile`, least-privilege
+  user; `apps/web/Dockerfile`, Next standalone output) but no deployment
+  automation consumes them yet.
 
-## Backups
+## Backup / restore today
 
-- Postgres: managed point-in-time recovery + nightly snapshot to a separate region.
-- Object storage: versioning + cross-region replication on the artifacts bucket.
-- Keycloak realm: weekly export to the artifacts bucket.
+Dev data lives in named Docker volumes (`postgres-data`, `minio-data`, …).
+There is no automated backup. `docker compose down -v` destroys everything;
+re-run migrations + seed to rebuild the demo.
 
-## Key rotation
+## Planned production posture (not implemented)
 
-- KMS keys rotated annually (automatic on AWS).
-- Database credentials rotated quarterly (Secrets Manager rotation lambda).
-- API JWT signing key rotated every 90 days; old keys kept hot for the JWT TTL window then archived.
+None of the following exists in this repo today — `infra/terraform/` is an
+empty placeholder and `docs/runbooks/` is empty. Decisions on cloud, account,
+region, and network are pending (needs-David; see `DELIVERY_PLAN.md`).
 
-## Monitoring + alerting
+- Terraform IaC for AWS GovCloud and/or Azure Government.
+- Managed Postgres (PITR + snapshots), managed Redis, S3/Blob + KMS with
+  versioning and tight bucket policy.
+- Secrets manager with rotation; JWT signing-key rotation.
+- Log aggregation (CloudWatch / Log Analytics) and alerting; a metrics
+  exposition endpoint would have to be added to the API first.
+- Runbooks: incident response, backup/restore, key rotation, DR,
+  redactor-failure.
+- FedRAMP package artifacts (SSP / SAR / POA&M).
 
-- Structured JSON logs to CloudWatch / Log Analytics.
-- Metrics: Prometheus exposition from `api`, `worker`, `web`.
-- Alerts: latency p95 > 1s; 5xx rate > 1%; queue depth > 1000; redactor failure (page immediately).
-
-## Incident response
-
-Runbook templates under `docs/runbooks/`:
-
-- `incident-response.md`
-- `backup-restore.md`
-- `key-rotation.md`
-- `disaster-recovery.md`
-- `redactor-failure.md`
-
-Each runbook lists: signal → triage steps → mitigation → post-incident actions.
-
-## FedRAMP package
-
-- SSP (System Security Plan) draft under `docs/fedramp/ssp.md` (Phase 6).
-- SAR (Security Assessment Report) template under `docs/fedramp/sar.md` (Phase 6).
-- POA&M (Plan of Action & Milestones) tracker under `docs/fedramp/poam.md` (Phase 6).
+When any of these land, move them up into "Running today" with the command or
+path that proves them.

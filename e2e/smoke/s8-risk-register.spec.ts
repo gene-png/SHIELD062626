@@ -269,6 +269,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
     filename: string | null;
     contentType: string;
     label: string;
+    ext: string;
   }> = [
     {
       id: withArtifacts.xlsx_artifact_id,
@@ -276,12 +277,14 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       contentType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       label: "XLSX",
+      ext: "xlsx",
     },
     {
       id: withArtifacts.pdf_artifact_id,
       filename: withArtifacts.pdf_filename,
       contentType: "application/pdf",
       label: "PDF",
+      ext: "pdf",
     },
     {
       id: withArtifacts.docx_artifact_id,
@@ -289,6 +292,7 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
       contentType:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       label: "Word",
+      ext: "docx",
     },
   ];
 
@@ -296,6 +300,12 @@ test("Generate derives tiers in code, renders KPIs + 5x5 heatmap, cites only the
   for (const dl of downloads) {
     expect(dl.id, `${dl.label} artifact id`).toBeTruthy();
     expect(dl.filename, `${dl.label} filename`).toBeTruthy();
+    // Master Spec §15.5: {Company}_Risk_Register{MMDDYY}[_v{n}].{ext}
+    // (T4 routed the export through deliverable_filename() — no more raw
+    // Risk_Register_v{n}).
+    expect(dl.filename, `${dl.label} §15.5 name`).toMatch(
+      new RegExp(`^[A-Za-z0-9_]+_Risk_Register\\d{6}(_v\\d+)?\\.${dl.ext}$`),
+    );
     // The dashboard renders the download link (accessible name includes the
     // filename, so match on the label prefix).
     await expect(

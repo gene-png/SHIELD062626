@@ -9,9 +9,11 @@ Claims:
   aud: KEYCLOAK_AUDIENCE (default "shield-api") - keeps shape stable when
        v1.x federates auth through Keycloak; the same `aud` already matches.
   sub: user id (UUID, string form)
-  role: UserRole enum value ("admin"/"reviewer"/"client")
+  role: UserRole enum value ("admin"/"client")
   typ: "access" | "refresh"
-  jti: UUID per token, so a future allowlist/denylist has a stable key
+  jti: UUID per token; the refresh jti is the rotation key (see routes/auth.py)
+  auth_time: original login time (epoch s); rides forward across refreshes so
+       the forced-reauth ceiling anchors to the login, not the last refresh
   iat, nbf, exp: standard
 """
 
@@ -42,6 +44,11 @@ class TokenPayload:
     typ: TokenType
     jti: uuid.UUID
     exp: datetime
+    # Original login time (Sprint 3 T2). Rides forward unchanged across
+    # refreshes so /auth/refresh can enforce the daily forced-reauth ceiling
+    # against the original login, not the last refresh. Optional so tokens
+    # minted before this claim existed still parse (C0).
+    auth_time: datetime | None = None
 
 
 def _ttl_for(typ: TokenType) -> timedelta:
@@ -60,13 +67,20 @@ def issue_token(
     subject: uuid.UUID,
     role: str,
     typ: TokenType = "access",
+    auth_time: datetime | None = None,
     additional_claims: dict | None = None,
 ) -> tuple[str, TokenPayload]:
-    """Sign and return a token plus its decoded payload."""
+    """Sign and return a token plus its decoded payload.
+
+    `auth_time` is the original login time. Pass it forward on refresh so the
+    forced-reauth ceiling anchors to the original login; omit it on a fresh
+    login/register and it defaults to now.
+    """
     settings = get_settings()
     now = _now()
     exp = now + _ttl_for(typ)
     jti = uuid.uuid4()
+    effective_auth_time = auth_time or now
 
     claims: dict = {
         "iss": ISSUER,
@@ -78,12 +92,15 @@ def issue_token(
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
         "exp": int(exp.timestamp()),
+        "auth_time": int(effective_auth_time.timestamp()),
     }
     if additional_claims:
         claims.update(additional_claims)
 
     token = jwt.encode(claims, settings.jwt_signing_secret, algorithm=ALGORITHM)
-    payload = TokenPayload(sub=subject, role=role, typ=typ, jti=jti, exp=exp)
+    payload = TokenPayload(
+        sub=subject, role=role, typ=typ, jti=jti, exp=exp, auth_time=effective_auth_time
+    )
     return token, payload
 
 
@@ -118,10 +135,16 @@ def verify_token(token: str, *, expected_type: TokenType | None = None) -> Token
     except (KeyError, ValueError) as exc:
         raise TokenError(f"Malformed token claims: {exc}") from exc
 
+    raw_auth_time = claims.get("auth_time")
+    auth_time = (
+        datetime.fromtimestamp(int(raw_auth_time), UTC) if raw_auth_time is not None else None
+    )
+
     return TokenPayload(
         sub=sub,
         role=str(claims["role"]),
         typ=typ,  # type: ignore[arg-type]
         jti=jti,
         exp=datetime.fromtimestamp(int(claims["exp"]), UTC),
+        auth_time=auth_time,
     )

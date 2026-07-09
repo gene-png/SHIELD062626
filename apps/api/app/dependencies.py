@@ -6,7 +6,7 @@ need the role take `require_role` instead (Phase 1 stage 7).
 
 `current_client` resolves the active tenant for the request:
   - Client-role user: pinned to user.client_id (request can't escape it).
-  - Admin/reviewer (User.client_id IS NULL): must send X-Client-Id header
+  - Platform admin (User.client_id IS NULL): must send X-Client-Id header
     naming an existing client. Cross-tenant admin routes that operate on
     all clients (e.g. GET /admin/clients) should not take this dependency.
 """
@@ -94,7 +94,7 @@ def current_client(
     """Resolve the active tenant for this request.
 
     Client-role users are pinned to their own client_id. Platform-level
-    users (admin/reviewer with client_id IS NULL) must send X-Client-Id
+    users (platform admin with client_id IS NULL) must send X-Client-Id
     to choose which client they're operating on. The header value must
     reference an existing client.
     """
@@ -112,7 +112,7 @@ def current_client(
             )
         return client
 
-    # Platform admin/reviewer: client_id is typically NULL; they pick the
+    # Platform admin: client_id is typically NULL; they pick the
     # active tenant via X-Client-Id. If user.client_id is set (legacy data),
     # the header still wins so a platform admin can switch contexts.
     header_val = request.headers.get("X-Client-Id")

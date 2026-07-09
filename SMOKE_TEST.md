@@ -88,11 +88,14 @@ documents, live AI). Work top-to-bottom in one sitting.
 
 The part only a human can do — confirm the documents actually _look_ right.
 
-> **Ready for review:** the sprint-1 sweep saved 8 generated artifacts to
-> `e2e/artifacts/` (gitignored) — `CSF_Playbook_v8.xlsx`,
-> `CSF_Playbook_v8_Executive.pdf/.docx`, `CSF_Playbook_v8_Full.pdf/.docx`, and
-> `Risk_Register_v5.xlsx/.pdf/.docx`. Each was asserted HTTP 200 with the correct
-> content-type; the visual eyeball below still needs David.
+> **Ready for review:** s7/s8 save 8 generated artifacts to `e2e/artifacts/`
+> (gitignored). As of Sprint 3 T4 every download name follows Master Spec §15.5
+> — `{Company}_{Service}{MMDDYY}(_v{n})?(_{variant})?.{ext}` — so the files now
+> land as e.g. `Atlas_Defense_Solutions_CSF_Playbook070926_v18.xlsx`,
+> `…_v18_Executive.pdf/.docx`, `…_v18_Full.pdf/.docx`, and
+> `Atlas_Defense_Solutions_Risk_Register070926_v20.xlsx/.pdf/.docx` (date +
+> version vary per run; v1 carries no `_v{n}` suffix). Each was asserted HTTP 200
+> with the correct content-type; the visual eyeball below still needs David.
 
 - [ ] **CSF executive briefing** PDF: cover, exec summary, scorecard with **colored maturity cells**, top gaps, next steps — spacing / page-breaks look right.
 - [ ] **CSF full playbook** PDF: contents, methodology, per-function tables, appendix; colors render.
@@ -131,8 +134,16 @@ The part only a human can do — confirm the documents actually _look_ right.
 
 ## 14. Live AI (optional but recommended)
 
+> **Now meaningful (Sprint 3 T0):** before T0, a live `csf_score` run silently
+> discarded its response — the prompt asked for a `{subcategories:[…]}` shape the
+> parser never read. T0 aligned the prompt/parser schema and grounded the payload
+> in the interview answers, so a live run now actually applies suggestions. This
+> is the run that proves it. Left **unchecked on purpose**: it needs David's
+> machine with a real `ANTHROPIC_API_KEY` — no committed spec can prove it, and
+> the fixture-mode suite (D-017) does not exercise the live provider path.
+
 - [ ] Set `ANTHROPIC_API_KEY` (and `SHIELD_LLM_MODE=live`) in `.env`; restart `api`.
-- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry; no PII in the log.
+- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 
 ## 15. Security headers
 

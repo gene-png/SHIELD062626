@@ -42,11 +42,15 @@ def deliverable_filename(
     extension: str,
     day: _date,
     version: int = 1,
+    variant: str | None = None,
     working: bool = False,
 ) -> str:
     """Build the deliverable filename per §15.5.
 
     `version` > 1 appends `_v{n}` after the date.
+    `variant` (e.g. "Executive", "Full") appends `_{variant}` AFTER the version
+    suffix — for export sets that ship several sub-documents under one service
+    (the CSF Playbook's Executive/Full briefings). Slugified like the rest.
     `working=True` prefixes WORKING_ for admin-only intermediates.
     """
     company_slug = slugify(company)
@@ -55,6 +59,8 @@ def deliverable_filename(
     head = f"{company_slug}_{svc}{mmddyy(day)}"
     if version > 1:
         head = f"{head}_v{version}"
+    if variant:
+        head = f"{head}_{slugify(variant)}"
     name = f"{head}.{ext}"
     if working:
         name = f"WORKING_{name}"
@@ -69,6 +75,11 @@ SERVICE_SLUG_NIST_CSF = "NIST_CSF_2_0_Assessment"
 SERVICE_SLUG_ATTACK = "MITRE_ATTACK_Coverage"
 SERVICE_SLUG_CONSULTATION = "Consultation_Request"
 SERVICE_SLUG_ENGAGEMENT_SUMMARY = "Engagement_Summary"
+# The CSF full-Playbook workbook set and the synthesized Risk Register are
+# deliverables in their own right (not the four base service reports), so they
+# carry their own §15.5 service slugs.
+SERVICE_SLUG_CSF_PLAYBOOK = "CSF_Playbook"
+SERVICE_SLUG_RISK_REGISTER = "Risk_Register"
 
 SERVICE_SLUG_BY_KIND: dict[str, str] = {
     "tech_debt": SERVICE_SLUG_TECH_DEBT,
