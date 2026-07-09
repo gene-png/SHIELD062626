@@ -1,10 +1,11 @@
 """User model.
 
 Two roles: admin (Kentro consultant, cross-client) and client (external
-company user, tied to one client by email domain). The earlier read-only
-reviewer role was collapsed into admin (Work Order A3): multiple admins
-all see and do the work, no separate reviewer gate. MFA enrollment column
-is present in v1 but the flag default-false until SHIELD_AUTH_REQUIRE_MFA
+company user, tied to one client by email domain). An earlier read-only
+second-consultant role was folded into admin (Work Order A3; see the
+DECISIONS.md D-005/D-006 supersession erratum): multiple admins all see
+and do the work, no separate approval gate. MFA enrollment column is
+present in v1 but the flag default-false until SHIELD_AUTH_REQUIRE_MFA
 flips on (spec §2 locked decisions).
 """
 

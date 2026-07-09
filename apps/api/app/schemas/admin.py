@@ -93,7 +93,7 @@ class FulfillServiceRequestResponse(BaseModel):
 
 
 class AdminClientSummary(BaseModel):
-    """One row in the platform-wide client list (admin/reviewer view)."""
+    """One row in the platform-wide client list (platform admin view)."""
 
     model_config = ConfigDict(from_attributes=True)
 

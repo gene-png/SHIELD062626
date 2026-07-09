@@ -2,12 +2,18 @@
 
 All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the phase template in AI Prompt §9.
 
-## [3.0.1] — Sprint 2 · findings burn-down — 2026-07-07
+> **Version renumber (Sprint 3 docs truth pass):** two releases were both
+> headed `[3.0.0]`. The v2 work order (PR #1) keeps `[3.0.0]`; Sprint 1
+> (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
+> `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
+
+## [3.0.2] — Sprint 2 · findings burn-down — 2026-07-07
 
 Branch `fix/findings-burndown-sprint-2`. Ten tasks (T0–T9) burning down the
 defect + coverage backlog Sprint 1 surfaced, plus this docs refresh (T10). All
-exit gates green: the full 16-file / 32-test Playwright suite, `pytest -m unit`,
-and web `tsc --noEmit`.
+exit gates green: the full 16-file Playwright suite (34 tests — recorded as 32
+at the time, corrected in the Sprint 3 audit), `pytest -m unit`, and web
+`tsc --noEmit`.
 
 - **Dependency bump (T0, `f580a3b`):** `next` → latest 14.2.x patch (14.2.35;
   stayed on the 14 App-Router line, no 15.x jump). `pnpm audit` clean of
@@ -60,7 +66,7 @@ and web `tsc --noEmit`.
   D-number collision with the unmerged `chore/dependabot-policy` branch (which
   owns D-018 for its majors-suppressed policy).
 
-## [3.0.0] — Sprint 1 · smoke sweep — 2026-07-06
+## [3.0.1] — Sprint 1 · smoke sweep — 2026-07-06
 
 Branch `qa/smoke-sweep-sprint-1` (PR #16). A green Playwright smoke suite now
 backs `SMOKE_TEST.md`, plus the runtime defects the sweep surfaced and fixed.
@@ -85,7 +91,8 @@ the single redacting egress client, and the deterministic engines (CSF Playbook
 `app/csf/playbook.py`, Risk Register `app/risk/engine.py`, ZT scoring
 `app/zt/scoring.py`) — "AI suggests, code computes." Part F added the hardening
 pass (synchronous AI runs, dependency audits + Dependabot, cross-tenant
-isolation tests, production Dockerfiles). See DECISIONS.md D-015 (Part F) and
+isolation tests, production Dockerfiles). See DECISIONS.md D-021 (Part F;
+renumbered from a duplicate D-015 heading, erratum D-022) and
 the granular history below.
 
 ## Earlier build history — v0.x foundation → v2 work order

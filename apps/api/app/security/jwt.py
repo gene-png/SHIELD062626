@@ -9,7 +9,7 @@ Claims:
   aud: KEYCLOAK_AUDIENCE (default "shield-api") - keeps shape stable when
        v1.x federates auth through Keycloak; the same `aud` already matches.
   sub: user id (UUID, string form)
-  role: UserRole enum value ("admin"/"reviewer"/"client")
+  role: UserRole enum value ("admin"/"client")
   typ: "access" | "refresh"
   jti: UUID per token; the refresh jti is the rotation key (see routes/auth.py)
   auth_time: original login time (epoch s); rides forward across refreshes so

@@ -131,7 +131,10 @@ Opening commit lands directly on `main`. Push is deferred until the dev containe
 **Rationale:** AI Prompt §3.9 prescribes "push frequently" but §3.3 forbids the agent from introducing its own credentials. Eugene will push when he attaches a PAT or SSH key to the container.
 **Ref:** AI Prompt §3.3, §3.9.
 
-## D-015 — Part F: harden and ship decisions
+## D-021 — Part F: harden and ship decisions
+
+_(Renumbered from a duplicate "D-015" heading — see the D-022 erratum. Older
+documents citing "D-015 (Part F)" mean this entry.)_
 
 **2026-06-26 · F (harden)**
 
@@ -315,3 +318,39 @@ restarts/multi-worker without an outage fail-open/closed dilemma.
 
 **Ref:** SPRINT_3.md T2; DECISIONS D-016 (typed errors); migration 0026;
 `app/config.py`, `app/security/jwt.py`, `app/routes/auth.py`.
+
+## D-022 — Erratum: duplicate D-015 heading renumbered to D-021
+
+**2026-07-09 · housekeeping**
+Two distinct decisions were both headed `D-015`: the 2026-05-21 multi-tenant
+architecture entry and the 2026-06-26 "Part F: harden and ship decisions"
+entry. This log is append-only, so the collision is resolved by renumbering
+the **second** entry (Part F) to **D-021** with an in-place note at its
+heading, and recording the change here. `D-015` now unambiguously means the
+multi-tenant decision. Documents written before this erratum that cite
+"D-015 (Part F)" refer to D-021.
+**Rationale:** The Sprint 3 repo audit (docs/audits/2026-07-08-repo-audit.md)
+flagged the duplicate heading; two entries sharing a D-number breaks the
+log's whole purpose as a citation target. Same remedy as the Sprint 2
+D-018→D-019 renumber.
+**Ref:** SPRINT_3.md T6; DECISIONS D-015, D-021.
+
+## D-023 — Supersession: D-005/D-006 reviewer role and release flow removed
+
+**2026-07-09 · auth/workflow**
+D-005 (deployment-wide reviewer assignment) and D-006 (deliverable approval
+flow: admin marks final → reviewer approves → admin releases to client) are
+**superseded**. Work Order A1/A3 removed the reviewer role entirely — the
+`UserRole` enum is now `admin` / `client` only, multiple admins all see and
+do the work with no separate approval gate — and the mark-final /
+release-to-client workflow was removed with it. Deliverables are generated,
+versioned, and downloaded directly by admins; there is no release gate in
+the current code. Sprint 5 may reintroduce a deliberate release-to-client
+step as a client-facing feature; if it does, that will be a new decision,
+not a revival of D-006.
+**Rationale:** Code reality has diverged from the two entries since the v2
+work order merged (PR #1); docstrings and OpenAPI summaries still claiming a
+reviewer role were purged in Sprint 3 T6. Recording the supersession keeps
+the append-only log honest without rewriting history.
+**Ref:** Work Order A1/A3 (via PR #1); SPRINT_3.md T6; `app/models/user.py`
+(UserRole); DECISIONS D-005, D-006.

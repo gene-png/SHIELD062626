@@ -8,7 +8,7 @@
 
 **The Sprint-1 smoke sweep's defect + coverage backlog is burned down.** Ten
 tasks (T0–T9) on `fix/findings-burndown-sprint-2` plus this docs refresh (T10).
-See `CHANGELOG.md` `[3.0.1]` and `SPRINT_2.md` for the full record.
+See `CHANGELOG.md` `[3.0.2]` and `SPRINT_2.md` for the full record.
 
 Highlights:
 
@@ -40,9 +40,9 @@ cloud/account/region decisions).**
 | Phase 1 — Foundation (`v0.1.0`)                                       | Complete                   | CHANGELOG (earlier history)        |
 | Phase 2 — Intake (`v0.2.0`)                                           | Complete                   | CHANGELOG (earlier history)        |
 | Phase 3 — Tech Debt service (`v0.3.x`)                                | Complete                   | CHANGELOG (earlier history)        |
-| v2 work order Parts A–F (`v3.0.0`, migrations 0015–0025)              | **Complete (PR #1)**       | DECISIONS D-015 (Part F)           |
+| v2 work order Parts A–F (`v3.0.0`, migrations 0015–0025)              | **Complete (PR #1)**       | DECISIONS D-021 (Part F)           |
 | Sprint 1 — smoke sweep (`qa/smoke-sweep-sprint-1`, PR #16)            | **Complete**               | `SPRINT_1.md`                      |
-| Sprint 2 — findings burn-down (`fix/findings-burndown-sprint-2`)      | **Complete (this branch)** | `SPRINT_2.md`, CHANGELOG `[3.0.1]` |
+| Sprint 2 — findings burn-down (`fix/findings-burndown-sprint-2`)      | **Complete (this branch)** | `SPRINT_2.md`, CHANGELOG `[3.0.2]` |
 | Sprint 3 — infra (terraform, MFA/email-verify, FedRAMP LLM connector) | **Next (needs-David)**     | `DELIVERY_PLAN.md`                 |
 
 ## Product surface at `v3.0.0`
@@ -65,7 +65,7 @@ The repo-wide gates enforced this sprint (and encoded in the sprint queue):
 | --------------------- | ------------------------------------------------------------------------------ | --------------------- |
 | Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                 | api container         |
 | Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"` | web container         |
-| Full e2e smoke suite  | `cd e2e && npx playwright test` (16 spec files / 32 tests)                     | host → composed stack |
+| Full e2e smoke suite  | `cd e2e && npx playwright test` (16 spec files / 34 tests)                     | host → composed stack |
 | Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                          | host → composed stack |
 | Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                     | host                  |
 
@@ -90,7 +90,9 @@ Four jobs gate every push / PR to `main`:
 ```
 pytest -m unit         → green (in api container)
 web tsc --noEmit       → clean
-e2e (host, :3001)      → 32/32 green, 16 spec files
+e2e (host, :3001)      → 34/34 green, 16 spec files (recorded as 32 at the
+                         time; the Sprint 3 audit's `playwright test --list`
+                         count is 34)
 ```
 
 (Exact figures recorded in the T10 commit / CONTEXT.md. The machine running this
@@ -131,8 +133,9 @@ sprint serves web on **:3001**; Playwright resolves the port via
 See [`DECISIONS.md`](DECISIONS.md) for the full log. Highlights:
 
 - **D-007 (FLIPPED):** ATT&CK uses the full Enterprise matrix (~600 techniques).
-- **D-015:** Multi-tenant shared DB with `client_id` on every row + Part F
-  harden-and-ship posture.
+- **D-015:** Multi-tenant shared DB with `client_id` on every row. **D-021:**
+  Part F harden-and-ship posture (renumbered from a duplicate D-015 heading,
+  erratum D-022).
 - **D-016 / D-017:** typed registration errors; offline deterministic
   fixture-mode AI.
 - **D-019:** reject reserved/special-use TLDs at domain-approval time
