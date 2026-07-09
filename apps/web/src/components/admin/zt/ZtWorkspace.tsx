@@ -58,8 +58,7 @@ function normalizeTarget(value: number | null | undefined): number {
 function describeError(err: unknown): string {
   if (err instanceof ZtProxyError) {
     const payload = err.payload as
-      | { error?: { message?: string }; detail?: string }
-      | undefined;
+      { error?: { message?: string }; detail?: string } | undefined;
     return (
       payload?.error?.message ??
       payload?.detail ??
