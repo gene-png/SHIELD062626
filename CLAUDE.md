@@ -51,6 +51,11 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
 - e2e (host, not docker): `cd e2e && npx playwright test [file]` — base URL
   `http://localhost:3000`, chromium, serialized (shared seeded DB). Full suite
   ~17 min.
+- Format check (MANDATORY before every commit — CI enforces it, the Sprint 2
+  loop shipped unformatted files it only caught at CI): run host prettier at the
+  version the lockfile pins (`3.9.4`) so local and CI agree —
+  `npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` from
+  the repo root. `--write` the same glob to fix, then re-check.
 - Dependency audits: `pnpm audit` at root, `npm audit` inside `e2e/`.
 - Seed: `docker compose exec -T api python scripts/seed_demo.py` (idempotent).
 

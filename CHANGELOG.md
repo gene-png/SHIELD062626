@@ -7,6 +7,63 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.0.3] — Sprint 3 · audit correctness & honesty — 2026-07-09
+
+Branch `fix/audit-correctness-sprint-3`. Eight tasks (T0–T7) burning down the
+correctness, security, and truth-in-docs findings from the 2026-07-08 deep repo
+audit (`docs/audits/2026-07-08-repo-audit.md`). All exit gates green: the full
+Playwright suite (16 files / 34 tests), `pytest -m unit`, web `tsc --noEmit`,
+and the newly-mandatory repo-wide prettier `--check` (lockfile-pinned 3.9.4).
+
+- **CSF live-mode Run-AI fixed (T0, `03175f8`):** `_CSF_SCORE_PROMPT` asked the
+  model for a `{subcategories:[…]}` shape the route never parsed (it reads
+  `scores[]` keyed on tier + subcategory_code) — live mode silently discarded a
+  compliant response. Aligned the prompt to the parser's shape and grounded the
+  payload in the assessment's interview answers/evidence (mirroring ZT), with a
+  loud warning when a Run-AI parses to zero changes. Fixture determinism (D-017)
+  untouched; a contract test locks the schema.
+- **Draft-exists guard ported to ATT&CK + ZT (T1, `4056170`):** the attack mint
+  (~600 coverage rows/version) and zt mint (~87 rows) shared CSF's old
+  unbounded-version bug. Both now return the open DRAFT idempotently (HTTP 200)
+  and only cut v+1 after the prior draft closes; tech_debt has no equivalent
+  mint. Two new contract tests; s5/s6/s11 close-then-mint for a fresh grid.
+- **Auth compensating controls made honest (T2, `bc491b9`):** README/BUILD_REPORT
+  claimed daily forced re-auth + 30-min idle timeout that nothing enforced. Now
+  real: an `auth_time` claim rides refreshes and `/auth/refresh` returns a typed
+  401 `reauth_required` past `SHIELD_FORCED_REAUTH_SECONDS` (24h default);
+  refresh-token rotation via `users.active_refresh_jti` (migration 0026, C0) so a
+  replayed refresh token is rejected (`refresh_reused`); dead `require_mfa` /
+  `require_email_verify` flags now refuse boot instead of silently no-op'ing; web
+  shows a friendly session-expired banner. See DECISIONS **D-020**.
+- **Rate limiting on auth + run-AI (T3, `b48a39f`):** new `app/security/rate_limit.py`
+  — fixed-window Redis counters, per-IP + per-account on login/register (checked
+  before Argon2), per-client on the five run-AI endpoints. Over-limit → typed 429
+  `rate_limited` (D-016) + `Retry-After`; a Redis outage fails **open** with a
+  loud structlog warning (unit-tested). Redis finally earns its keep. Defaults
+  are generous so the serialized e2e suite never trips.
+- **Spec §15.5 export filenames (T4, `b14ccd5`):** the CSF Playbook 5-file export
+  and Risk Register export bypassed `deliverable_filename()`. Both now route
+  through it — e.g. `Atlas_Defense_Solutions_CSF_Playbook070926_v8_Executive.pdf`
+  — carrying Company + Service + `MMDDYY` + version (v1 carries no suffix).
+- **`llm_calls` tenant attribution (T5, `cea0c5a`):** added nullable
+  `llm_calls.client_id` (migration 0027, batch_alter_table + FK, C0) threaded
+  through all five call sites so the largest cross-assessment egress (risk
+  synthesis) is finally attributable to a tenant.
+- **Docs truth pass (T6, `aeac503`):** `docs/architecture.md` rewritten to the
+  real system (multi-tenant, no Celery/worker — AI runs synchronously in `api`,
+  Redis = rate limiting, two-layer append-only `audit_entries`, one-way redactor
+  with no unredact). README phantom runbooks/terraform marked planned-not-present;
+  real test matrix. DECISIONS append-only fixes: the duplicate `[3.0.0]` /
+  duplicate D-015 heading resolved (Part F → **D-021**, erratum **D-022**),
+  D-005/D-006 reviewer-role + release-flow supersession recorded (**D-023**).
+  Zero `reviewer` hits remain in `apps/api/app` docstrings/OpenAPI summaries.
+  ops/development docs de-fictionalized.
+- **Loop hygiene + wrap-up (T7, this entry):** host prettier `format:check` gate
+  documented in CLAUDE.md (the Sprint 2 loop shipped unformatted files CI caught);
+  SMOKE_TEST §14 flagged as now-meaningful post-T0 but left unchecked (needs
+  David's live key) and §10 artifact names synced to the §15.5 convention;
+  CONTEXT.md end-of-sprint snapshot.
+
 ## [3.0.2] — Sprint 2 · findings burn-down — 2026-07-07
 
 Branch `fix/findings-burndown-sprint-2`. Ten tasks (T0–T9) burning down the
