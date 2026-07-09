@@ -19,10 +19,10 @@ Every step that says **HALT** means: set `halt.active=true` with a clear `halt.r
 
 1. Read `.claude/sprint-queue.json`. If missing, HALT with reason `queue-missing`.
 2. If `halt.active==true`, do nothing and do not reschedule. Tell the user the existing halt reason.
-3. CWD must equal the queue's `working_dir` field (a path string). If not, HALT.
+3. CWD must equal the queue's `working_dir` field (a path string; compare case-insensitively on Windows). If not, HALT. (`working_dir` is machine-local — the launch checklist has each developer set it in their runtime copy of the queue.)
 4. Check for `.claude/sprint-queue.lock`. If present and mtime is within the last 10 minutes, another iteration is running, HALT with `lock-contention`. Otherwise, claim the lock (write `<pid>\n<iso8601>` into the file).
-5. Confirm `gh auth status` shows active user matching the queue's `expected_gh_user` field. If not, HALT with `gh-account-mismatch` and tell the user the expected value.
-6. Confirm `gcloud config configurations list --filter=is_active=true --format="value(name)"` returns the queue's `expected_gcloud_config` value. If not, HALT with `gcloud-config-mismatch`. (You may still proceed if the next task is `risk=low`, but for any `gcp-mutating` task this is a hard halt.)
+5. Confirm `gh auth status` shows active user matching the queue's `expected_gh_user` field (also machine-local; if the active account differs but the expected account is logged in, run `gh auth switch --user <expected>` and re-check before halting). If not, HALT with `gh-account-mismatch` and tell the user the expected value.
+6. ONLY IF the queue defines a non-null `expected_gcloud_config` field: confirm `gcloud config configurations list --filter=is_active=true --format="value(name)"` returns it; if not, HALT with `gcloud-config-mismatch`. (You may still proceed if the next task is `risk=low`, but for any `gcp-mutating` task this is a hard halt.) Projects with no GCP surface simply omit the field — skip this step entirely, do not halt on its absence.
 7. Confirm git branch matches the queue's `branch` field. If on `main` and `started_at` is null, run `git checkout -b <branch>`. If on any other branch, HALT.
 
 ---
