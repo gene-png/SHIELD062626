@@ -56,6 +56,15 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
   version the lockfile pins (`3.9.4`) so local and CI agree —
   `npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` from
   the repo root. `--write` the same glob to fix, then re-check.
+- Python lint/format (in-container, CI-parity — MANDATORY before every commit
+  that touches `apps/api`): `docker compose exec -T api sh -lc "cd /app && ruff
+  check --no-cache . && black --check ."`. Compose bind-mounts the root
+  `./pyproject.toml` read-only at `/pyproject.toml` (the api build context is
+  only `apps/api`, whose `pyproject.toml` carries no `[tool.ruff]`/`[tool.black]`
+  tables, so both tools skip it and walk up to the root config — same rule set
+  CI runs). Sprint 3 shipped 6 ruff errors CI caught because in-container runs
+  used tool defaults; this closes that gap (`--no-cache`: `/.ruff_cache` is not
+  writable in the container).
 - Dependency audits: `pnpm audit` at root, `npm audit` inside `e2e/`.
 - Seed: `docker compose exec -T api python scripts/seed_demo.py` (idempotent).
 
