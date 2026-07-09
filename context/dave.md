@@ -5,23 +5,30 @@ _Last updated: 2026-07-08_
 
 ## Branch / in flight
 
-- **Sprint 2 MERGED** (PR #19, 2026-07-08): all 11 tasks + shutdown audit, full
-  gates green, first real CI e2e run passed on the PR.
-- `chore/dependabot-policy` — **PR #20**, conflict-resolved against post-#19
-  `main` (D-018 + D-019 coexist; CONTEXT snapshot merged). Awaiting merge.
-- Dependabot triage: 7 majors closed (D-018), 5 Actions bumps merged.
-  Remaining: #7 autoprefixer, #13 next-auth, #14 prettier — rebase + merge
-  after PR #20 (Claude handles it; #14 needs a reformat commit because
-  prettier 3.9.4 formats differently than 3.8.3).
+- **Sprint 2 MERGED** (PR #19) and **dependabot fully triaged**: PR #20
+  (policy) merged, 7 majors closed (D-018), 5 Actions + autoprefixer +
+  next-auth + prettier-3.9.4 (+reformat) + grouped-Actions #21 merged;
+  grouped-npm #22 pending rebase+CI at last check.
+- `chore/sprint-3-plan` — **Sprint 3 planned from the deep repo audit**
+  (`docs/audits/2026-07-08-repo-audit.md`): SPRINT_3.md + staged queue
+  `.claude/sprint-queue.sprint-3.json`. Theme: correctness & honesty —
+  CSF live-AI fix (CRITICAL: live mode silently broken), attack/zt draft
+  guards, auth controls enforce-or-retract, rate limiting, §15.5 filenames,
+  llm_calls.client_id, docs truth pass. Framework majors → Sprint 4;
+  client-facing features → Sprint 5.
 
 ## Next steps
 
-1. Merge PR #20.
-2. Let the session finish the 3 npm dependabot merges.
-3. Plan Sprint 3 (`DELIVERY_PLAN.md`): infra decisions (cloud/account/region),
-   MFA/email-verify flags, FedRAMP LLM connector; candidate carry-overs: the
-   framework-major bundle (Next 15/16, React 19, Tailwind 4, ESLint 10,
-   Node 22), attack/zt mint-route guards (T7 pattern), duplicate D-015 cleanup.
+1. Merge the sprint-3 planning PR; merge #22 when green.
+2. Launch: cut `fix/audit-correctness-sprint-3` from `main`, swap the staged
+   queue into `.claude/sprint-queue.json`, invoke `/loop-sprint-cron`
+   (checklist in SPRINT_3.md).
+3. AFTER sprint-3 T0 lands: run SMOKE_TEST §14 (live-AI) — meaningful only
+   once the CSF schema/grounding fix is in.
+4. Sprint 4 = framework majors (D-018 bundle). Sprint 5 candidates = client
+   deliverable release + /home value loop + POA&M (audit §4c). Needs-me:
+   cloud/account/region decisions (terraform), v2 Work Order doc for
+   reference-docs, backup-restore drill.
 
 ## Personal todos (human-only)
 
