@@ -121,6 +121,46 @@ def test_csf_run_ai_skips_locked(app_client) -> None:
 
 
 @pytest.mark.unit
+def test_csf_run_ai_payload_carries_interview_answers(app_client) -> None:
+    """Sprint 3 T0(b): the job payload must ground the model in the client's
+    interview answers/evidence (not just tier/subcategory codes)."""
+    c, provider = app_client
+    h, svc_id = _bootstrap(c)
+    code = SUBCATEGORIES[0].code
+    # Capture what actually reaches the provider (post-redaction send payload).
+    captured: dict = {}
+
+    def _capture(payload: dict) -> LLMResponse:
+        captured.clear()
+        captured.update(payload)
+        return LLMResponse('{"scores": []}')
+
+    provider.register("csf_score", _capture)
+
+    # Give one subcategory real interview signal: a self-assessed tier + notes.
+    latest = c.get(f"/csf/services/{svc_id}/assessments/latest", headers=h).json()
+    answer_id = next(a["id"] for a in latest["answers"] if a["subcategory_code"] == code)
+    r = c.patch(
+        f"/csf/answers/{answer_id}",
+        headers=h,
+        json={"maturity_tier": 3, "notes": "Documented IAM policy exists."},
+    )
+    assert r.status_code == 200, r.text
+
+    assert c.post(f"/csf/services/{svc_id}/run-ai", headers=h).status_code == 200
+    assert "answers" in captured, "run-ai payload omitted interview answers"
+    assert code in captured["answers"], "the answered subcategory is missing from the payload"
+    ans = captured["answers"][code]
+    assert ans["maturity_tier"] == 3
+    assert ans["notes"] == "Documented IAM policy exists."
+    assert ans["has_evidence"] is False
+    # Unanswered subcategories are NOT flooded into the payload (only signal).
+    assert len(captured["answers"]) == 1
+    # Grounding is additive: the tier/subcategory context the fixture reads stays.
+    assert "tiers" in captured and "subcategories" in captured
+
+
+@pytest.mark.unit
 def test_csf_run_ai_requires_seeded_profile(app_client) -> None:
     c, provider = app_client
     r = c.post(

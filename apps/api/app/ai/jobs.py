@@ -38,18 +38,30 @@ register_job(
 
 
 # --- CSF dimension-score suggestions ---------------------------------------
+# The response schema below MUST match what routes/csf.py:run_ai parses: a top-
+# level "scores" array whose rows are keyed by "tier" + "subcategory_code" and
+# carry the five _DIM_FIELDS + "what_we_found". test_csf_ai_contract.py locks
+# this contract so prompt and parser can never silently drift again (the audit
+# find that motivated Sprint 3 T0: the prompt used to say {"subcategories":[{
+# "code":...}]} while the parser read {"scores":[{"tier","subcategory_code"}]},
+# so live mode discarded every schema-compliant response).
 _CSF_SCORE_PROMPT = """You are assisting a Kentro analyst scoring a NIST CSF 2.0
-assessment. From the supplied interview answers, evidence summaries, and per-
-subcategory context, SUGGEST a draft only.
+assessment. The payload supplies the in-scope tier profiles ("tiers"), the in-
+scope subcategory codes ("subcategories"), and the client's interview answers
+("answers": a map of subcategory_code -> {maturity_tier, notes, has_evidence},
+where has_evidence records whether supporting evidence was attached). SUGGEST a
+draft only, grounded in those answers.
 
-For each in-scope subcategory return the five dimension scores — Governance,
-Policy and Process, Implementation, Monitoring and Measurement, Continuous
-Improvement — each an integer 0, 1, or 2, plus a short "what we found" narrative.
+Score EACH in-scope (tier, subcategory) pair: for every subcategory code emit
+one row per tier listed in "tiers". Each row carries the five dimension scores —
+Governance, Policy and Process, Implementation, Monitoring and Measurement,
+Continuous Improvement — each an integer 0, 1, or 2, plus a short "what we
+found" narrative.
 
 Do NOT compute totals, maturity levels, roll-ups, gaps, or priorities — those are
 calculated by code. Return strictly JSON of the form:
-{"subcategories": [{"code": "GV.OC-01", "governance": 0-2, "policy": 0-2,
-"implementation": 0-2, "monitoring": 0-2, "improvement": 0-2,
+{"scores": [{"tier": "high", "subcategory_code": "GV.OC-01", "governance": 0,
+"policy": 0, "implementation": 0, "monitoring": 0, "improvement": 0,
 "what_we_found": "..."}], "executive_summary": "..."}
 """
 

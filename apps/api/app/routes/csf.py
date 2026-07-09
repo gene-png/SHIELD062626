@@ -1095,6 +1095,25 @@ def run_ai(
         return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
 
     before = _snap()
+    # Ground the suggestion in the client's interview answers + evidence flags,
+    # the way ZT's run-ai does (routes/zt.py). Before Sprint 3 T0 the payload
+    # carried only tier/subcategory codes even though the prompt claimed the
+    # answers were supplied. Only answers with actual signal are sent (a scored
+    # tier, notes, or attached evidence) so the model sees what the analyst
+    # captured rather than ~106 empty rows. The payload goes through the
+    # redactor (nested note strings included) as designed.
+    answer_rows = (
+        db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
+    )
+    answers = {
+        ans.subcategory_code: {
+            "maturity_tier": ans.maturity_tier,
+            "notes": ans.notes,
+            "has_evidence": ans.evidence_artifact_id is not None,
+        }
+        for ans in answer_rows
+        if ans.maturity_tier is not None or ans.notes or ans.evidence_artifact_id is not None
+    }
     client_org = None if client.legal_name == "(pending intake)" else client.legal_name
     result = run_job(
         db,
@@ -1103,6 +1122,7 @@ def run_ai(
         inputs={
             "tiers": sorted({r.tier for r in rows.values()}),
             "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+            "answers": answers,
         },
         requested_by=user.id,
         service_id=svc.id,
@@ -1130,6 +1150,18 @@ def run_ai(
     db.flush()
     after = _snap()
     diffs = diff_keyed_rows(before, after, list(_RUN_FIELDS), locked_keys=locked_keys)
+    if not diffs:
+        # FAIL LOUDLY: a run that parsed but changed nothing is the exact
+        # symptom of the T0 schema-drift bug (a compliant response silently
+        # discarded). Surface it — a re-run that suggests identical values also
+        # trips this, which is still worth a "did this do anything?" signal.
+        _log.warning(
+            "csf_run_ai_no_changes",
+            service_id=str(svc.id),
+            assessment_id=str(a.id),
+            suggestions=len(data.get("scores", [])),
+            unlocked_rows=len(rows) - len(locked_keys),
+        )
     changes: list[CsfDimensionChange] = []
     for d in diffs:
         tier, _, code = d.key.partition("|")
