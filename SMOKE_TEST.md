@@ -95,13 +95,14 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `…_v18_Executive.pdf/.docx`, `…_v18_Full.pdf/.docx`, and
 > `Atlas_Defense_Solutions_Risk_Register070926_v20.xlsx/.pdf/.docx` (date +
 > version vary per run; v1 carries no `_v{n}` suffix). Each was asserted HTTP 200
-> with the correct content-type; the visual eyeball below still needs David.
+> with the correct content-type; **eyeballed by David 2026-07-09** against the
+> `Atlas_Defense_Solutions_*` v19 (CSF) / v22 (Risk Register) artifact set.
 
-- [ ] **CSF executive briefing** PDF: cover, exec summary, scorecard with **colored maturity cells**, top gaps, next steps — spacing / page-breaks look right.
-- [ ] **CSF full playbook** PDF: contents, methodology, per-function tables, appendix; colors render.
-- [ ] Both **CSF .docx** files in Word: tables + **shaded level cells** render.
-- [ ] **CSF .xlsx**: Enterprise sheet + per-tier sheets + About cover.
-- [ ] **Risk Register** XLSX / PDF / Word: 5×5 matrix + entries + blank governance columns.
+- [x] **CSF executive briefing** PDF: cover, exec summary, scorecard with **colored maturity cells**, top gaps, next steps — spacing / page-breaks look right. (David, 2026-07-09)
+- [x] **CSF full playbook** PDF: contents, methodology, per-function tables, appendix; colors render. (David, 2026-07-09)
+- [x] Both **CSF .docx** files in Word: tables + **shaded level cells** render. (David, 2026-07-09)
+- [x] **CSF .xlsx**: Enterprise sheet + per-tier sheets + About cover. (David, 2026-07-09)
+- [x] **Risk Register** XLSX / PDF / Word: 5×5 matrix + entries + blank governance columns. (David, 2026-07-09)
 
 ## 11. Auto-versioned docs (C3)
 

@@ -1,44 +1,52 @@
 # Dave — current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-07-08_
+_Last updated: 2026-07-09_
 
 ## Branch / in flight
 
-- **Sprint 2 MERGED** (PR #19) and **dependabot fully triaged**: PR #20
-  (policy) merged, 7 majors closed (D-018), 5 Actions + autoprefixer +
-  next-auth + prettier-3.9.4 (+reformat) + grouped-Actions #21 merged;
-  grouped-npm #22 pending rebase+CI at last check.
-- `chore/sprint-3-plan` — **Sprint 3 planned from the deep repo audit**
-  (`docs/audits/2026-07-08-repo-audit.md`): SPRINT_3.md + staged queue
-  `.claude/sprint-queue.sprint-3.json`. Theme: correctness & honesty —
-  CSF live-AI fix (CRITICAL: live mode silently broken), attack/zt draft
-  guards, auth controls enforce-or-retract, rate limiting, §15.5 filenames,
-  llm_calls.client_id, docs truth pass. Framework majors → Sprint 4;
-  client-facing features → Sprint 5.
+- **Sprint 3 MERGED** (PR #26, merge commit `995b403`): all 8 tasks via the
+  `/loop-sprint-cron` autonomous loop + closing audit (which caught a real
+  non-atomic INCR/EXPIRE lockout bug in the new rate limiter) + one manual
+  ruff fix (`753d765` — in-container lint missed the root config; becomes
+  Sprint 4 T0). Branch deleted after merge.
+- `chore/sprint-4-plan` — **Sprint 4 planned**: SPRINT_4.md + staged queue
+  `.claude/sprint-queue.sprint-4.json`. Theme: D-018 framework majors
+  (Next 15/React 19/Tailwind 4/ESLint 10/Node 22 → audit-to-zero) +
+  **multi-provider LLM** (OpenAI + Gemini adapters behind the existing
+  `_build_provider` seam — Dave asked "do we have to use anthropic?" — no,
+  spec §4.4 already mandates env-configurable provider) + T0 lint-gate CI
+  parity. SMOKE_TEST §10 checked off in this PR (Dave eyeballed the v19/v22
+  §15.5 artifacts 2026-07-09).
 
 ## Next steps
 
-1. Merge the sprint-3 planning PR; merge #22 when green.
-2. Launch: cut `fix/audit-correctness-sprint-3` from `main`, swap the staged
-   queue into `.claude/sprint-queue.json`, invoke `/loop-sprint-cron`
-   (checklist in SPRINT_3.md).
-3. AFTER sprint-3 T0 lands: run SMOKE_TEST §14 (live-AI) — meaningful only
-   once the CSF schema/grounding fix is in.
-4. Sprint 4 = framework majors (D-018 bundle). Sprint 5 candidates = client
-   deliverable release + /home value loop + POA&M (audit §4c). Needs-me:
-   cloud/account/region decisions (terraform), v2 Work Order doc for
-   reference-docs, backup-restore drill.
+1. Merge the sprint-4 planning PR.
+2. **SMOKE_TEST §14** (live AI): Dave getting an `ANTHROPIC_API_KEY` shortly.
+   Set it + `SHIELD_LLM_MODE=live` in `.env`, restart api, one CSF Run-AI,
+   verify redacted `llm_calls` row with `client_id` set, no PII; revert to
+   fixture. Any defects found → append as tasks to the sprint-4 queue.
+3. Launch Sprint 4: cut `feat/majors-providers-sprint-4` from `main`, swap
+   the staged queue in, `/loop-sprint-cron` (checklist in SPRINT_4.md).
+4. Sprint 5 candidates: client deliverable release + /home value loop +
+   POA&M + redaction preview + audit viewer (audit §4c). Needs-me:
+   cloud/account/region decisions (gates terraform/deploy/DR).
 
 ## Personal todos (human-only)
 
-- SMOKE_TEST §10: eyeball the 8 export documents in `e2e/artifacts/`.
-- SMOKE_TEST §14: one live-AI run (`ANTHROPIC_API_KEY` +
-  `SHIELD_LLM_MODE=live`), confirm redacted `llm_calls`, no PII.
+- SMOKE_TEST §14 live-AI run (see step 2 above). §10 done 2026-07-09.
+- Decide cloud/account/region for the infra work (Sprint 5+/6).
+- Optional: OpenAI/Gemini API keys if I want a live smoke of the new
+  adapters after Sprint 4 T6 (unit tests don't need them).
 
 ## Notes for Gene
 
 - This box runs SHIELD web on **:3001** (machine-local `.env WEB_PORT`);
   canonical/CI port stays 3000 — see CONTEXT.md machine-local facts.
-- Loop-agent gate gap found in Sprint 2: in-container gates don't run the
-  host prettier `format:check` — add it to the sprint-3 queue gates.
+- Loop lesson from Sprint 3: in-container ruff/black DON'T see the root
+  pyproject config (api container mounts only apps/api) — CI does. Sprint 4
+  T0 fixes it with a compose mount; until then run lint checks from a full
+  checkout context before pushing python changes.
+- The cron loop is session-bound: if the Claude session dies, re-invoking
+  `/loop-sprint-cron` re-bootstraps from the queue file — state lives in
+  `.claude/sprint-queue.json`, nothing is lost.
