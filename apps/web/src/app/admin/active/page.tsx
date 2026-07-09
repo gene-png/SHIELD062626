@@ -5,6 +5,8 @@ import { Card, CardBody } from "@shield/design-system";
 
 import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 
+import type { JSX } from "react";
+
 export const metadata: Metadata = { title: "Active Work" };
 
 export default function ActiveWorkPage(): JSX.Element {

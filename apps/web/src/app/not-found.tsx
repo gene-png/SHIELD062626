@@ -4,6 +4,8 @@ import Link from "next/link";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 
+import type { JSX } from "react";
+
 export const metadata: Metadata = { title: "Page not found" };
 
 export default function NotFound(): JSX.Element {

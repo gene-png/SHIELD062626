@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +24,8 @@ import {
   type AssessmentResponse,
   type ServiceType,
 } from "@/lib/intake/types";
+
+import type { JSX } from "react";
 
 const SELF_ASSESSMENT_TYPES: ReadonlyArray<ServiceType> = [
   "nist_csf",
