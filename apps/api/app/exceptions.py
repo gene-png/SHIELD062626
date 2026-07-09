@@ -39,7 +39,14 @@ async def _handle_http_exception(request: Request, exc: HTTPException) -> JSONRe
             error["reason"] = reason
     else:
         error["message"] = detail
-    return JSONResponse(status_code=exc.status_code, content={"error": error})
+    # Preserve response headers the route attached to the exception (e.g. a
+    # rate-limit 429's Retry-After, or a 401's WWW-Authenticate) — without this
+    # they were being silently dropped by the custom envelope.
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": error},
+        headers=exc.headers or None,
+    )
 
 
 async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

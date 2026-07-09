@@ -72,6 +72,7 @@ from app.schemas.attack import (
     TacticHeatmapEntry,
 )
 from app.schemas.tech_debt import DeliverableResponse
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import SERVICE_SLUG_ATTACK, deliverable_filename
 from app.tenant import (
@@ -462,6 +463,7 @@ def run_ai(
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> AttackRunAiResponse:
     """The ATT&CK 'Run AI'. Suggests coverage status + which listed tools provide
     Detection / Prevention / Response per technique, validating every cited tool

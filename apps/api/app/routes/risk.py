@@ -49,6 +49,7 @@ from app.schemas.risk import (
     RiskGateStatus,
     RiskRegisterResponse,
 )
+from app.security.rate_limit import RateLimiter, get_rate_limiter
 from app.storage import StorageBackend
 
 router = APIRouter(prefix="/risk", tags=["risk-register"])
@@ -192,7 +193,12 @@ def generate(
     admin: Annotated[User, _admin_required],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> RiskRegisterResponse:
+    # Per-client throttle on the most expensive egress (cross-assessment
+    # synthesis). Risk pins the tenant via the path `cid`, not X-Client-Id,
+    # so we key on it directly rather than via the current_client dependency.
+    limiter.enforce_ai(cid)
     client = _require_client(db, cid)
     g = _gate(db, cid)
     if not g.unlocked:

@@ -70,6 +70,19 @@ class Settings(BaseSettings):
     shield_idle_timeout_seconds: int = Field(default=1800, ge=60)
     shield_forced_reauth_seconds: int = Field(default=86400, ge=300)
 
+    # Rate limiting (Sprint 3 T3). Fixed-window per-IP + per-account on the auth
+    # endpoints and per-client on the expensive run-AI path. Defaults are
+    # deliberately generous so the serialized e2e suite (all traffic from one
+    # localhost IP, one seeded admin account) never trips them; tighten per
+    # environment via env vars. Redis-backed; fail-open on a Redis outage.
+    shield_rate_limit_enabled: bool = True
+    shield_rate_limit_auth_ip_max: int = Field(default=300, ge=1)
+    shield_rate_limit_auth_ip_window_seconds: int = Field(default=60, ge=1)
+    shield_rate_limit_auth_account_max: int = Field(default=100, ge=1)
+    shield_rate_limit_auth_account_window_seconds: int = Field(default=60, ge=1)
+    shield_rate_limit_ai_max: int = Field(default=60, ge=1)
+    shield_rate_limit_ai_window_seconds: int = Field(default=60, ge=1)
+
     # JWT signing
     jwt_signing_secret: str = (
         "dev-only-replace-via-secrets-manager"  # noqa: S105 - dev placeholder, refused in prod via assert_safe_for_runtime

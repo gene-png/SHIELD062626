@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,7 @@ from app.security.password import (
     hash_password,
     verify_password,
 )
+from app.security.rate_limit import RateLimiter, get_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -164,9 +165,15 @@ def _register_successful_login(db: Session, user: User) -> None:
 )
 def register(
     body: RegisterRequest,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> RegisterResponse:
     email = _normalize_email(body.email)
+
+    # Throttle before any expensive work (Argon2 hashing, DB writes). Per-IP +
+    # per-account fixed windows; typed 429 with Retry-After (D-016).
+    limiter.enforce_auth(request, email)
 
     if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
         # Typed detail (reason + message): the web sign-up form maps `reason`
@@ -286,9 +293,16 @@ def register(
 )
 def login(
     body: LoginRequest,
+    request: Request,
     db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> TokenPairResponse:
     email = _normalize_email(body.email)
+
+    # Throttle before the timing-safe Argon2 verify so a credential-stuffing
+    # flood is cheap to reject; account lockout remains the second line.
+    limiter.enforce_auth(request, email)
+
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
 
     # Defer the "no such user" branch to the same response shape + timing

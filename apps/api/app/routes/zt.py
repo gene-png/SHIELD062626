@@ -71,6 +71,7 @@ from app.schemas.zt import (
     ZtServiceCreateRequest,
     ZtServiceResponse,
 )
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
     SERVICE_SLUG_ZT_CISA,
@@ -344,6 +345,7 @@ def run_ai(
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> ZtRunAiResponse:
     """The ZT 'Run AI'. Suggests a current and target maturity level per
     capability (on the framework's own scale) plus per-pillar narratives. AI

@@ -106,6 +106,7 @@ from app.schemas.csf import (
     ProfileSeedRequest,
 )
 from app.schemas.tech_debt import DeliverableResponse
+from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
     SERVICE_SLUG_NIST_CSF,
@@ -1060,6 +1061,7 @@ def run_ai(
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
     llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
 ) -> CsfRunAiResponse:
     """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
     + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
