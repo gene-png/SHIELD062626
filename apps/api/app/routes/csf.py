@@ -109,6 +109,7 @@ from app.schemas.tech_debt import DeliverableResponse
 from app.security.rate_limit import enforce_ai_rate_limit
 from app.storage import StorageBackend
 from app.tech_debt.filename import (
+    SERVICE_SLUG_CSF_PLAYBOOK,
     SERVICE_SLUG_NIST_CSF,
     deliverable_filename,
 )
@@ -1233,16 +1234,27 @@ def export_playbook(
 
     org = None if client.legal_name == "(pending intake)" else client.legal_name
     name = org or "Client"
-    base = f"CSF_Playbook_v{a.version}"
+    today = utcnow().date()
     on = utcnow().strftime("%Y-%m-%d")
     xlsx_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     pdf_mime = "application/pdf"
+
+    def _pb_name(extension: str, variant: str | None = None) -> str:
+        # §15.5: {Company}_CSF_Playbook{MMDDYY}[_v{n}][_variant].ext
+        return deliverable_filename(
+            company=org,
+            service_slug=SERVICE_SLUG_CSF_PLAYBOOK,
+            extension=extension,
+            day=today,
+            version=a.version,
+            variant=variant,
+        )
 
     specs = [
         (
             "xlsx",
             "Data workbook (XLSX)",
-            f"{base}.xlsx",
+            _pb_name("xlsx"),
             xlsx_mime,
             csf_playbook_export.render_xlsx(
                 client_name=name,
@@ -1254,7 +1266,7 @@ def export_playbook(
         (
             "exec_pdf",
             "Executive briefing (PDF)",
-            f"{base}_Executive.pdf",
+            _pb_name("pdf", "Executive"),
             pdf_mime,
             csf_playbook_export.render_exec_pdf(
                 client_name=name,
@@ -1266,7 +1278,7 @@ def export_playbook(
         (
             "exec_docx",
             "Executive briefing (Word)",
-            f"{base}_Executive.docx",
+            _pb_name("docx", "Executive"),
             DOCX_MIME,
             csf_playbook_export.render_exec_docx(
                 client_name=name,
@@ -1278,7 +1290,7 @@ def export_playbook(
         (
             "full_pdf",
             "Full playbook (PDF)",
-            f"{base}_Full.pdf",
+            _pb_name("pdf", "Full"),
             pdf_mime,
             csf_playbook_export.render_full_pdf(
                 client_name=name,
@@ -1290,7 +1302,7 @@ def export_playbook(
         (
             "full_docx",
             "Full playbook (Word)",
-            f"{base}_Full.docx",
+            _pb_name("docx", "Full"),
             DOCX_MIME,
             csf_playbook_export.render_full_docx(
                 client_name=name,

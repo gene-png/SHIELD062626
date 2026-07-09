@@ -37,6 +37,17 @@ const EXPECTED_ARTIFACTS: Record<string, string> = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 };
 
+// Master Spec §15.5: every download is
+// {Company}_CSF_Playbook{MMDDYY}[_v{n}][_variant].{ext} (T4 routed the
+// 5-file export through deliverable_filename() — no more raw CSF_Playbook_v{n}).
+const NAME_15_5: Record<string, RegExp> = {
+  xlsx: /^[A-Za-z0-9_]+_CSF_Playbook\d{6}(_v\d+)?\.xlsx$/,
+  exec_pdf: /^[A-Za-z0-9_]+_CSF_Playbook\d{6}(_v\d+)?_Executive\.pdf$/,
+  exec_docx: /^[A-Za-z0-9_]+_CSF_Playbook\d{6}(_v\d+)?_Executive\.docx$/,
+  full_pdf: /^[A-Za-z0-9_]+_CSF_Playbook\d{6}(_v\d+)?_Full\.pdf$/,
+  full_docx: /^[A-Za-z0-9_]+_CSF_Playbook\d{6}(_v\d+)?_Full\.docx$/,
+};
+
 const DIM_LABELS = [
   "Governance",
   "Policy & Process",
@@ -352,6 +363,10 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
 
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   for (const artifact of exported.artifacts) {
+    // §15.5: the stored filename carries Company + service + MMDDYY.
+    expect(artifact.filename, `${artifact.kind} §15.5 name`).toMatch(
+      NAME_15_5[artifact.kind],
+    );
     // The panel renders a working download link per artifact...
     await expect(page.getByRole("link", { name: artifact.label })).toBeVisible({
       timeout: 30000,

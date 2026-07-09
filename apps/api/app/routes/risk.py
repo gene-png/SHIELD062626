@@ -51,6 +51,7 @@ from app.schemas.risk import (
 )
 from app.security.rate_limit import RateLimiter, get_rate_limiter
 from app.storage import StorageBackend
+from app.tech_debt.filename import SERVICE_SLUG_RISK_REGISTER, deliverable_filename
 
 router = APIRouter(prefix="/risk", tags=["risk-register"])
 
@@ -335,13 +336,24 @@ def export(
     )
     org = None if client.legal_name == "(pending intake)" else client.legal_name
     ctx = risk_exporters.build_context(client_legal_name=org, version=reg.version, entries=entries)
-    base = f"Risk_Register_v{reg.version}"
+    today = utcnow().date()
+
+    def _rr_name(extension: str) -> str:
+        # §15.5: {Company}_Risk_Register{MMDDYY}[_v{n}].ext
+        return deliverable_filename(
+            company=org,
+            service_slug=SERVICE_SLUG_RISK_REGISTER,
+            extension=extension,
+            day=today,
+            version=reg.version,
+        )
+
     xlsx = _write_artifact(
         db,
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.xlsx",
+        filename=_rr_name("xlsx"),
         mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         data=risk_exporters.render_xlsx(ctx),
     )
@@ -350,7 +362,7 @@ def export(
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.pdf",
+        filename=_rr_name("pdf"),
         mime_type="application/pdf",
         data=risk_exporters.render_pdf(ctx),
     )
@@ -359,7 +371,7 @@ def export(
         storage=storage,
         user=admin,
         client_id=cid,
-        filename=f"{base}.docx",
+        filename=_rr_name("docx"),
         mime_type=DOCX_MIME,
         data=risk_exporters.render_docx(ctx),
     )
