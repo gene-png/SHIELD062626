@@ -41,6 +41,22 @@ async function openFreshDraft(page: Page): Promise<string> {
     page.getByRole("heading", { name: "MITRE ATT&CK Coverage" }),
   ).toBeVisible({ timeout: 30000 });
 
+  // Close any open draft first, then mint. SPRINT_3 T1 added a draft-exists
+  // guard: POST now REUSES an open draft instead of minting a new version, so a
+  // plain POST would hand back the draft s5-attack left on this same service —
+  // one that already had an AI run and so already shows the stale nudge,
+  // breaking the "brand-new draft has no nudge" precondition below. Approving
+  // moves any open DRAFT out of DRAFT (ignored when nothing is open), so the
+  // following POST cuts a genuinely fresh, never-AI-run v+1.
+  const prior = await page.request.get(
+    `/api/proxy/attack/services/${attackServiceId}/assessments/latest`,
+  );
+  if (prior.ok()) {
+    const p = (await prior.json()) as { id: string; status: string };
+    if (p.status === "draft") {
+      await page.request.post(`/api/proxy/attack/assessments/${p.id}/approve`);
+    }
+  }
   const created = await page.request.post(
     `/api/proxy/attack/services/${attackServiceId}/assessments`,
   );
