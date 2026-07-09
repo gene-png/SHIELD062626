@@ -27,6 +27,7 @@ from app.audit import audit
 from app.config import get_settings
 from app.db.session import get_db
 from app.dependencies import current_user
+from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.client import Client
 from app.models.client_domain import ClientDomain
@@ -49,6 +50,8 @@ from app.security.password import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+log = get_logger("app.routes.auth")
+
 # Precomputed Argon2 hash for the unknown-user code path. Keeps wrong-email
 # response time comparable to wrong-password response time so an attacker
 # can't enumerate accounts by timing (OWASP A07 hardening).
@@ -68,10 +71,27 @@ def _normalize_email(raw: str) -> str:
     return raw.strip().lower()
 
 
-def _issue_pair(user: User) -> TokenPairResponse:
-    access_token, access_payload = issue_token(subject=user.id, role=user.role.value, typ="access")
+def _issue_pair(user: User, *, auth_time: datetime | None = None) -> TokenPairResponse:
+    """Issue an access + refresh pair and record the refresh jti for rotation.
+
+    On a fresh login/register pass `auth_time=None` (defaults to now). On
+    refresh pass the original login time so the forced-reauth ceiling anchors
+    to the login, not the refresh. The refresh token's jti is stored on the
+    user as the single valid one; any previously issued refresh token is thereby
+    rotated out (its jti no longer matches).
+    """
+    access_token, access_payload = issue_token(
+        subject=user.id, role=user.role.value, typ="access", auth_time=auth_time
+    )
     refresh_token, refresh_payload = issue_token(
-        subject=user.id, role=user.role.value, typ="refresh"
+        subject=user.id, role=user.role.value, typ="refresh", auth_time=auth_time
+    )
+    user.active_refresh_jti = str(refresh_payload.jti)
+    log.info(
+        "auth.tokens_issued",
+        user_id=str(user.id),
+        refresh_jti=str(refresh_payload.jti),
+        auth_time=refresh_payload.auth_time.isoformat() if refresh_payload.auth_time else None,
     )
     return TokenPairResponse(
         access_token=access_token,
@@ -316,6 +336,7 @@ def refresh(
     body: RefreshRequest,
     db: Annotated[Session, Depends(get_db)],
 ) -> TokenPairResponse:
+    settings = get_settings()
     try:
         payload = verify_token(body.refresh_token, expected_type="refresh")
     except TokenError as exc:
@@ -330,7 +351,48 @@ def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is no longer active.",
         )
-    return _issue_pair(user)
+
+    # (a) Forced re-auth ceiling. Checked before rotation: once a session is
+    # past the ceiling the user must sign in fresh regardless of rotation state.
+    # A token with no auth_time claim predates this control and expires within
+    # the short refresh TTL, so we cannot (and need not) enforce a ceiling on it.
+    if payload.auth_time is not None:
+        age = utcnow() - payload.auth_time
+        if age.total_seconds() > settings.shield_forced_reauth_seconds:
+            log.info(
+                "auth.reauth_required",
+                user_id=str(user.id),
+                auth_time=payload.auth_time.isoformat(),
+                age_seconds=int(age.total_seconds()),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "reason": "reauth_required",
+                    "message": "Your session has reached its daily limit. Please sign in again.",
+                },
+            )
+
+    # (b) Rotation. Only the single most recently issued refresh token is valid;
+    # a replayed (already-rotated) token no longer matches and is rejected loudly.
+    if user.active_refresh_jti != str(payload.jti):
+        log.warning(
+            "auth.refresh_reused",
+            user_id=str(user.id),
+            presented_jti=str(payload.jti),
+            active_jti=user.active_refresh_jti,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "reason": "refresh_reused",
+                "message": "This session has been superseded. Please sign in again.",
+            },
+        )
+
+    tokens = _issue_pair(user, auth_time=payload.auth_time)
+    db.commit()
+    return tokens
 
 
 @router.post(

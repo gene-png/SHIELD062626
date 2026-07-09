@@ -134,7 +134,7 @@ cd e2e && npx playwright test smoke/s15-headers.spec.ts   # one spec
 Per Master Spec §2, two risks are explicitly accepted for v1:
 
 1. **Commercial LLM provider may not be FedRAMP-authorized.** Egress may leave the FedRAMP boundary. Mandatory PII redaction (`apps/api/app/ai/redact.py`) is the primary control. See [`docs/security.md`](docs/security.md).
-2. **MFA and email verification deferred for v1.** Compensating controls: 15-minute JWT lifetime, 30-minute idle timeout, daily forced re-auth, account lockout after 10 failed attempts in 15 minutes. Feature flags (`SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`) enable both in v1.x with no code changes.
+2. **MFA and email verification deferred for v1.** Compensating controls that are actually enforced: 15-minute access-token lifetime; a 30-minute refresh-token TTL that functions as the idle timeout (an idle session cannot refresh past it); a daily (24h) forced re-auth ceiling enforced at `/auth/refresh` via an `auth_time` claim (typed 401 `reason=reauth_required`, tunable with `SHIELD_FORCED_REAUTH_SECONDS`); single-use refresh-token rotation (a replayed/rotated-out refresh token is rejected, `reason=refresh_reused`); and account lockout after 10 failed attempts in 15 minutes. The MFA and email-verification **flows do not exist yet** — the `SHIELD_AUTH_REQUIRE_MFA` / `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` flags therefore **fail loudly at startup** if set true (the app refuses to boot rather than silently pretend a control is active); wiring the flows up is planned for a later sprint.
 
 ## License
 

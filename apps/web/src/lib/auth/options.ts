@@ -12,6 +12,7 @@ import type { JWT } from "next-auth/jwt";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 import { ApiError, apiFetch } from "@/lib/api";
+import { REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
 
 interface LoginResponse {
   access_token: string;
@@ -26,14 +27,29 @@ type RefreshResponse = LoginResponse;
 /** Refresh this many ms early so an in-flight proxy call never races expiry. */
 const REFRESH_SKEW_MS = 30_000;
 
+/** Pull the typed `reason` out of the backend's {error:{reason}} envelope. */
+function reasonOf(payload: unknown): string | undefined {
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const err = (payload as { error?: unknown }).error;
+    if (err && typeof err === "object" && "reason" in err) {
+      const reason = (err as { reason?: unknown }).reason;
+      return typeof reason === "string" ? reason : undefined;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Trade the stored refresh token for a fresh access+refresh pair.
  *
  * The backend access token lives 15 min while the NextAuth session lives
  * 24 h, so without this the session keeps handing proxies a dead bearer and
- * every upstream call 401s. On failure (e.g. the 30-min refresh TTL lapsed
- * while idle) we stamp the token with an error so `session()` stops exposing
- * the access token and the UI falls back to sign-in.
+ * every upstream call 401s. On failure we stamp the token with an error so
+ * `session()` stops exposing the access token and the UI falls back to
+ * sign-in. A backend `reauth_required` / `refresh_reused` reason (daily
+ * forced-reauth ceiling, or a rotated-out token) is surfaced as the distinct
+ * REAUTH_REQUIRED_ERROR so the UI can show friendly "please sign in again"
+ * copy rather than a generic error.
  */
 async function refreshAccessToken(token: JWT): Promise<JWT> {
   if (!token.refreshToken) {
@@ -53,8 +69,14 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
       accessExpiresAt: refreshed.access_expires_at,
       error: undefined,
     };
-  } catch {
-    return { ...token, error: "RefreshAccessTokenError" };
+  } catch (err) {
+    const reason = err instanceof ApiError ? reasonOf(err.payload) : undefined;
+    const isReauth =
+      reason === "reauth_required" || reason === "refresh_reused";
+    return {
+      ...token,
+      error: isReauth ? REAUTH_REQUIRED_ERROR : "RefreshAccessTokenError",
+    };
   }
 }
 

@@ -274,3 +274,44 @@ was needed (s13 find-or-creates `beacon.example` itself).
 
 **Ref:** SPRINT_2.md T9; DECISIONS D-016 (typed-error pattern); D-004/B1
 (domain-gated registration); `email-validator` `SPECIAL_USE_DOMAIN_NAMES`.
+
+## D-020 — Auth compensating controls: enforce the real ones, retract the fiction
+
+**2026-07-09 · admin**
+README §Risk-acceptance and BUILD_REPORT A07 claimed "30-minute idle timeout"
+and "daily forced re-auth" as MFA offsets, and said the deferred
+`SHIELD_AUTH_REQUIRE_MFA` / `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` flags "enable
+both in v1.x with no code changes". None of that was true: the reauth/idle
+config knobs were referenced nowhere and `/auth/refresh` re-issued token pairs
+indefinitely with no rotation or ceiling. Sprint 3 T2 makes the claims honest:
+
+- **Forced re-auth ceiling (real):** access + refresh tokens now carry an
+  `auth_time` claim (original login time) that rides forward unchanged across
+  refreshes. `/auth/refresh` rejects a refresh whose session age exceeds
+  `SHIELD_FORCED_REAUTH_SECONDS` (default 24h) with a typed 401
+  `reason=reauth_required` (D-016 envelope).
+- **Refresh-token rotation (real):** each refresh mints a new refresh token and
+  stores its jti on the user (`users.active_refresh_jti`, additive/nullable
+  migration 0026, C0). Only the most recently issued refresh token is valid; a
+  replayed/rotated-out token is rejected `reason=refresh_reused`. This is a
+  **single active session per user** posture — a new login supersedes the prior
+  session's refresh token. Acceptable for a consultant-led tool; revisit if
+  concurrent multi-device sessions become a requirement.
+- **Idle timeout (documented, not new machinery):** the 30-minute refresh-token
+  TTL already IS the idle timeout — an idle session cannot refresh past it. We
+  document that rather than invent a second timer.
+- **Dead flags fail loudly:** `assert_safe_for_runtime` now refuses to boot if
+  `SHIELD_AUTH_REQUIRE_MFA` or `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` is true,
+  because the enrollment/challenge and email-verification flows do not exist.
+  Silently ignoring a security flag is worse than refusing to start.
+- **Web:** the NextAuth refresh callback surfaces the reauth/rotation reasons as
+  a distinct `REAUTH_REQUIRED_ERROR`; a `SessionExpiryGuard` clears the dead
+  session and routes to `/sign-in?reason=session_expired` with friendly copy.
+
+**Why DB rotation, not Redis:** a jti denylist in Redis (T3's territory) would
+also work, but the rotating-pair check needs only one nullable column, is fully
+testable under the SQLite unit suite with no Redis dependency, and survives
+restarts/multi-worker without an outage fail-open/closed dilemma.
+
+**Ref:** SPRINT_3.md T2; DECISIONS D-016 (typed errors); migration 0026;
+`app/config.py`, `app/security/jwt.py`, `app/routes/auth.py`.

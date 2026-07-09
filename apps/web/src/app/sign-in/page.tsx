@@ -9,7 +9,12 @@ export const metadata: Metadata = {
   title: "Sign in",
 };
 
-export default function SignInPage(): JSX.Element {
+export default function SignInPage({
+  searchParams,
+}: {
+  searchParams?: { reason?: string };
+}): JSX.Element {
+  const sessionExpired = searchParams?.reason === "session_expired";
   return (
     <>
       <PublicHeader />
@@ -21,6 +26,15 @@ export default function SignInPage(): JSX.Element {
             the v1.x roadmap.
           </p>
         </header>
+        {sessionExpired ? (
+          <div
+            role="status"
+            className="rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-sm text-status-warning-fg"
+          >
+            For your security, your session ended and you&apos;ll need to sign
+            in again.
+          </div>
+        ) : null}
         <Suspense
           fallback={
             <div aria-busy="true" className="text-sm text-ink-tertiary">

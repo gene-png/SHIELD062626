@@ -56,3 +56,10 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
     last_failed_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_until_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Refresh-token rotation (Sprint 3 T2): the jti of the single currently
+    # valid refresh token. Each /auth/refresh mints a new refresh token and
+    # overwrites this, so a replayed (already-rotated) refresh token no longer
+    # matches and is rejected. Nullable/additive (C0): pre-migration rows and
+    # any user who has not yet logged in simply have no active refresh token.
+    active_refresh_jti: Mapped[str | None] = mapped_column(String(36))

@@ -92,6 +92,21 @@ class Settings(BaseSettings):
             )
         if self.is_production() and self.jwt_signing_secret.startswith("dev-only"):
             raise RuntimeError("JWT_SIGNING_SECRET is still the default placeholder in production.")
+        # Fail loudly on dead feature flags. The MFA and email-verification
+        # flows do not exist yet (Master Spec §2 deferred them); flipping the
+        # flag true used to silently do nothing, which is worse than refusing —
+        # an operator would believe a control is active when it is not. Refuse
+        # to boot until the flows land (Sprint 5+).
+        if self.shield_auth_require_mfa:
+            raise RuntimeError(
+                "SHIELD_AUTH_REQUIRE_MFA=true but no MFA enrollment/challenge flow "
+                "exists yet. Refusing to start rather than silently ignore the flag."
+            )
+        if self.shield_auth_require_email_verify:
+            raise RuntimeError(
+                "SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=true but no email-verification flow "
+                "exists yet. Refusing to start rather than silently ignore the flag."
+            )
 
 
 @lru_cache(maxsize=1)
