@@ -9,8 +9,9 @@ Two surfaces are protected:
     so one tenant cannot exhaust the shared AI budget.
 
 Counters live in Redis (composed, previously idle — D-015 Part F). The window
-is a plain fixed window: ``INCR`` the key, and set the TTL only when the key is
-first created.
+is a plain fixed window: ``INCR`` the key and arm the TTL, both in one atomic
+MULTI/EXEC. ``EXPIRE ... NX`` sets the TTL only when the key has none, so the
+first hit fixes the window and later hits leave it untouched.
 
 FAIL-OPEN, loudly: if Redis is unreachable the request is ALLOWED and a warning
 is logged. An infra blip must never brick authentication. Every other failure
@@ -72,12 +73,17 @@ class RedisRateLimitBackend:
         import redis
 
         try:
-            count = int(self._client.incr(key))
-            if count == 1:
-                # First hit in this window — arm the TTL so the window rolls
-                # over. Subsequent hits leave the existing TTL untouched.
-                self._client.expire(key, window_seconds)
-            return count
+            # INCR and the TTL arm run in ONE MULTI/EXEC transaction: a mid-call
+            # outage can never leave a key counting up forever with no expiry
+            # (which would be a permanent lockout — the opposite of fail-open).
+            # EXPIRE ... NX only arms the TTL when the key has none, so the
+            # first hit sets the fixed window and later hits leave it untouched
+            # (and a key that somehow lost its TTL self-heals on the next hit).
+            pipe = self._client.pipeline(transaction=True)
+            pipe.incr(key)
+            pipe.expire(key, window_seconds, nx=True)
+            count, _armed = pipe.execute()
+            return int(count)
         except redis.RedisError as exc:  # pragma: no cover - exercised via fake in tests
             raise RateLimitBackendError(str(exc)) from exc
 

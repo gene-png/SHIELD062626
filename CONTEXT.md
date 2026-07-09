@@ -39,12 +39,24 @@ in `SPRINT_<n>.md`._
 | T4 | Spec §15.5 filenames for CSF Playbook + Risk Register exports | `b14ccd5` |
 | T5 | `llm_calls.client_id` tenant attribution (migration 0027, C0) | `cea0c5a` |
 | T6 | Docs truth pass: architecture rewrite, reviewer purge, DECISIONS dedupe | `aeac503` |
-| T7 | Loop hygiene + wrap-up (prettier gate, SMOKE_TEST sync, this snapshot) | this commit |
+| T7 | Loop hygiene + wrap-up (prettier gate, SMOKE_TEST sync, snapshot) | `a4ff3dd` |
+| — | Final audit + CONTEXT refresh (rate-limiter atomicity fix, coverage) | this commit |
 
 New migrations this sprint: `0026` (`users.active_refresh_jti`, T2), `0027`
 (`llm_calls.client_id`, T5) — both additive/SQLite-safe (C0). New DECISIONS:
 **D-020** (auth posture), **D-021** + erratum **D-022** (duplicate-D-015 dedupe),
 **D-023** (D-005/D-006 reviewer-role + release-flow supersession).
+
+The closing audit (this commit) found one real hardening item and fixed it:
+the T3 Redis limiter armed the window TTL with a **separate** `EXPIRE` after
+`INCR`, so a Redis error landing between the two calls could leave a key
+counting up forever with no expiry — a permanent lockout, the opposite of the
+module's fail-open promise. It now runs `INCR` + `EXPIRE … NX` in one
+`MULTI/EXEC`, self-healing and window-preserving. Coverage grew to match: an
+atomic-TTL test, a route-dependency 429 test for the run-AI path, and a
+`client_id` assertion on the tech_debt extract call site (the one egress path
+that bypasses `run_job`). Spec-compliance and security sub-audits came back
+clean — no other code changes.
 
 ## Machine-local facts (this box)
 
@@ -90,7 +102,8 @@ New migrations this sprint: `0026` (`users.active_refresh_jti`, T2), `0027`
 
 - Backend: full `pytest -m unit` green in-container (engines, cross-tenant
   isolation, AI fixtures, draft guards for CSF/attack/zt, auth reauth+rotation,
-  rate limiter incl. fail-open, deliverable filenames, llm_call attribution).
+  rate limiter incl. fail-open + atomic-TTL arming + run-AI dependency 429,
+  deliverable filenames, llm_call attribution incl. the tech_debt extract path).
   Note: the `integration` pytest marker is declared but unused; there is no
   `pnpm test` script (documented in T6's docs pass).
 - Web: `tsc --noEmit` clean.

@@ -54,6 +54,64 @@ class _BrokenBackend:
         raise RateLimitBackendError("redis is down")
 
 
+class _FakePipeline:
+    """Models a redis-py MULTI/EXEC pipeline over the shared store."""
+
+    def __init__(self, store: dict[str, int], ttls: dict[str, int]) -> None:
+        self._store = store
+        self._ttls = ttls
+        self._ops: list[tuple] = []
+
+    def incr(self, key: str) -> "_FakePipeline":
+        self._ops.append(("incr", key))
+        return self
+
+    def expire(self, key: str, seconds: int, nx: bool = False) -> "_FakePipeline":
+        self._ops.append(("expire", key, seconds, nx))
+        return self
+
+    def execute(self) -> list:
+        results: list = []
+        for op in self._ops:
+            if op[0] == "incr":
+                self._store[op[1]] = self._store.get(op[1], 0) + 1
+                results.append(self._store[op[1]])
+            else:
+                _, key, seconds, nx = op
+                if nx and key in self._ttls:
+                    results.append(False)  # NX: TTL already set, leave it
+                else:
+                    self._ttls[key] = seconds
+                    results.append(True)
+        return results
+
+
+class _FakeRedis:
+    """A minimal Redis stand-in that ONLY exposes the atomic pipeline path.
+
+    Standalone ``incr``/``expire`` raise, so any non-atomic INCR-then-EXPIRE
+    implementation fails this fake — the counter and its TTL must be armed in a
+    single MULTI/EXEC so a mid-call outage can never leave a key incrementing
+    forever without an expiry (the fail-open promise).
+    """
+
+    def __init__(self) -> None:
+        self.store: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+
+    def pipeline(self, transaction: bool = True) -> _FakePipeline:
+        return _FakePipeline(self.store, self.ttls)
+
+    def ttl(self, key: str) -> int:
+        return self.ttls.get(key, -1)
+
+    def incr(self, key: str) -> int:  # pragma: no cover - guard
+        raise AssertionError("must arm counter + TTL atomically via pipeline, not standalone incr")
+
+    def expire(self, key: str, seconds: int, nx: bool = False) -> bool:  # pragma: no cover - guard
+        raise AssertionError("must arm TTL atomically via pipeline, not a standalone expire")
+
+
 # -----------------------------------------------------------------------------
 # Core limiter behaviour
 # -----------------------------------------------------------------------------
@@ -113,6 +171,27 @@ def test_fail_open_when_backend_unavailable(capsys) -> None:
 
 
 @pytest.mark.unit
+def test_redis_backend_arms_ttl_atomically_with_the_counter() -> None:
+    """The counter and its TTL are set in one atomic op, TTL armed only once.
+
+    A non-atomic INCR-then-EXPIRE could crash between the two calls and leave a
+    key counting up forever with no expiry — a permanent lockout that violates
+    the module's fail-open promise. The window TTL must also survive subsequent
+    hits (fixed window), not reset on every request.
+    """
+    from app.security.rate_limit import RedisRateLimitBackend
+
+    fake = _FakeRedis()
+    backend = RedisRateLimitBackend(fake)
+
+    assert backend.incr("k", 60) == 1
+    assert fake.ttl("k") == 60  # TTL armed alongside the very first count
+
+    assert backend.incr("k", 60) == 2
+    assert fake.ttl("k") == 60  # fixed window preserved — NX kept the original
+
+
+@pytest.mark.unit
 def test_enforce_ai_blocks_per_client_after_limit() -> None:
     import uuid
 
@@ -131,6 +210,30 @@ def test_enforce_ai_blocks_per_client_after_limit() -> None:
         limiter.enforce_ai(cid)
     assert exc_info.value.status_code == 429
     assert exc_info.value.detail["reason"] == "rate_limited"
+
+
+@pytest.mark.unit
+def test_enforce_ai_rate_limit_dependency_yields_typed_429() -> None:
+    """The dependency wired onto the run-AI routes (csf/zt/attack/tech_debt)
+    throttles per resolved tenant and raises the D-016 typed 429 over limit."""
+    import uuid
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from app.config import Settings
+    from app.security.rate_limit import RateLimiter, enforce_ai_rate_limit
+
+    settings = Settings(shield_rate_limit_ai_max=1, shield_rate_limit_ai_window_seconds=60)
+    limiter = RateLimiter(_FakeBackend(), settings)
+    client = SimpleNamespace(id=uuid.uuid4())
+
+    enforce_ai_rate_limit(client=client, limiter=limiter)  # first call within budget
+    with pytest.raises(HTTPException) as exc_info:
+        enforce_ai_rate_limit(client=client, limiter=limiter)
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail["reason"] == "rate_limited"
+    assert exc_info.value.headers["Retry-After"] == "60"
 
 
 @pytest.mark.unit
