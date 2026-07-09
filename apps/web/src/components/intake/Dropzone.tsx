@@ -75,8 +75,7 @@ export function Dropzone({
           err instanceof ArtifactUploadError
             ? (() => {
                 const payload = err.payload as
-                  | { error?: { message?: string }; detail?: string }
-                  | undefined;
+                  { error?: { message?: string }; detail?: string } | undefined;
                 return (
                   payload?.error?.message ??
                   payload?.detail ??

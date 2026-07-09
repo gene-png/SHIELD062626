@@ -114,8 +114,7 @@ export function TechDebtWorkspace({
     } catch (err) {
       if (err instanceof TechDebtProxyError) {
         const payload = err.payload as
-          | { error?: { message?: string }; detail?: string }
-          | undefined;
+          { error?: { message?: string }; detail?: string } | undefined;
         setExtractError(
           payload?.error?.message ??
             payload?.detail ??
