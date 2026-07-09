@@ -513,6 +513,7 @@ def run_ai(
         inputs={"capability_list": tools, "technique_codes": sorted(rows)},
         requested_by=user.id,
         service_id=svc.id,
+        client_id=client.id,
         client_org_name=client_org,
     )
 

@@ -171,6 +171,7 @@ def extract_capability_list(
             artifact=artifact,
             requested_by=user,
             service_id=svc.id,
+            client_id=client.id,
             client_org_name=client_org_name_for_tenant(db, client.id),
             name_hints=name_hints_for_tenant(db, client.id),
             llm=llm,

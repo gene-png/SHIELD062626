@@ -1129,6 +1129,7 @@ def run_ai(
         },
         requested_by=user.id,
         service_id=svc.id,
+        client_id=client.id,
         client_org_name=client_org,
     )
     data = result.data if isinstance(result.data, dict) else {}

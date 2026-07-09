@@ -220,6 +220,7 @@ def generate(
             "valid_controls": sorted(valid_controls),
         },
         requested_by=admin.id,
+        client_id=cid,
         client_org_name=client_org,
     )
     data = result.data if isinstance(result.data, dict) else {}
