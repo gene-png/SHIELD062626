@@ -19,7 +19,7 @@ export default function AssessmentsPage(): JSX.Element {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto max-w-6xl px-6 py-10 outline-none"
+        className="mx-auto max-w-6xl px-6 py-10 outline-hidden"
       >
         <AssessmentsView />
       </main>

@@ -180,7 +180,7 @@ export function ZtQuestionnaire({
                         if (v === (ans.notes ?? "")) return;
                         void onAnswerUpdate(ans.id, { notes: v });
                       }}
-                      className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-none"
+                      className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-hidden"
                       placeholder="Evidence, references, exceptions…"
                     />
                   </details>

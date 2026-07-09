@@ -105,7 +105,7 @@ export function ToastProvider({
               <button
                 type="button"
                 aria-label="Dismiss notification"
-                className="text-sm font-medium opacity-70 hover:opacity-100 focus:outline-none focus-visible:opacity-100"
+                className="text-sm font-medium opacity-70 hover:opacity-100 focus:outline-hidden focus-visible:opacity-100"
                 onClick={() => dismiss(t.id)}
               >
                 ✕

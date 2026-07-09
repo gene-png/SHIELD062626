@@ -59,10 +59,10 @@ export function Field({
 }
 
 export const inputClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg";
 
 export const textareaClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg min-h-[7rem] resize-vertical";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg min-h-[7rem] resize-vertical";
 
 export const selectClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg";

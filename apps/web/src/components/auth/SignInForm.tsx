@@ -52,7 +52,7 @@ export function SignInForm(): JSX.Element {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none"
+          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden"
           placeholder="you@example.gov"
         />
       </div>
@@ -71,7 +71,7 @@ export function SignInForm(): JSX.Element {
           minLength={1}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-none"
+          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden"
         />
       </div>
       {error ? (

@@ -151,7 +151,7 @@ export function AttackTechniquePanel({
               if (v === (coverage?.notes ?? "")) return;
               void onPatch({ notes: v });
             }}
-            className="w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-hidden"
           />
         </label>
 

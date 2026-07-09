@@ -104,7 +104,7 @@ export function AdminShell({
           <main
             id="main-content"
             tabIndex={-1}
-            className="mx-auto w-full max-w-6xl px-6 py-8 outline-none"
+            className="mx-auto w-full max-w-6xl px-6 py-8 outline-hidden"
           >
             {children}
           </main>
