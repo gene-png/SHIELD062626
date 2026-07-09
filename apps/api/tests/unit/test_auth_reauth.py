@@ -110,9 +110,7 @@ def test_refresh_within_window_carries_auth_time_forward(app_client: TestClient)
     body = _register(app_client)
     original = verify_token(body["tokens"]["refresh_token"], expected_type="refresh")
 
-    r = app_client.post(
-        "/auth/refresh", json={"refresh_token": body["tokens"]["refresh_token"]}
-    )
+    r = app_client.post("/auth/refresh", json={"refresh_token": body["tokens"]["refresh_token"]})
     assert r.status_code == 200, r.text
     rotated = verify_token(r.json()["refresh_token"], expected_type="refresh")
 
