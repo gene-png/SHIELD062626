@@ -25,11 +25,18 @@ to Sprint 5 candidates.
 
 ## Prerequisites / launch checklist (human)
 
+0. New machine or new developer? Do ONBOARDING.md first (Docker, Node, gh,
+   e2e deps, seeded stack — zero-to-loop).
 1. Merge the sprint-3 planning PR (this doc + queue + audit report).
 2. `git checkout -b fix/audit-correctness-sprint-3 main` BEFORE the first fire.
 3. `mv .claude/sprint-queue.json .claude/sprint-queue.sprint-2.done.json`
-   then copy `.claude/sprint-queue.sprint-3.json` to `.claude/sprint-queue.json`.
-4. Invoke `/loop-sprint-cron`.
+   (if a prior runtime queue exists) then COPY
+   `.claude/sprint-queue.sprint-3.json` to `.claude/sprint-queue.json`.
+4. In your runtime copy (`.claude/sprint-queue.json` — gitignored,
+   machine-local), set `working_dir` to YOUR absolute repo path and
+   `expected_gh_user` to YOUR GitHub login. The loop preflight halts on
+   either being wrong.
+5. Invoke `/loop-sprint-cron`.
 5. AFTER T0 lands: SMOKE_TEST §14 (live-AI run) is finally meaningful — do it
    then, not before (T0 fixes the bug that would have failed it).
 6. Needs-David inputs, non-blocking: the v2 Developer Work Order document for
