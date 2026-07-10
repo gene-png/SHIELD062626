@@ -48,19 +48,36 @@ export function MessageThread({
   const [sending, setSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Monotonic request sequence: only the newest messages GET may write state.
+  // Without this, a slow mount-time load (StrictMode duplicates, next-dev
+  // queuing) resolving AFTER onSend's optimistic append calls setMessages(rows)
+  // and clobbers the just-sent message — the T8 stale-fetch race. onSend bumps
+  // the sequence when it appends, so any in-flight GET is discarded on arrival.
+  const reqSeq = React.useRef(0);
+
   const load = React.useCallback(async () => {
-    try {
-      const { messages: rows } = await fetchMessages(serviceId);
+    const seq = ++reqSeq.current;
+    const { messages: rows } = await fetchMessages(serviceId);
+    if (seq === reqSeq.current) {
       setMessages(rows);
-    } catch (err) {
-      setError(describeMessagesError(err));
-    } finally {
-      setLoading(false);
+      console.debug(`[MessageThread] messages applied (seq ${seq})`);
+    } else {
+      console.debug(
+        `[MessageThread] discarded stale messages response (seq ${seq}, latest ${reqSeq.current})`,
+      );
     }
   }, [serviceId]);
 
   React.useEffect(() => {
-    void load();
+    (async () => {
+      try {
+        await load();
+      } catch (err) {
+        setError(describeMessagesError(err));
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [load]);
 
   async function onSend(): Promise<void> {
@@ -70,6 +87,9 @@ export function MessageThread({
     setError(null);
     try {
       const created = await postMessage(serviceId, text);
+      // Invalidate any in-flight mount/reload GET: its late setMessages(rows)
+      // would clobber this append and hide the just-sent message (T8 race).
+      reqSeq.current += 1;
       setMessages((prev) => [...prev, created]);
       setDraft("");
     } catch (err) {
