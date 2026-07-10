@@ -7,12 +7,12 @@ is `context/<your-name>.md` (create it from the template in `context/`)._
 
 ## 1. Prerequisites (install once)
 
-| Tool           | How                                                       | Notes                                                                              |
-| -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Docker Desktop | docker.com installer                                      | The whole stack runs in compose; first `up` pulls ~2 GB                            |
-| Node.js LTS    | `winget install OpenJS.NodeJS.LTS --scope user` (Windows) | Host-run Playwright + prettier. `--scope user` needs no admin; new shells get PATH |
-| GitHub CLI     | `winget install GitHub.cli --scope user`                  | Then `gh auth login` → github.com → HTTPS → browser, with YOUR personal account    |
-| Git            | you have it                                               | Credential Manager stores your push identity on first push                         |
+| Tool           | How                                                       | Notes                                                                                                                                          |
+| -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop | docker.com installer                                      | The whole stack runs in compose; first `up` pulls ~2 GB                                                                                        |
+| Node.js 22 LTS | `winget install OpenJS.NodeJS.LTS --scope user` (Windows) | Host-run Playwright + prettier. The stack runs Node 22 (Docker + CI); match it on the host. `--scope user` needs no admin; new shells get PATH |
+| GitHub CLI     | `winget install GitHub.cli --scope user`                  | Then `gh auth login` → github.com → HTTPS → browser, with YOUR personal account                                                                |
+| Git            | you have it                                               | Credential Manager stores your push identity on first push                                                                                     |
 
 Windows PATH gotchas (this repo's docs assume them): Docker CLI is not on Git
 Bash PATH (`export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"`

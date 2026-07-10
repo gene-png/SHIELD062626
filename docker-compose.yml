@@ -187,7 +187,7 @@ services:
 
   web:
     restart: unless-stopped
-    image: node:20-bookworm
+    image: node:22-bookworm
     working_dir: /app
     environment:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
