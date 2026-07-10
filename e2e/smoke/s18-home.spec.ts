@@ -26,8 +26,6 @@ import { adminApiToken, API_BASE } from "../helpers/ids";
  * bytes in the live object store, which only runtime-finalized deliverables get.
  */
 
-const TENANT_NAME = "Home QA";
-const TENANT_DOMAIN = "homeqa.example";
 const PASSWORD = "correct horse battery staple!";
 
 interface ClientRow {
@@ -48,37 +46,38 @@ function tenantHeaders(
   return { Authorization: `Bearer ${token}`, "X-Client-Id": clientId };
 }
 
-/** Find-or-create the throwaway "Home QA" tenant with an approved domain. */
-async function ensureHomeTenant(
+/**
+ * Create a FRESH throwaway tenant (unique name + domain) with an approved
+ * domain, and return its id and domain.
+ *
+ * This test asserts the hero-ABSENT "guidance before a report" state and then
+ * releases a deliverable into the same tenant. A persistent find-or-create
+ * tenant (the s17 pattern) cannot serve both: the release from a prior run
+ * persists, so a later run's fresh client would see the hero, not guidance.
+ * A domain binds to exactly one client, so the tenant AND its domain must both
+ * be unique per run for registration to route the new client into the fresh,
+ * release-free tenant.
+ */
+async function createHomeTenant(
   request: APIRequestContext,
   token: string,
-): Promise<string> {
+): Promise<{ clientId: string; domain: string }> {
   const auth = { Authorization: `Bearer ${token}` };
-  const listed = await request.get(`${API_BASE}/admin/clients`, {
+  const stamp = Date.now();
+  const legalName = `Home QA ${stamp}`;
+  const domainName = `homeqa-${stamp}.example`;
+  const created = await request.post(`${API_BASE}/admin/clients`, {
     headers: auth,
+    data: { legal_name: legalName },
   });
-  expect(listed.ok()).toBeTruthy();
-  const clients = ((await listed.json()) as { clients: ClientRow[] }).clients;
-  let tenant = clients.find(
-    (c) => c.legal_name.toLowerCase() === TENANT_NAME.toLowerCase(),
-  );
-  if (!tenant) {
-    const created = await request.post(`${API_BASE}/admin/clients`, {
-      headers: auth,
-      data: { legal_name: TENANT_NAME },
-    });
-    expect(created.ok()).toBeTruthy();
-    tenant = (await created.json()) as ClientRow;
-  }
+  expect(created.ok(), `create tenant (${created.status()})`).toBeTruthy();
+  const tenant = (await created.json()) as ClientRow;
   const domain = await request.post(
     `${API_BASE}/admin/clients/${tenant.id}/domains`,
-    { headers: auth, data: { domain: TENANT_DOMAIN } },
+    { headers: auth, data: { domain: domainName } },
   );
-  expect(
-    domain.status() === 201 || domain.status() === 409,
-    `approve ${TENANT_DOMAIN}: ${domain.status()}`,
-  ).toBeTruthy();
-  return tenant.id;
+  expect(domain.status(), `approve ${domainName}`).toBe(201);
+  return { clientId: tenant.id, domain: domainName };
 }
 
 /** Finalize a fresh CSF deliverable in the tenant and release it. */
@@ -129,10 +128,10 @@ test.describe("s18 /home — client dashboard hero states + role landing", () =>
   }) => {
     test.slow();
     const token = await adminApiToken(request);
-    const clientId = await ensureHomeTenant(request, token);
+    const { clientId, domain } = await createHomeTenant(request, token);
 
     // A real client of this tenant self-registers (auto signed-in).
-    await register(page, "Hank Home", uniqueEmail(TENANT_DOMAIN), PASSWORD);
+    await register(page, "Hank Home", uniqueEmail(domain), PASSWORD);
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
       timeout: 20000,
     });
