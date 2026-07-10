@@ -59,12 +59,36 @@ roll-up Rules 2/5 and `is_core` stop using safe defaults; refresh stale docs
 (branch creation, queue swap, demo-DB wipe warning) before invoking
 `/loop-sprint-cron`.
 
-## Sprint 3 — Production runway
+## Sprint 3 — Audit correctness & honesty (COMPLETE 2026-07-09, PR #26)
 
-Goal: `infra/terraform` skeleton for AWS GovCloud / Azure Government
-(**blocked on David: account/region/network decisions**); MFA + email-verify
-feature-flag enablement plan; FedRAMP-authorized LLM connector evaluation;
-production deploy runbook. Timing depends on Kentro's infra decisions.
+(The "production runway" sprint originally sketched here was re-scoped; infra
+remains gated on David — see the needs-David track.) Actual Sprint 3 burned
+down the 2026-07-08 deep repo audit: CSF live-mode Run-AI schema align, real
+forced-reauth + refresh rotation, Redis rate limiting, §15.5 export
+filenames, `llm_calls` tenant attribution, docs truth pass. Detail:
+`SPRINT_3.md`.
+
+## Sprint 4 — Framework majors + multi-provider LLM (COMPLETE 2026-07-10, PR #28)
+
+The D-018 majors bundle (Next 15 / React 19 / Tailwind 4 / ESLint 9 flat /
+Node 22; ESLint 10 deferred upstream) executed one major per commit to
+audit-zero, plus OpenAI + Gemini adapters behind the redacting egress seam
+(D-024). Detail: `SPRINT_4.md`.
+
+## Sprint 5 — Client value loop (PLANNED 2026-07-10, not launched)
+
+Goal: the client-facing value surfaces — deliverable release-to-client flow
+(D-025), `/documents` (§6.7), `/home` dashboard (§6.4) + value-loop card
+(§2.5), CSF POA&M step (spec step 10), redaction preview gate, `/admin/audit`
+viewer, vitest harness + react-hooks v6 adoption. Detail: `SPRINT_5.md`.
+Queue staged at `.claude/sprint-queue.sprint-5.json` — see the SPRINT_5.md
+launch checklist before invoking `/loop-sprint-cron`.
+
+## Production runway (unscheduled — gated on David)
+
+`infra/terraform` skeleton for AWS GovCloud / Azure Government (**blocked on
+David: account/region/network decisions**); MFA + email-verify feature-flag
+enablement (D-020); production deploy runbook; DR drills.
 
 ## Needs-David track (not in any sprint queue)
 
