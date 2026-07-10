@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.ai.diff import diff_keyed_rows
 from app.ai.engine import run_job
 from app.ai.llm import LLMClient
+from app.ai.preview import AiPreviewPayload
 from app.audit import audit
 from app.csf import playbook_export as csf_playbook_export
 from app.csf.catalog import (
@@ -1239,25 +1241,29 @@ _DIM_FIELDS = ("governance", "policy", "implementation", "monitoring", "improvem
 _RUN_FIELDS = (*_DIM_FIELDS, "what_we_found")
 
 
-@router.post(
-    "/services/{service_id}/run-ai",
-    response_model=CsfRunAiResponse,
-    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
-)
-def run_ai(
-    service_id: uuid.UUID,
-    user: Annotated[User, _admin_required],
-    client: Annotated[Client, Depends(current_client)],
-    db: Annotated[Session, Depends(get_db)],
-    llm: Annotated[LLMClient, Depends(_llm_dep)],
-    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
-) -> CsfRunAiResponse:
-    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
-    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
-    rows are untouched; code does the total/level/cap + Enterprise roll-up.
-    Returns a 'what changed' list.
+@dataclass(frozen=True)
+class CsfAiRequest:
+    """Loaded state + outbound payload for the CSF csf_score run-ai job.
+
+    Built once by :func:`build_csf_ai_request`; consumed by both run-ai (which
+    needs ``rows``/``locked_keys`` to apply and diff the suggestions) and the
+    redaction-preview route (which only needs ``.preview``). Single source of the
+    egress payload so preview can never diverge from what actually egresses.
     """
-    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+
+    assessment: CsfAssessment
+    rows: dict[str, CsfDimensionScore]
+    locked_keys: frozenset[str]
+    preview: AiPreviewPayload
+
+
+def build_csf_ai_request(db: Session, svc: Service, client: Client) -> CsfAiRequest:
+    """Load the latest CSF assessment and build the csf_score run-ai payload.
+
+    Raises the same typed 404/409s run-ai does (no assessment / locked / not
+    seeded) so preview and run-ai agree on when a run is even possible. Reads
+    only — never mutates.
+    """
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -1282,17 +1288,11 @@ def run_ai(
         )
     locked_keys = frozenset(k for k, r in rows.items() if r.locked)
 
-    def _snap() -> dict[str, dict]:
-        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
-
-    before = _snap()
     # Ground the suggestion in the client's interview answers + evidence flags,
-    # the way ZT's run-ai does (routes/zt.py). Before Sprint 3 T0 the payload
-    # carried only tier/subcategory codes even though the prompt claimed the
-    # answers were supplied. Only answers with actual signal are sent (a scored
-    # tier, notes, or attached evidence) so the model sees what the analyst
-    # captured rather than ~106 empty rows. The payload goes through the
-    # redactor (nested note strings included) as designed.
+    # the way ZT's run-ai does (routes/zt.py). Only answers with actual signal
+    # are sent (a scored tier, notes, or attached evidence) so the model sees
+    # what the analyst captured rather than ~106 empty rows. The payload goes
+    # through the redactor (nested note strings included) as designed.
     answer_rows = (
         db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     )
@@ -1306,19 +1306,58 @@ def run_ai(
         if ans.maturity_tier is not None or ans.notes or ans.evidence_artifact_id is not None
     }
     client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    return CsfAiRequest(
+        assessment=a,
+        rows=rows,
+        locked_keys=locked_keys,
+        preview=AiPreviewPayload(
+            job_name="csf_score",
+            inputs={
+                "tiers": sorted({r.tier for r in rows.values()}),
+                "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+                "answers": answers,
+            },
+            client_org_name=client_org,
+        ),
+    )
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=CsfRunAiResponse,
+    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
+) -> CsfRunAiResponse:
+    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
+    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
+    rows are untouched; code does the total/level/cap + Enterprise roll-up.
+    Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    req = build_csf_ai_request(db, svc, client)
+    a, rows, locked_keys = req.assessment, req.rows, req.locked_keys
+
+    def _snap() -> dict[str, dict]:
+        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
+
+    before = _snap()
     result = run_job(
         db,
         llm,
-        "csf_score",
-        inputs={
-            "tiers": sorted({r.tier for r in rows.values()}),
-            "subcategories": sorted({r.subcategory_code for r in rows.values()}),
-            "answers": answers,
-        },
+        req.preview.job_name,
+        inputs=req.preview.inputs,
         requested_by=user.id,
         service_id=svc.id,
         client_id=client.id,
-        client_org_name=client_org,
+        client_org_name=req.preview.client_org_name,
+        name_hints=req.preview.name_hints,
     )
     data = result.data if isinstance(result.data, dict) else {}
 

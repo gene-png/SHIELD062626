@@ -193,6 +193,34 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
     page.locator("span", { hasText: /3 tier\(s\) in use/ }).first(),
   ).toBeVisible({ timeout: 30000 });
 
+  // --- Redaction preview gate (T6): look before you send --------------------
+  // The OFFERED preview shows the redacted payload + removed counts WITHOUT
+  // egressing or recording a call. Open it, confirm it echoes the csf_score
+  // payload + a redacted-span count, THEN run AI for real.
+  const previewDone = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/proxy/ai/preview") &&
+      r.request().method() === "POST" &&
+      r.ok(),
+    { timeout: 90000 },
+  );
+  await page.getByTestId("ai-preview-button").click();
+  const previewBody = (await (await previewDone).json()) as {
+    purpose: string;
+    removed_counts: Record<string, number>;
+    payload: Record<string, unknown>;
+  };
+  expect(previewBody.purpose).toBe("csf_score");
+  expect(previewBody.payload).toHaveProperty("subcategories");
+  const previewResult = page.getByTestId("ai-preview-result");
+  await expect(previewResult).toBeVisible({ timeout: 30000 });
+  await expect(previewResult).toContainText(/csf_score/);
+  await expect(page.getByTestId("ai-preview-removed-total")).toBeVisible();
+  // The redacted payload is rendered (never the raw one) and nothing was sent.
+  await expect(page.getByTestId("ai-preview-payload")).toContainText(
+    "subcategories",
+  );
+
   // --- Run AI (csf_score): dimensions + narrative ---------------------------
   const runDone = page.waitForResponse(
     (r) =>

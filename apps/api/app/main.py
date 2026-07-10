@@ -18,6 +18,7 @@ from app.logging import configure_logging, get_logger
 from app.middleware.correlation import CorrelationIdMiddleware
 from app.routes import (
     admin,
+    ai_preview,
     artifacts,
     attack,
     auth,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(risk.router)
     app.include_router(clients.router)
+    app.include_router(ai_preview.router)
 
     return app
 

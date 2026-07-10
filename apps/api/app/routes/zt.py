@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.ai.diff import diff_keyed_rows
 from app.ai.engine import run_job
 from app.ai.llm import LLMClient
+from app.ai.preview import AiPreviewPayload
 from app.audit import audit
 from app.db.session import get_db
 from app.deliverable_release import release_deliverable
@@ -335,6 +337,67 @@ def _llm_dep() -> LLMClient:
     return LLMClient.from_settings()
 
 
+@dataclass(frozen=True)
+class ZtAiRequest:
+    """Loaded state + outbound payload for the ZT zt_score run-ai job.
+
+    Built once by :func:`build_zt_ai_request`; consumed by run-ai (which needs
+    ``rows``/``locked_keys``/``max_stage`` to clamp, apply and diff suggestions)
+    and by the redaction-preview route (which only needs ``.preview``).
+    """
+
+    assessment: ZtAssessment
+    rows: dict[str, ZtAnswer]
+    locked_keys: frozenset[str]
+    max_stage: int
+    preview: AiPreviewPayload
+
+
+def build_zt_ai_request(db: Session, svc: Service, client: Client) -> ZtAiRequest:
+    """Load the latest ZT assessment and build the zt_score run-ai payload.
+
+    Raises the same typed 404/409s run-ai does. Reads only — never mutates.
+    """
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (ZtAssessmentStatus.APPROVED, ZtAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+
+    cat_fw = _to_catalog_framework(a.framework)
+    max_stage = level_count(cat_fw)
+    valid = all_codes(cat_fw)
+    rows = {
+        r.capability_code: r
+        for r in db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
+        if r.capability_code in valid
+    }
+    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    return ZtAiRequest(
+        assessment=a,
+        rows=rows,
+        locked_keys=locked_keys,
+        max_stage=max_stage,
+        preview=AiPreviewPayload(
+            job_name="zt_score",
+            inputs={
+                "framework": a.framework.value,
+                "capabilities": sorted(rows),
+                "answers": {
+                    code: {"notes": r.notes, "current": r.maturity_stage}
+                    for code, r in rows.items()
+                },
+            },
+            client_org_name=client_org,
+        ),
+    )
+
+
 @router.post(
     "/services/{service_id}/run-ai",
     response_model=ZtRunAiResponse,
@@ -358,25 +421,13 @@ def run_ai(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Zero Trust service not found."
         )
-    a = _latest_assessment(db, svc.id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
-        )
-    if a.status in (ZtAssessmentStatus.APPROVED, ZtAssessmentStatus.RELEASED):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
-        )
-
-    cat_fw = _to_catalog_framework(a.framework)
-    max_stage = level_count(cat_fw)
-    valid = all_codes(cat_fw)
-    rows = {
-        r.capability_code: r
-        for r in db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == a.id)).scalars().all()
-        if r.capability_code in valid
-    }
-    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+    req = build_zt_ai_request(db, svc, client)
+    a, rows, locked_keys, max_stage = (
+        req.assessment,
+        req.rows,
+        req.locked_keys,
+        req.max_stage,
+    )
 
     def _snap() -> dict[str, dict]:
         return {
@@ -393,22 +444,16 @@ def run_ai(
             return None
         return iv if 1 <= iv <= max_stage else None
 
-    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
     result = run_job(
         db,
         llm,
-        "zt_score",
-        inputs={
-            "framework": a.framework.value,
-            "capabilities": sorted(rows),
-            "answers": {
-                code: {"notes": r.notes, "current": r.maturity_stage} for code, r in rows.items()
-            },
-        },
+        req.preview.job_name,
+        inputs=req.preview.inputs,
         requested_by=user.id,
         service_id=svc.id,
         client_id=client.id,
-        client_org_name=client_org,
+        client_org_name=req.preview.client_org_name,
+        name_hints=req.preview.name_hints,
     )
     data = result.data if isinstance(result.data, dict) else {}
 

@@ -19,6 +19,7 @@ import {
   seedProfiles,
 } from "@/lib/csf/client";
 
+import { AiPreviewButton } from "../AiPreviewButton";
 import { CsfDimensionEditor } from "./CsfDimensionEditor";
 import { CsfGapActionEditor } from "./CsfGapActionEditor";
 import type {
@@ -285,6 +286,10 @@ export function CsfPlaybookPanel({
               </span>
             ) : null}
           </div>
+
+          {seeded ? (
+            <AiPreviewButton serviceId={serviceId} disabled={busy !== null} />
+          ) : null}
 
           {runResult ? (
             <p className="text-sm text-ink-secondary" aria-live="polite">

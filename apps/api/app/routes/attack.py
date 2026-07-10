@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -26,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.ai.diff import diff_keyed_rows
 from app.ai.engine import run_job
 from app.ai.llm import LLMClient
+from app.ai.preview import AiPreviewPayload
 from app.attack.analytics import compute as compute_heatmap
 from app.attack.catalog import (
     TACTICS,
@@ -453,6 +455,60 @@ _DIFF_FIELDS = (
 )
 
 
+@dataclass(frozen=True)
+class AttackAiRequest:
+    """Loaded state + outbound payload for the ATT&CK mitre_map run-ai job.
+
+    Built once by :func:`build_attack_ai_request`; consumed by run-ai (which
+    needs ``rows``/``locked_keys``/``valid_tools`` to validate and apply
+    suggestions) and by the redaction-preview route (which only needs
+    ``.preview``).
+    """
+
+    assessment: AttackAssessment
+    rows: dict[str, AttackCoverage]
+    locked_keys: frozenset[str]
+    valid_tools: frozenset[str]
+    preview: AiPreviewPayload
+
+
+def build_attack_ai_request(db: Session, svc: Service, client: Client) -> AttackAiRequest:
+    """Load the latest ATT&CK assessment and build the mitre_map run-ai payload.
+
+    Raises the same typed 404/409s run-ai does. Reads only — never mutates.
+    """
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
+        )
+    if a.status in (AttackAssessmentStatus.APPROVED, AttackAssessmentStatus.RELEASED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
+        )
+
+    tools = _client_tool_names(db, client.id)
+    rows = {
+        r.technique_code: r
+        for r in db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
+        .scalars()
+        .all()
+    }
+    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    return AttackAiRequest(
+        assessment=a,
+        rows=rows,
+        locked_keys=locked_keys,
+        valid_tools=frozenset(t.lower() for t in tools),
+        preview=AiPreviewPayload(
+            job_name="mitre_map",
+            inputs={"capability_list": tools, "technique_codes": sorted(rows)},
+            client_org_name=client_org,
+        ),
+    )
+
+
 @router.post(
     "/services/{service_id}/run-ai",
     response_model=AttackRunAiResponse,
@@ -472,26 +528,14 @@ def run_ai(
     untouched; code computes coverage % elsewhere. Returns a 'what changed' list.
     """
     svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.ATTACK_COVERAGE)
-    a = _latest_assessment(db, svc.id)
-    if a is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Create an assessment first."
-        )
-    if a.status in (AttackAssessmentStatus.APPROVED, AttackAssessmentStatus.RELEASED):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="This assessment is locked."
-        )
-
-    tools = _client_tool_names(db, client.id)
-    valid_tools = {t.lower() for t in tools}
-
-    rows = {
-        r.technique_code: r
-        for r in db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == a.id))
-        .scalars()
-        .all()
-    }
-    locked_keys = frozenset(code for code, r in rows.items() if r.locked)
+    req = build_attack_ai_request(db, svc, client)
+    a, rows, locked_keys, valid_tools = (
+        req.assessment,
+        req.rows,
+        req.locked_keys,
+        req.valid_tools,
+    )
+    tools = req.preview.inputs["capability_list"]
 
     def _snap() -> dict[str, dict]:
         return {
@@ -506,16 +550,16 @@ def run_ai(
         }
 
     before = _snap()
-    client_org = None if client.legal_name == "(pending intake)" else client.legal_name
     result = run_job(
         db,
         llm,
-        "mitre_map",
-        inputs={"capability_list": tools, "technique_codes": sorted(rows)},
+        req.preview.job_name,
+        inputs=req.preview.inputs,
         requested_by=user.id,
         service_id=svc.id,
         client_id=client.id,
-        client_org_name=client_org,
+        client_org_name=req.preview.client_org_name,
+        name_hints=req.preview.name_hints,
     )
 
     def _validate_tools(names: object) -> list[str]:

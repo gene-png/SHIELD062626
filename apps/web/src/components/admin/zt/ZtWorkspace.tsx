@@ -36,6 +36,7 @@ import type {
 
 import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+import { AiPreviewButton } from "@/components/admin/AiPreviewButton";
 
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
@@ -370,6 +371,7 @@ export function ZtWorkspace({
                   {busy === "run" ? "Running…" : "Run AI"}
                 </button>
               </div>
+              <AiPreviewButton serviceId={serviceId} disabled={busy !== null} />
               {runResult ? (
                 <p className="text-sm text-ink-secondary" aria-live="polite">
                   Updated{" "}
