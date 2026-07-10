@@ -158,6 +158,14 @@ services:
       - "8000:8000"
     volumes:
       - ./apps/api:/app
+      # Root pyproject.toml mounted at /app's parent (/) so in-container
+      # ruff/black config discovery walks up and finds [tool.ruff]/[tool.black]
+      # — CI parity. The api build context is only ./apps/api, whose
+      # pyproject.toml has no [tool.*] tables, so both tools skip it (modern
+      # ruff/black only treat a pyproject.toml as config root when it carries
+      # their own [tool.*] section) and continue up to /pyproject.toml.
+      # See CLAUDE.md "Real commands" + SPRINT_4.md T0.
+      - ./pyproject.toml:/pyproject.toml:ro
       # zt-data seed corpus, read-only, for the questionnaire contract test
       # (SHIELD_ZT_DATA_DIR points here). Not part of the app runtime.
       - ./packages/zt-data:/packages/zt-data:ro
@@ -179,7 +187,7 @@ services:
 
   web:
     restart: unless-stopped
-    image: node:20-bookworm
+    image: node:22-bookworm
     working_dir: /app
     environment:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}

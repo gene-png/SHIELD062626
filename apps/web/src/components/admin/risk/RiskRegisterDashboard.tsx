@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 import Link from "next/link";
 
@@ -35,6 +34,8 @@ import {
   type RiskTier,
 } from "@/lib/risk/matrix";
 import type { RiskEntry, RiskGate, RiskRegister } from "@/lib/risk/types";
+
+import type { JSX } from "react";
 
 function TierChip({ tier }: { tier: string | null }): JSX.Element {
   const t = (tier ?? "negligible") as RiskTier;

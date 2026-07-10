@@ -1,8 +1,9 @@
 "use client";
-
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
+
+import type { JSX } from "react";
 
 interface FieldErrors {
   email?: string;
@@ -103,7 +104,7 @@ export function SignUpForm(): JSX.Element {
           value={displayName}
           autoComplete="name"
           onChange={(e) => setDisplayName(e.target.value)}
-          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none"
+          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden"
         />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -118,7 +119,7 @@ export function SignUpForm(): JSX.Element {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={errors.email ? "true" : undefined}
-          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none"
+          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden"
           placeholder="you@example.gov"
         />
         {errors.email ? (
@@ -141,7 +142,7 @@ export function SignUpForm(): JSX.Element {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           aria-invalid={errors.password ? "true" : undefined}
-          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-none"
+          className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden"
         />
         <p className="text-xs text-ink-tertiary">
           12+ characters. Choose something memorable.

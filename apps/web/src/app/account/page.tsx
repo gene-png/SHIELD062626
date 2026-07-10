@@ -9,6 +9,8 @@ import { SignOutButton } from "@/components/site/SignOutButton";
 import { SkipToContent } from "@/components/site/SkipToContent";
 import { authOptions } from "@/lib/auth/options";
 
+import type { JSX } from "react";
+
 export const metadata: Metadata = { title: "Account" };
 
 function Row({ label, value }: { label: string; value: string }): JSX.Element {
@@ -30,7 +32,7 @@ export default async function AccountPage(): Promise<JSX.Element> {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10 outline-none"
+        className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-10 outline-hidden"
       >
         <div>
           <h1 className="text-2xl font-semibold text-ink-primary">Account</h1>

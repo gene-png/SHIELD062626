@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 
 import { cn } from "@shield/design-system";
@@ -12,6 +11,8 @@ import {
 } from "../intake/Field";
 
 import type { Question, ResponseValue } from "./types";
+
+import type { JSX } from "react";
 
 export interface QuestionFieldProps {
   question: Question;
@@ -211,7 +212,7 @@ export function QuestionField({
                         : [...current, c.value];
                       onChange(next);
                     }}
-                    className="mt-1 h-4 w-4 rounded border-border text-brand-500"
+                    className="mt-1 h-4 w-4 rounded-sm border-border text-brand-500"
                   />
                   <span>
                     <span className="font-medium">{c.label}</span>

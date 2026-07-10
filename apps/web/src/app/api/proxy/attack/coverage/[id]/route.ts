@@ -6,9 +6,7 @@
  */
 import { proxyJsonFromRequest } from "../../_proxy";
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return proxyJsonFromRequest(request, `/attack/coverage/${params.id}`, "PATCH");
 }

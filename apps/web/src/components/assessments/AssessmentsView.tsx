@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -25,6 +24,8 @@ import {
   type AssessmentResponse,
   type ServiceType,
 } from "@/lib/intake/types";
+
+import type { JSX } from "react";
 
 const SELF_ASSESSMENT_TYPES: ReadonlyArray<ServiceType> = [
   "nist_csf",
@@ -161,7 +162,7 @@ export function AssessmentsView(): JSX.Element {
                   setCsfProfile(null);
                   setZtStage(null);
                 }}
-                className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
+                className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
               >
                 {ASSESSMENT_SERVICE_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -183,7 +184,7 @@ export function AssessmentsView(): JSX.Element {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Cloud Platform — Q3 review"
-                className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
+                className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
               />
             </label>
 
@@ -198,7 +199,7 @@ export function AssessmentsView(): JSX.Element {
                     onChange={(e) =>
                       setCsfTier(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
+                    className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
                   >
                     <option value="">Select a tier…</option>
                     {CSF_TARGET_TIERS.map((t) => (
@@ -219,7 +220,7 @@ export function AssessmentsView(): JSX.Element {
                         (e.target.value || null) as CsfProfile | null,
                       )
                     }
-                    className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
+                    className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
                   >
                     <option value="">Select a profile…</option>
                     {CSF_PROFILES.map((p) => (
@@ -242,7 +243,7 @@ export function AssessmentsView(): JSX.Element {
                   onChange={(e) =>
                     setZtStage(e.target.value ? Number(e.target.value) : null)
                   }
-                  className="max-w-xs rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-none"
+                  className="max-w-xs rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
                 >
                   <option value="">Select a stage…</option>
                   {ZT_TARGET_STAGES[

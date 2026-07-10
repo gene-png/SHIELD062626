@@ -4,6 +4,8 @@ import Link from "next/link";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 
+import type { JSX } from "react";
+
 export const metadata: Metadata = { title: "Page not found" };
 
 export default function NotFound(): JSX.Element {
@@ -13,7 +15,7 @@ export default function NotFound(): JSX.Element {
       <main
         id="main-content"
         tabIndex={-1}
-        className="mx-auto flex max-w-3xl flex-col px-6 py-24 outline-none"
+        className="mx-auto flex max-w-3xl flex-col px-6 py-24 outline-hidden"
       >
         <p className="text-sm font-semibold uppercase tracking-wider text-ink-tertiary">
           Error 404

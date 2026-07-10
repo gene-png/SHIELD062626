@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 
 import {
@@ -43,6 +42,8 @@ import { ZtGapList } from "./ZtGapList";
 import { ZtRoadmapCard } from "./ZtRoadmapCard";
 import { ZtQuestionnaire } from "./ZtQuestionnaire";
 import { ZtScoreCard } from "./ZtScoreCard";
+
+import type { JSX } from "react";
 
 export interface ZtWorkspaceProps {
   serviceId: string;

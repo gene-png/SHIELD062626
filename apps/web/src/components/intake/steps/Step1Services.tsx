@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 
 import {
@@ -15,6 +14,8 @@ import {
   type IntakeStateResponse,
   type ServiceType,
 } from "@/lib/intake/types";
+
+import type { JSX } from "react";
 
 export interface Step1ServicesProps {
   state: IntakeStateResponse;
@@ -79,7 +80,7 @@ export function Step1Services({
                     type="checkbox"
                     checked={isOn}
                     onChange={() => toggle(service)}
-                    className="mt-1 h-4 w-4 rounded border-border text-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
+                    className="mt-1 h-4 w-4 rounded-sm border-border text-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border-focus"
                     aria-describedby={`svc-${service}-desc`}
                   />
                   <span className="flex flex-col">

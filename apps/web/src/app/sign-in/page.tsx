@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type JSX } from "react";
 
 import { SignInForm } from "@/components/auth/SignInForm";
 import { PublicHeader } from "@/components/site/PublicHeader";
@@ -9,11 +9,10 @@ export const metadata: Metadata = {
   title: "Sign in",
 };
 
-export default function SignInPage({
-  searchParams,
-}: {
-  searchParams?: { reason?: string };
-}): JSX.Element {
+export default async function SignInPage(props: {
+  searchParams?: Promise<{ reason?: string }>;
+}): Promise<JSX.Element> {
+  const searchParams = await props.searchParams;
   const sessionExpired = searchParams?.reason === "session_expired";
   return (
     <>

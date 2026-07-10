@@ -251,6 +251,17 @@ case.
 **Ref:** SPRINT_2.md T0/T3; CLAUDE.md (migrations/e2e gotchas); D-015 (Part F
 dependency-audit posture).
 
+**Annotation (2026-07-09 · Sprint 4 · David):** the framework-majors bundle
+above executed this sprint EXCEPT its ESLint target. The bundle named ESLint 10;
+what shipped is ESLint **9** (9.39.4) on flat config (T3, `bf82fd2`). ESLint 10
+is not runnable with any published Next lint stack today —
+`eslint-plugin-react` 7.37.5 calls the removed `context.getFilename()` and Next's
+compiled babel parser hits an `eslint-scope` `scopeManager.addGlobals` gap — so
+v10 is honestly deferred to a future sprint once `eslint-plugin-react` ships v10
+support. This supersedes SPRINT_4.md T3's ESLint-10 Definition-of-Done item; the
+Dependabot major-suppression posture is unchanged (ESLint 10 stays suppressed
+until the ecosystem catches up). CHANGELOG `[3.1.0]` T3 cites this annotation.
+
 ## D-019 — Reject reserved/special-use TLDs at domain-approval time
 
 **2026-07-07 · admin**
@@ -354,3 +365,28 @@ reviewer role were purged in Sprint 3 T6. Recording the supersession keeps
 the append-only log honest without rewriting history.
 **Ref:** Work Order A1/A3 (via PR #1); SPRINT_3.md T6; `app/models/user.py`
 (UserRole); DECISIONS D-005, D-006.
+
+---
+
+## D-024 — Multi-provider LLM egress: provider-configurable adapters below the seam
+
+**2026-07-09 · ai/architecture**
+Add live `OpenAIProvider` and `GeminiProvider` beside `AnthropicProvider` in
+`app/ai/llm.py`, selected by `_build_provider` on `SHIELD_LLM_PROVIDER`.
+Adapters are thin `httpx` translators (OpenAI chat/completions, Gemini
+`generateContent`) — no SDK dependency; Anthropic keeps its lazy-imported SDK.
+New settings `OPENAI_API_KEY` / `GEMINI_API_KEY` (empty default); a missing key
+for the selected provider raises the same loud `RuntimeError` at construction as
+Anthropic. `SHIELD_LLM_MODEL` stays the single model knob (`gpt-*`, `gemini-*`,
+`claude-*`). `azure_openai` / `bedrock` / `local` remain valid config values with
+no adapter yet and raise a loud not-implemented `RuntimeError`. Fixture mode
+stays the default and byte-identical deterministic (D-017 untouched).
+**Rationale:** Master Spec §4.4 requires the provider be env-configurable and
+never hardcoded. Everything that enforces the security posture — redaction, the
+`llm_calls` audit row (provider/model/client_id), "AI suggests, code computes" —
+lives ABOVE the provider seam and is unchanged; adapters only translate
+prompt+payload → provider REST API → text back. FedRAMP deployments pick the
+provider whose service sits inside their authorization boundary; fixture mode
+keeps the whole stack exercisable offline with zero egress.
+**Ref:** Master Spec §4.4, §12; SPRINT_4.md T6; `app/ai/llm.py`,
+`app/config.py`, `tests/unit/test_llm_providers.py`; DECISIONS D-017.

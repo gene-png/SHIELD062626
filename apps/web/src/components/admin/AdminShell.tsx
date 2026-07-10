@@ -1,10 +1,11 @@
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { SignOutButton } from "@/components/site/SignOutButton";
 import { SkipToContent } from "@/components/site/SkipToContent";
+
+import type { JSX } from "react";
 
 /**
  * Admin shell (Navigation_Spec §2): a persistent left sidebar so an admin can
@@ -103,7 +104,7 @@ export function AdminShell({
           <main
             id="main-content"
             tabIndex={-1}
-            className="mx-auto w-full max-w-6xl px-6 py-8 outline-none"
+            className="mx-auto w-full max-w-6xl px-6 py-8 outline-hidden"
           >
             {children}
           </main>

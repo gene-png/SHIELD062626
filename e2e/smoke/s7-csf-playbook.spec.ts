@@ -286,8 +286,27 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   expect(code).toBeTruthy();
   await subcatSelect.selectOption(code!);
 
+  // Content-aware wait: match the enterprise-profile response that actually
+  // reflects the committed L5 target, not whichever response lands first.
+  // Slow in-flight mount/seed GETs (StrictMode duplicates queuing behind
+  // next-dev) can resolve after this point carrying pre-PATCH data; the
+  // networkidle settle above swallows its timeout, so first-response matching
+  // raced and captured stale JSON (target_level null despite the committed
+  // PATCH — verified against the DB).
   const enterpriseReload = page.waitForResponse(
-    (r) => r.url().includes("/enterprise-profile") && r.ok(),
+    async (r) => {
+      if (!r.url().includes("/enterprise-profile") || !r.ok()) return false;
+      const body = (await r.json()) as {
+        subcategories?: Array<{
+          subcategory_code: string;
+          target_level: number | null;
+        }>;
+      };
+      return (
+        body.subcategories?.find((s) => s.subcategory_code === code)
+          ?.target_level === 5
+      );
+    },
     { timeout: 90000 },
   );
   // exact: true — the gap-analysis card has a separate "Target tier" select.

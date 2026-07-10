@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 import Link from "next/link";
 
@@ -12,6 +11,8 @@ import {
   fetchInbox,
   type InboxThread,
 } from "@/lib/messages/client";
+
+import type { JSX } from "react";
 
 function fmtTime(value: string | null): string {
   if (!value) return "";

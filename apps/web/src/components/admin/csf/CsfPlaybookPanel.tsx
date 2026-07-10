@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 
 import {
@@ -27,6 +26,8 @@ import type {
   EnterpriseProfile,
   EnterpriseSubcategory,
 } from "@/lib/csf/types";
+
+import type { JSX } from "react";
 
 export interface CsfPlaybookPanelProps {
   serviceId: string;
@@ -123,27 +124,38 @@ export function CsfPlaybookPanel({
     React.useState<CsfPlaybookExport | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Monotonic request sequence: only the newest enterprise-profile fetch may
+  // write state. Without this, a slow mount-time GET (StrictMode duplicates,
+  // next-dev queuing) resolving AFTER a post-edit reload clobbers fresh data
+  // with stale data — the same stale-fetch race family as MessageThread (T8).
+  const reqSeq = React.useRef(0);
+
   const reload = React.useCallback(async () => {
+    const seq = ++reqSeq.current;
     const ent = await fetchEnterpriseProfile(serviceId);
-    setEnterprise(ent);
+    if (seq === reqSeq.current) {
+      setEnterprise(ent);
+      console.debug(
+        `[CsfPlaybookPanel] enterprise-profile applied (seq ${seq})`,
+      );
+    } else {
+      console.debug(
+        `[CsfPlaybookPanel] discarded stale enterprise-profile response (seq ${seq}, latest ${reqSeq.current})`,
+      );
+    }
   }, [serviceId]);
 
   React.useEffect(() => {
-    let active = true;
     (async () => {
       try {
-        const ent = await fetchEnterpriseProfile(serviceId);
-        if (active) setEnterprise(ent);
+        await reload();
       } catch (err) {
-        if (active) setError(describeError(err));
+        setError(describeError(err));
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => {
-      active = false;
-    };
-  }, [serviceId]);
+  }, [reload]);
 
   async function onSeed(): Promise<void> {
     setBusy("seed");
@@ -169,6 +181,18 @@ export function CsfPlaybookPanel({
       setError(describeError(err));
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Reload after a dimension edit. Unlike a bare `void reload()`, this surfaces
+  // a failed refresh to the user via setError instead of letting it become a
+  // console-only unhandled rejection (FAIL LOUDLY) — matching onSeed/onRunAi.
+  async function onDimensionChanged(): Promise<void> {
+    setError(null);
+    try {
+      await reload();
+    } catch (err) {
+      setError(describeError(err));
     }
   }
 
@@ -300,7 +324,7 @@ export function CsfPlaybookPanel({
         <CsfDimensionEditor
           serviceId={serviceId}
           readOnly={readOnly}
-          onChanged={() => void reload()}
+          onChanged={() => void onDimensionChanged()}
         />
       ) : null}
     </div>

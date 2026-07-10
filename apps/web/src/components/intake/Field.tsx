@@ -2,6 +2,8 @@ import * as React from "react";
 
 import { cn } from "@shield/design-system";
 
+import type { JSX } from "react";
+
 export interface FieldProps {
   id: string;
   label: string;
@@ -34,11 +36,14 @@ export function Field({
           </span>
         ) : null}
       </label>
-      {React.cloneElement(children as React.ReactElement, {
-        "aria-describedby":
-          [hintId, errorId].filter(Boolean).join(" ") || undefined,
-        "aria-invalid": error ? "true" : undefined,
-      })}
+      {React.cloneElement(
+        children as React.ReactElement<React.HTMLAttributes<HTMLElement>>,
+        {
+          "aria-describedby":
+            [hintId, errorId].filter(Boolean).join(" ") || undefined,
+          "aria-invalid": error ? "true" : undefined,
+        },
+      )}
       {hint ? (
         <p id={hintId} className="text-xs text-ink-tertiary">
           {hint}
@@ -54,10 +59,10 @@ export function Field({
 }
 
 export const inputClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg";
 
 export const textareaClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg min-h-[7rem] resize-vertical";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg min-h-[7rem] resize-vertical";
 
 export const selectClasses =
-  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-none aria-[invalid=true]:border-status-danger-fg";
+  "rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden aria-[invalid=true]:border-status-danger-fg";

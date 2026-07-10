@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 
 import {
@@ -38,6 +37,8 @@ import { DeliverableCard } from "./DeliverableCard";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
+
+import type { JSX } from "react";
 
 export interface TechDebtWorkspaceProps {
   serviceId: string;

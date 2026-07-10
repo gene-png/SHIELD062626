@@ -20,11 +20,13 @@ The client's `invoke(...)` method:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from collections.abc import Callable
 from typing import Any, Literal, Protocol
 
+import httpx
 from sqlalchemy.orm import Session
 
 from app.ai.redact import RedactionMode, redact_payload
@@ -124,8 +126,6 @@ class AnthropicProvider:
         client = self._ensure_client()
         # Payload is sent as JSON inside the user message. The redactor has
         # already run upstream, so this content is safe to egress.
-        import json
-
         msg = client.messages.create(
             model=self.model,
             max_tokens=4096,
@@ -134,7 +134,7 @@ class AnthropicProvider:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {"type": "text", "text": json.dumps(payload)},
+                        {"type": "text", "text": json.dumps(_egress_payload(payload))},
                     ],
                 }
             ],
@@ -144,6 +144,122 @@ class AnthropicProvider:
         input_tokens = getattr(getattr(msg, "usage", None), "input_tokens", None)
         output_tokens = getattr(getattr(msg, "usage", None), "output_tokens", None)
         return LLMResponse(text, input_tokens, output_tokens)
+
+
+_HTTP_TIMEOUT_SECONDS = 60.0
+_MAX_OUTPUT_TOKENS = 4096
+
+
+def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop internal control keys (``__purpose__`` and any other ``__``-prefixed
+    routing metadata) before serializing to a real provider. Those keys are for
+    ``FixtureProvider`` dispatch only — never content the model should see."""
+    return {k: v for k, v in payload.items() if not str(k).startswith("__")}
+
+
+class OpenAIProvider:
+    """Live OpenAI provider via the Chat Completions REST API.
+
+    A thin ``httpx`` adapter — no SDK dependency. It sits BELOW the egress
+    seam: the payload it receives has already been redacted by
+    ``LLMClient.invoke``. It only translates prompt + payload into an OpenAI
+    request and parses the response text + token counts back out.
+    """
+
+    name = "openai"
+    _URL = "https://api.openai.com/v1/chat/completions"
+
+    def __init__(self, *, model: str, api_key: str) -> None:
+        if not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set. Either set it in .env or switch "
+                "SHIELD_LLM_MODE to 'fixture'."
+            )
+        self.model = model
+        self._api_key = api_key
+
+    def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
+        body = {
+            "model": self.model,
+            "max_tokens": _MAX_OUTPUT_TOKENS,
+            "messages": [
+                {"role": "user", "content": f"{prompt}\n\n{json.dumps(_egress_payload(payload))}"},
+            ],
+        }
+        with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            resp = client.post(
+                self._URL,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage") or {}
+        return LLMResponse(
+            text,
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+        )
+
+
+class GeminiProvider:
+    """Live Google Gemini provider via the generateContent REST API.
+
+    Thin ``httpx`` adapter, same seam contract as ``OpenAIProvider``: the
+    payload is already redacted; this only shapes the request and parses text
+    + token counts from the response.
+    """
+
+    name = "gemini"
+    _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+    # Key travels in the x-goog-api-key HEADER, never the URL query string. A
+    # ``?key=SECRET`` query param leaks into httpx's HTTPStatusError message
+    # (which embeds the full request URL) and would then be persisted to the
+    # llm_calls.error_message column and the logs on any HTTP failure.
+
+    def __init__(self, *, model: str, api_key: str) -> None:
+        if not api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Either set it in .env or switch "
+                "SHIELD_LLM_MODE to 'fixture'."
+            )
+        self.model = model
+        self._api_key = api_key
+
+    def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
+        url = f"{self._BASE_URL}/{self.model}:generateContent"
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
+                }
+            ],
+            "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
+        }
+        with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            resp = client.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self._api_key,
+                },
+                json=body,
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        parts = data["candidates"][0]["content"]["parts"]
+        text = "".join(p.get("text", "") for p in parts)
+        usage = data.get("usageMetadata") or {}
+        return LLMResponse(
+            text,
+            usage.get("promptTokenCount"),
+            usage.get("candidatesTokenCount"),
+        )
 
 
 def _build_provider(settings: Settings) -> LLMProvider:
@@ -162,9 +278,22 @@ def _build_provider(settings: Settings) -> LLMProvider:
             model=settings.shield_llm_model,
             api_key=settings.anthropic_api_key,
         )
+    if settings.shield_llm_provider == "openai":
+        return OpenAIProvider(
+            model=settings.shield_llm_model,
+            api_key=settings.openai_api_key,
+        )
+    if settings.shield_llm_provider == "gemini":
+        return GeminiProvider(
+            model=settings.shield_llm_model,
+            api_key=settings.gemini_api_key,
+        )
+    # azure_openai / bedrock / local are valid config values but have no
+    # adapter yet — fail loudly rather than silently degrade (FAIL LOUDLY).
     raise RuntimeError(
-        f"LLM provider {settings.shield_llm_provider!r} is not implemented in v1. "
-        "Set SHIELD_LLM_PROVIDER=anthropic or SHIELD_LLM_MODE=fixture."
+        f"LLM provider {settings.shield_llm_provider!r} is not implemented yet. "
+        "Set SHIELD_LLM_PROVIDER to anthropic, openai, or gemini, or switch "
+        "SHIELD_LLM_MODE to 'fixture'."
     )
 
 
@@ -226,7 +355,8 @@ class LLMClient:
         db.flush()
 
         # Pass the purpose into the fixture so tests can register per-purpose
-        # responses. Real providers ignore it.
+        # responses. Real providers strip __-prefixed control keys before egress
+        # (see _egress_payload) so this never reaches the model.
         send_payload = {**cleaned_payload, "__purpose__": purpose}
 
         started = time.monotonic()
