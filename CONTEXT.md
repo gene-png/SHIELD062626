@@ -29,7 +29,7 @@ in `SPRINT_<n>.md`._
   (no published Next lint stack runs on it today; see below). `OpenAIProvider`
   and `GeminiProvider` join `AnthropicProvider` behind the unchanged redacting
   egress seam (D-024). Full exit gate set green — 34-test e2e, `pytest -m unit`,
-  web `tsc`, host prettier `--check` (3.9.4), and the new in-container ruff/black
+  web `tsc`, host prettier `--check` (3.9.5), and the new in-container ruff/black
   gate with root-config parity (T0). The minor version bump is justified by the
   runtime/framework majors.
 
@@ -96,7 +96,7 @@ harness exists — an infra task, guards are e2e-happy-path covered today).
   `e2e/node_modules/@playwright/test/cli.js`. Docker CLI needs
   `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` per shell.
   Host Node LTS is now 22 (matches the container after T4).
-- **Prettier gate:** run `npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`
+- **Prettier gate:** run `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`
   from the repo root before every commit — CI enforces the same version.
 - **Lint gate (new, T0):** the api compose service now read-only-mounts the root
   `./pyproject.toml` at `/pyproject.toml` so `docker compose exec -T api sh -lc
@@ -158,7 +158,7 @@ harness exists — an infra task, guards are e2e-happy-path covered today).
   stack. The two stale-fetch races found this sprint (CsfPlaybookPanel s7,
   MessageThread s9) are fixed and now deterministic. Known cold-compile flake
   under load documented in `CLAUDE.md` — a re-run clears it.
-- Format: repo-wide prettier `--check` clean at 3.9.4.
+- Format: repo-wide prettier `--check` clean at 3.9.5.
 - Lint (Python): in-container ruff/black now see the root config (T0) and match
   CI — green at sprint close.
 - Audit: root `pnpm audit` 0 critical / 0 high (2 documented moderates); `e2e/`

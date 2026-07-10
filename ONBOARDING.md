@@ -64,7 +64,7 @@ docker compose exec -T api pytest -m unit -q
 # web typecheck (in-container):
 docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
 # formatting (host; use the version pinned in pnpm-lock.yaml):
-npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
+npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
 # full e2e (host): cd e2e && npx playwright test
 ```
 
