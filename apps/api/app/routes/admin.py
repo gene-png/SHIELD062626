@@ -12,11 +12,14 @@ surfaces build on this.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import uuid
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.audit import audit
@@ -24,14 +27,18 @@ from app.config import get_settings
 from app.db.session import get_db
 from app.dependencies import require_role
 from app.models.artifact import Artifact
+from app.models.audit_entry import AuditEntry
 from app.models.client import Client
 from app.models.client_domain import ClientDomain
+from app.models.llm_call import LLMCall, LLMCallStatus
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminAiStatus,
     AdminArtifactRow,
+    AdminAuditEntriesResponse,
+    AdminAuditEntryRow,
     AdminClientCreateRequest,
     AdminClientListResponse,
     AdminClientSummary,
@@ -39,6 +46,8 @@ from app.schemas.admin import (
     AdminDomainListResponse,
     AdminDomainRow,
     AdminIntakeQueueResponse,
+    AdminLlmCallRow,
+    AdminLlmCallsResponse,
     AdminServiceDetail,
     AdminServiceRequestRow,
     AdminUserSummary,
@@ -50,6 +59,29 @@ from app.security.email_domains import domain_of, is_generic_provider, is_reserv
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 _admin_required = Depends(require_role(UserRole.ADMIN))
+
+# Cursor pagination: keyset on (timestamp desc, id desc) so we never OFFSET a
+# growing append-only store. The cursor is opaque base64 of "<iso>|<uuid>".
+_MAX_PAGE = 200
+_DEFAULT_PAGE = 50
+
+
+def _encode_cursor(at: datetime, row_id: uuid.UUID) -> str:
+    raw = f"{at.isoformat()}|{row_id}".encode()
+    return base64.urlsafe_b64encode(raw).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        at_str, id_str = raw.rsplit("|", 1)
+        return datetime.fromisoformat(at_str), uuid.UUID(id_str)
+    except (ValueError, binascii.Error) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "bad_cursor", "message": "Pagination cursor is invalid."},
+        ) from exc
+
 
 # Human-readable service titles used when a request graduates to a workspace.
 _SERVICE_TITLES: dict[ServiceType, str] = {
@@ -492,4 +524,125 @@ def ai_status(_admin: Annotated[User, _admin_required]) -> AdminAiStatus:
         model=model,
         ready=True,
         detail=f"Live AI configured ({provider}/{model}).",
+    )
+
+
+@router.get(
+    "/audit-entries",
+    response_model=AdminAuditEntriesResponse,
+    summary="Read the append-only audit log (admin)",
+)
+def list_audit_entries(
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+    action: Annotated[str | None, Query(description="Match actions by prefix.")] = None,
+    target_type: str | None = None,
+    actor_user_id: uuid.UUID | None = None,
+    correlation_id: str | None = None,
+    at_from: datetime | None = None,
+    at_to: datetime | None = None,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = _DEFAULT_PAGE,
+) -> AdminAuditEntriesResponse:
+    """Cursor-paginated view of audit_entries, newest first.
+
+    Read-only surface for the append-only store: no mutation route exists for
+    audit rows (the DB trigger + before_flush guard forbid it). Keyset on
+    (at desc, id desc) keeps the query index-friendly as the log grows.
+    """
+    stmt = select(AuditEntry)
+    if action:
+        stmt = stmt.where(AuditEntry.action.startswith(action))
+    if target_type:
+        stmt = stmt.where(AuditEntry.target_type == target_type)
+    if actor_user_id is not None:
+        stmt = stmt.where(AuditEntry.actor_user_id == actor_user_id)
+    if correlation_id:
+        stmt = stmt.where(AuditEntry.correlation_id == correlation_id)
+    if at_from is not None:
+        stmt = stmt.where(AuditEntry.at >= at_from)
+    if at_to is not None:
+        stmt = stmt.where(AuditEntry.at <= at_to)
+    if cursor:
+        c_at, c_id = _decode_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                AuditEntry.at < c_at,
+                and_(AuditEntry.at == c_at, AuditEntry.id < c_id),
+            )
+        )
+    stmt = stmt.order_by(AuditEntry.at.desc(), AuditEntry.id.desc()).limit(limit + 1)
+    rows = db.execute(stmt).scalars().all()
+
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = _encode_cursor(last.at, last.id)
+
+    return AdminAuditEntriesResponse(
+        entries=[AdminAuditEntryRow.model_validate(r, from_attributes=True) for r in rows],
+        next_cursor=next_cursor,
+    )
+
+
+@router.get(
+    "/llm-calls",
+    response_model=AdminLlmCallsResponse,
+    summary="Read the AI egress log (admin)",
+)
+def list_llm_calls(
+    _admin: Annotated[User, _admin_required],
+    db: Annotated[Session, Depends(get_db)],
+    client_id: uuid.UUID | None = None,
+    purpose: str | None = None,
+    provider: str | None = None,
+    call_status: Annotated[LLMCallStatus | None, Query(alias="status")] = None,
+    correlation_id: str | None = None,
+    at_from: datetime | None = None,
+    at_to: datetime | None = None,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=_MAX_PAGE)] = _DEFAULT_PAGE,
+) -> AdminLlmCallsResponse:
+    """Cursor-paginated view of llm_calls, newest first.
+
+    Read-only surface over the AI egress record. Only audit-safe fields are
+    projected (see AdminLlmCallRow); the model holds no API key. Keyset on
+    (requested_at desc, id desc).
+    """
+    stmt = select(LLMCall)
+    if client_id is not None:
+        stmt = stmt.where(LLMCall.client_id == client_id)
+    if purpose:
+        stmt = stmt.where(LLMCall.purpose == purpose)
+    if provider:
+        stmt = stmt.where(LLMCall.provider == provider)
+    if call_status is not None:
+        stmt = stmt.where(LLMCall.status == call_status)
+    if correlation_id:
+        stmt = stmt.where(LLMCall.correlation_id == correlation_id)
+    if at_from is not None:
+        stmt = stmt.where(LLMCall.requested_at >= at_from)
+    if at_to is not None:
+        stmt = stmt.where(LLMCall.requested_at <= at_to)
+    if cursor:
+        c_at, c_id = _decode_cursor(cursor)
+        stmt = stmt.where(
+            or_(
+                LLMCall.requested_at < c_at,
+                and_(LLMCall.requested_at == c_at, LLMCall.id < c_id),
+            )
+        )
+    stmt = stmt.order_by(LLMCall.requested_at.desc(), LLMCall.id.desc()).limit(limit + 1)
+    rows = db.execute(stmt).scalars().all()
+
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        rows = rows[:limit]
+        last = rows[-1]
+        next_cursor = _encode_cursor(last.requested_at, last.id)
+
+    return AdminLlmCallsResponse(
+        calls=[AdminLlmCallRow.model_validate(r, from_attributes=True) for r in rows],
+        next_cursor=next_cursor,
     )
