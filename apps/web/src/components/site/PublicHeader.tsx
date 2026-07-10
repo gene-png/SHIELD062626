@@ -31,6 +31,14 @@ export async function PublicHeader(): Promise<JSX.Element> {
               >
                 My Assessments
               </Link>
+              {role === "client" ? (
+                <Link
+                  href="/documents"
+                  className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+                >
+                  Documents
+                </Link>
+              ) : null}
               <Link
                 href="/messages"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
