@@ -251,6 +251,17 @@ case.
 **Ref:** SPRINT_2.md T0/T3; CLAUDE.md (migrations/e2e gotchas); D-015 (Part F
 dependency-audit posture).
 
+**Annotation (2026-07-09 · Sprint 4 · David):** the framework-majors bundle
+above executed this sprint EXCEPT its ESLint target. The bundle named ESLint 10;
+what shipped is ESLint **9** (9.39.4) on flat config (T3, `bf82fd2`). ESLint 10
+is not runnable with any published Next lint stack today —
+`eslint-plugin-react` 7.37.5 calls the removed `context.getFilename()` and Next's
+compiled babel parser hits an `eslint-scope` `scopeManager.addGlobals` gap — so
+v10 is honestly deferred to a future sprint once `eslint-plugin-react` ships v10
+support. This supersedes SPRINT_4.md T3's ESLint-10 Definition-of-Done item; the
+Dependabot major-suppression posture is unchanged (ESLint 10 stays suppressed
+until the ecosystem catches up). CHANGELOG `[3.1.0]` T3 cites this annotation.
+
 ## D-019 — Reject reserved/special-use TLDs at domain-approval time
 
 **2026-07-07 · admin**

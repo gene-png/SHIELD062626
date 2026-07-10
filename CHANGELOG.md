@@ -101,6 +101,20 @@ audit` 0 total. Two root **moderates** are deliberately left open and
 - **Wrap-up (T7, this entry):** SMOKE_TEST §14 provider-agnostic wording
   verified landed (T6); BUILD_REPORT A06 row updated to the zero-audit state;
   CHANGELOG `[3.1.0]`; CONTEXT.md end-of-sprint snapshot.
+- **Post-sprint audit hardening:** the end-of-sprint deep + security audit
+  fixed three items on this branch. (1) **Security:** `GeminiProvider` now sends
+  its API key via the `x-goog-api-key` header instead of a `?key=` URL query
+  param — the query form leaked the key into httpx's `HTTPStatusError` message,
+  which `LLMClient.invoke` persists to `llm_calls.error_message` and the logs on
+  any HTTP failure. A new `test_gemini_http_error_records_failed_row` asserts the
+  FAILED row and that the key is absent from `error_message`. (2) **Fail loudly:**
+  `CsfPlaybookPanel`'s post-edit refresh no longer swallows a failed reload as a
+  console-only unhandled rejection — errors now surface via `setError` like the
+  other reload callers. (3) **Egress cleanup:** internal `__`-prefixed control
+  keys (`__purpose__`) are stripped from the payload before it reaches a live
+  provider (new `_egress_payload`); the misleading "real providers ignore it"
+  comment is corrected. The ESLint-10 deferral now also carries a dated
+  annotation on **D-018** in DECISIONS.md.
 
 ## [3.0.3] — Sprint 3 · audit correctness & honesty — 2026-07-09
 

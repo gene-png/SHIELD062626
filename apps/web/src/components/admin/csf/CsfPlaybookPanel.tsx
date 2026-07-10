@@ -184,6 +184,18 @@ export function CsfPlaybookPanel({
     }
   }
 
+  // Reload after a dimension edit. Unlike a bare `void reload()`, this surfaces
+  // a failed refresh to the user via setError instead of letting it become a
+  // console-only unhandled rejection (FAIL LOUDLY) — matching onSeed/onRunAi.
+  async function onDimensionChanged(): Promise<void> {
+    setError(null);
+    try {
+      await reload();
+    } catch (err) {
+      setError(describeError(err));
+    }
+  }
+
   async function onExport(): Promise<void> {
     setBusy("export");
     setError(null);
@@ -312,7 +324,7 @@ export function CsfPlaybookPanel({
         <CsfDimensionEditor
           serviceId={serviceId}
           readOnly={readOnly}
-          onChanged={() => void reload()}
+          onChanged={() => void onDimensionChanged()}
         />
       ) : null}
     </div>

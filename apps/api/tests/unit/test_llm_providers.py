@@ -147,7 +147,10 @@ def test_openai_request_shape_and_response_parsing(monkeypatch) -> None:
         ),
     )
     provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-    resp = provider.complete("Draft the summary.", {"framework": "csf", "step": 3})
+    resp = provider.complete(
+        "Draft the summary.",
+        {"framework": "csf", "step": 3, "__purpose__": "csf.narrative"},
+    )
 
     assert resp.content == "drafted narrative"
     assert resp.input_tokens == 42
@@ -162,6 +165,8 @@ def test_openai_request_shape_and_response_parsing(monkeypatch) -> None:
     blob = json.dumps(body["messages"])
     assert "Draft the summary." in blob
     assert "framework" in blob and "csf" in blob
+    # Internal control keys are stripped before egress — never sent to the model.
+    assert "__purpose__" not in blob
 
 
 @pytest.mark.unit
@@ -202,18 +207,26 @@ def test_gemini_request_shape_and_response_parsing(monkeypatch) -> None:
         ),
     )
     provider = GeminiProvider(model="gemini-1.5-pro", api_key="g-test")
-    resp = provider.complete("Draft the summary.", {"framework": "ztmm"})
+    resp = provider.complete(
+        "Draft the summary.", {"framework": "ztmm", "__purpose__": "zt.narrative"}
+    )
 
     assert resp.content == "gemini draft"
     assert resp.input_tokens == 100
     assert resp.output_tokens == 9
 
-    # Request shape: key as query param, model in the generateContent path.
+    # Request shape: model in the generateContent path; the API key travels in
+    # the x-goog-api-key HEADER, NOT the URL/query — so it can never leak into an
+    # HTTPStatusError message (see test_gemini_http_error_does_not_leak_key).
     assert "gemini-1.5-pro:generateContent" in captured["url"]
-    assert captured["params"]["key"] == "g-test"
+    assert "g-test" not in captured["url"]
+    assert captured["headers"]["x-goog-api-key"] == "g-test"
+    assert "key" not in captured["params"]
     blob = json.dumps(captured["json"])
     assert "Draft the summary." in blob
     assert "ztmm" in blob
+    # Internal control keys are stripped before egress — never sent to the model.
+    assert "__purpose__" not in blob
 
 
 @pytest.mark.unit
@@ -282,6 +295,40 @@ def test_openai_http_error_records_failed_row(monkeypatch, db_factory) -> None:
         assert row.mode == LLMCallMode.LIVE
         assert row.error_message
         assert row.duration_ms is not None and row.duration_ms >= 0
+
+
+@pytest.mark.unit
+def test_gemini_http_error_records_failed_row(monkeypatch, db_factory) -> None:
+    _install_fake_httpx(monkeypatch, _FakeResponse(500, {"error": "boom"}))
+    provider = GeminiProvider(model="gemini-1.5-pro", api_key="g-secret-key")
+    live_settings = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="gemini",
+        gemini_api_key="g-secret-key",
+    )
+    client = LLMClient(provider, settings=live_settings)
+
+    with db_factory() as db:
+        admin = _new_admin(db)
+        with pytest.raises(httpx.HTTPStatusError):  # bubbles through the seam
+            client.invoke(
+                db,
+                purpose="zt.narrative",
+                prompt="x",
+                payload={"a": 1},
+                requested_by=admin.id,
+            )
+        db.commit()
+
+        row = db.execute(select(LLMCall)).scalar_one()
+        assert row.status == LLMCallStatus.FAILED
+        assert row.provider == "gemini"
+        assert row.mode == LLMCallMode.LIVE
+        assert row.error_message
+        assert row.duration_ms is not None and row.duration_ms >= 0
+        # The API key must NEVER be persisted to the audit row — it rides the
+        # x-goog-api-key header, so it can't leak via the error URL (A1).
+        assert "g-secret-key" not in row.error_message
 
 
 @pytest.mark.unit

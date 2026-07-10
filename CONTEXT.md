@@ -51,8 +51,35 @@ in `SPRINT_<n>.md`._
 
 No new migrations this sprint (T6 added only nullable settings, no schema).
 New DECISIONS: **D-024** (multi-provider LLM egress below the seam). The D-018
-"ESLint 10" line item is honestly annotated as deferred-upstream in the T3
-commit body and CHANGELOG.
+"ESLint 10" line item is honestly annotated as deferred-upstream — in the T3
+commit body, the CHANGELOG, and a dated 2026-07-09 annotation appended to D-018
+itself in `DECISIONS.md`.
+
+### Post-sprint audit pass (`chore(sprint-4): final audit and CONTEXT refresh`)
+
+A deep + security audit after T7 found and fixed three issues on this branch:
+
+- **Gemini API-key leak (security, backend).** `GeminiProvider` sent the key as
+  a `?key=` URL query param; on any HTTP error, httpx's `HTTPStatusError` embeds
+  the full URL, which `LLMClient.invoke` persists to `llm_calls.error_message`
+  and writes to logs. Moved the key to the `x-goog-api-key` header (mirrors
+  OpenAI's bearer header) so the key can never reach the audit row or logs. New
+  `test_gemini_http_error_records_failed_row` asserts a FAILED row **and** that
+  the key is absent from `error_message`.
+- **FAIL-LOUDLY gap (web).** `CsfPlaybookPanel` refreshed after a dimension edit
+  via a bare `void reload()` that swallowed a failed refresh as a console-only
+  unhandled rejection. Wrapped it in `onDimensionChanged` that routes errors to
+  `setError`, matching `onSeed`/`onRunAi`. s7 e2e re-run green.
+- **Egress cleanup (backend).** Internal `__`-prefixed control keys (e.g.
+  `__purpose__`, used only for `FixtureProvider` dispatch) were being serialized
+  into the real-provider prompt despite a comment claiming otherwise. Added
+  `_egress_payload` to strip them in all three live adapters; corrected the
+  comment.
+
+Deferred (documented in the PR follow-ups): OpenAI `max_tokens` →
+`max_completion_tokens` for reasoning models (unverifiable without a live key);
+deterministic component-level tests for the two `reqSeq` guards (no web unit-test
+harness exists — an infra task, guards are e2e-happy-path covered today).
 
 ## Machine-local facts (this box)
 
@@ -86,7 +113,8 @@ commit body and CHANGELOG.
   runs on ESLint 10 today (`eslint-plugin-react` 7.37.5 uses the removed
   `context.getFilename()`; Next's compiled babel parser hits an `eslint-scope`
   `scopeManager.addGlobals` gap). Revisit when `eslint-plugin-react` ships v10
-  support. The D-018 "ESLint 10" line item is annotated accordingly.
+  support. The D-018 "ESLint 10" line item carries a dated deferral annotation
+  in `DECISIONS.md`.
 - **14 `react-hooks` v6 rules disabled for parity** — the ESLint 9 flat-config
   migration (T3) preserved the exact prior rule set; the newer
   `eslint-plugin-react-hooks` v6 rules are disabled to hold parity rather than
@@ -118,10 +146,12 @@ commit body and CHANGELOG.
 ## Test coverage status
 
 - Backend: full `pytest -m unit` green in-container. Sprint 4 added
-  `test_llm_providers.py` (11 tests): OpenAI + Gemini request shape / response
+  `test_llm_providers.py` (12 tests): OpenAI + Gemini request shape / response
   parsing / token counts via monkeypatched `httpx`, missing-key loud raise,
-  unimplemented-provider raise, HTTP 500 → `llm_calls` status=failed — no live
-  calls. Fixture-mode determinism (D-017) untouched and green.
+  unimplemented-provider raise, HTTP 500 → `llm_calls` status=failed for BOTH
+  providers (the Gemini case also asserts the API key never lands in
+  `error_message`), and `__purpose__` stripped from egress — no live calls.
+  Fixture-mode determinism (D-017) untouched and green.
 - Web: `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4. ESLint 9 flat
   config green with the 47-rule parity set.
 - e2e: 34/34 green across 16 spec files (host, resolves `:3001`) on the new

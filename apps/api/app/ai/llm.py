@@ -134,7 +134,7 @@ class AnthropicProvider:
                     "role": "user",
                     "content": [
                         {"type": "text", "text": prompt},
-                        {"type": "text", "text": json.dumps(payload)},
+                        {"type": "text", "text": json.dumps(_egress_payload(payload))},
                     ],
                 }
             ],
@@ -148,6 +148,13 @@ class AnthropicProvider:
 
 _HTTP_TIMEOUT_SECONDS = 60.0
 _MAX_OUTPUT_TOKENS = 4096
+
+
+def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Drop internal control keys (``__purpose__`` and any other ``__``-prefixed
+    routing metadata) before serializing to a real provider. Those keys are for
+    ``FixtureProvider`` dispatch only — never content the model should see."""
+    return {k: v for k, v in payload.items() if not str(k).startswith("__")}
 
 
 class OpenAIProvider:
@@ -176,7 +183,7 @@ class OpenAIProvider:
             "model": self.model,
             "max_tokens": _MAX_OUTPUT_TOKENS,
             "messages": [
-                {"role": "user", "content": f"{prompt}\n\n{json.dumps(payload)}"},
+                {"role": "user", "content": f"{prompt}\n\n{json.dumps(_egress_payload(payload))}"},
             ],
         }
         with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
@@ -209,6 +216,10 @@ class GeminiProvider:
 
     name = "gemini"
     _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+    # Key travels in the x-goog-api-key HEADER, never the URL query string. A
+    # ``?key=SECRET`` query param leaks into httpx's HTTPStatusError message
+    # (which embeds the full request URL) and would then be persisted to the
+    # llm_calls.error_message column and the logs on any HTTP failure.
 
     def __init__(self, *, model: str, api_key: str) -> None:
         if not api_key:
@@ -225,7 +236,7 @@ class GeminiProvider:
             "contents": [
                 {
                     "role": "user",
-                    "parts": [{"text": prompt}, {"text": json.dumps(payload)}],
+                    "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
                 }
             ],
             "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
@@ -233,8 +244,10 @@ class GeminiProvider:
         with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
             resp = client.post(
                 url,
-                params={"key": self._api_key},
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self._api_key,
+                },
                 json=body,
             )
         resp.raise_for_status()
@@ -342,7 +355,8 @@ class LLMClient:
         db.flush()
 
         # Pass the purpose into the fixture so tests can register per-purpose
-        # responses. Real providers ignore it.
+        # responses. Real providers strip __-prefixed control keys before egress
+        # (see _egress_payload) so this never reaches the model.
         send_payload = {**cleaned_payload, "__purpose__": purpose}
 
         started = time.monotonic()
