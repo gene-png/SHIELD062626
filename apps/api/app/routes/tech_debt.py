@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.ai.llm import LLMClient
 from app.audit import audit
 from app.db.session import get_db
+from app.deliverable_release import release_deliverable
 from app.dependencies import current_client, current_user, require_role
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
@@ -522,6 +523,8 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
         superseded_by=deliv.superseded_by,
+        released_at=deliv.released_at,
+        released_by=deliv.released_by,
     )
 
 
@@ -725,4 +728,26 @@ def latest_deliverable(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
         )
+    return _serialize_deliverable(db, deliv)
+
+
+@router.post(
+    "/deliverables/{deliverable_id}/release",
+    response_model=DeliverableResponse,
+    summary="Release a finalized Tech Debt deliverable to the client (admin, D-025)",
+)
+def release_tech_debt_deliverable(
+    deliverable_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    deliv = release_deliverable(
+        db,
+        deliverable_id=deliverable_id,
+        tenant_client_id=client.id,
+        user=user,
+        kinds=(ServiceKind.TECH_DEBT,),
+        action="deliverable.released",
+    )
     return _serialize_deliverable(db, deliv)

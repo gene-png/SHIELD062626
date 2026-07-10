@@ -4,9 +4,12 @@
                   pdf_artifact_id, xlsx_artifact_id, finalized_at,
                   finalized_by, superseded_by
 
-Deliverables are admin-only (Work Order A1): there is no client release
-path and no `released_to_client_at` column. `version`/`superseded_by`
-keep internal history; an admin downloads and shares outside the app.
+Deliverables are generated and versioned by admins. Sprint 5 (D-025)
+reintroduced an explicit release-to-client step (Master Spec §12): until a
+consultant sets `released_at`, the client sees nothing — no draft, no AI
+output, no download. This is a NEW single-role release action, not a revival
+of the removed D-005/D-006 reviewer gate (D-023). `version`/`superseded_by`
+keep internal history.
 
 Filenames follow Master Spec §15.5: `{Company}_{Service}{MMDDYY}.{ext}`.
 The slugifier lives in app.deliverables.filename (Phase 3 stage 8).
@@ -52,4 +55,12 @@ class Deliverable(UUIDPKMixin, TimestampMixin, Base):
 
     superseded_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("deliverables.id", ondelete="SET NULL")
+    )
+
+    # Release-to-client (D-025, Master Spec §12): null = unreleased (client sees
+    # nothing). Set once by an admin via the release route; SET NULL on the
+    # releasing user's deletion so the deliverable outlives them.
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    released_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
     )

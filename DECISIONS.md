@@ -390,3 +390,32 @@ provider whose service sits inside their authorization boundary; fixture mode
 keeps the whole stack exercisable offline with zero egress.
 **Ref:** Master Spec §4.4, §12; SPRINT_4.md T6; `app/ai/llm.py`,
 `app/config.py`, `tests/unit/test_llm_providers.py`; DECISIONS D-017.
+
+---
+
+## D-025 — Deliverable release-to-client: a new admin-only release action
+
+**2026-07-10 · workflow/deliverables**
+Reintroduce an explicit release-to-client step for deliverables. Migration
+`0028` adds `deliverables.released_at` (nullable DateTime) + `released_by`
+(nullable FK `users.id`, SET NULL); old rows parse as UNRELEASED (C0). A new
+admin-only route `POST /{service}/deliverables/{id}/release` (one per service,
+behind the shared `app/deliverable_release.release_deliverable` helper) requires
+`finalized_at` set (typed 409 `not_finalized`, D-016), is idempotent (a second
+release is a logged no-op, not an error), and writes a `*.deliverable.released`
+audit row. Clients read released deliverables via `GET /clients/{cid}/deliverables`
+(tenant-enforced, 404 on mismatch) and download their artifacts through the
+existing artifact-download path, which now also admits a client for a format of
+a RELEASED deliverable of their own tenant — and nothing else.
+**Rationale:** Master Spec §12 requires "released to client = consultant
+explicitly released; until then the client sees nothing." D-023 anticipated
+this as a NEW decision, explicitly NOT a revival of the removed D-005/D-006
+reviewer→approve→release gate: there is no separate reviewer role and no
+approval hand-off — one admin action flips visibility. Release state is the
+sole gate for every client-facing surface built this sprint (`/home`,
+`/documents`, the value-loop card), so unreleased and draft work stays
+invisible to clients by construction.
+**Ref:** Master Spec §6.7, §12; SPRINT_5.md T1; `app/models/deliverable.py`,
+`app/deliverable_release.py`, `app/routes/clients.py`, `app/routes/artifacts.py`,
+`alembic/versions/0028_deliverable_release.py`,
+`tests/unit/test_deliverable_release.py`; DECISIONS D-023, D-016.
