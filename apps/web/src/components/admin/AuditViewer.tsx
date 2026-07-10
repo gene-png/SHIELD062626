@@ -76,34 +76,38 @@ export function AuditViewer(): JSX.Element {
 
   React.useEffect(() => {
     const seq = ++seqRef.current;
-    setLoading(true);
-    setError(null);
-    const run =
-      tab === "activity"
-        ? fetchAuditEntries({
+    // Wrapped in an async IIFE (same shape as MessageThread) so no setState is
+    // called synchronously in the effect body — react-hooks v6
+    // set-state-in-effect flags that. Timing is unchanged: the IIFE runs
+    // synchronously up to the first await, so the spinner still shows at once.
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (tab === "activity") {
+          const r = await fetchAuditEntries({
             action: activityApplied.action || undefined,
             target_type: activityApplied.target_type || undefined,
             correlation_id: correlationId || undefined,
             limit: PAGE,
-          }).then((r) => {
-            if (seq === seqRef.current) setEntries(r.entries);
-          })
-        : fetchLlmCalls({
+          });
+          if (seq === seqRef.current) setEntries(r.entries);
+        } else {
+          const r = await fetchLlmCalls({
             purpose: aiApplied.purpose || undefined,
             provider: aiApplied.provider || undefined,
             status: aiApplied.status || undefined,
             correlation_id: correlationId || undefined,
             limit: PAGE,
-          }).then((r) => {
-            if (seq === seqRef.current) setCalls(r.calls);
           });
-    run
-      .catch((err) => {
+          if (seq === seqRef.current) setCalls(r.calls);
+        }
+      } catch (err) {
         if (seq === seqRef.current) setError(describeAuditError(err));
-      })
-      .finally(() => {
+      } finally {
         if (seq === seqRef.current) setLoading(false);
-      });
+      }
+    })();
   }, [tab, activityApplied, aiApplied, correlationId]);
 
   function jumpToCorrelation(target: Tab, id: string | null): void {

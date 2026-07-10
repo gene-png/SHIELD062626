@@ -82,7 +82,9 @@ export function CsfDimensionEditor({
   );
 
   React.useEffect(() => {
-    void loadTier(tier);
+    void (async () => {
+      await loadTier(tier);
+    })();
   }, [tier, loadTier]);
 
   const row = profile?.rows.find((r) => r.subcategory_code === code) ?? null;

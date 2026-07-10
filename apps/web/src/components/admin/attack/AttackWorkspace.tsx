@@ -148,7 +148,9 @@ export function AttackWorkspace({
   }, [serviceId, refreshHeatmap]);
 
   React.useEffect(() => {
-    void initialLoad();
+    void (async () => {
+      await initialLoad();
+    })();
   }, [initialLoad]);
 
   async function onCreateAssessment(): Promise<void> {

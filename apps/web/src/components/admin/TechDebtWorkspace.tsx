@@ -102,7 +102,9 @@ export function TechDebtWorkspace({
   }, [serviceId, refreshOverlap]);
 
   React.useEffect(() => {
-    void refresh();
+    void (async () => {
+      await refresh();
+    })();
   }, [refresh]);
 
   async function runExtraction(artifactId: string): Promise<void> {

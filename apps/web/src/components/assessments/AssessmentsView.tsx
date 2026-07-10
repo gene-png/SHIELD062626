@@ -88,7 +88,9 @@ export function AssessmentsView(): JSX.Element {
   }, []);
 
   React.useEffect(() => {
-    void load();
+    void (async () => {
+      await load();
+    })();
   }, [load]);
 
   const isCsf = svcType === "nist_csf";

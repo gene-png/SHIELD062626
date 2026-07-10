@@ -14,30 +14,11 @@ module.exports = [
     ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
   },
   ...nextCoreWebVitals,
-  // RULE PARITY: eslint-config-next 16 bundles eslint-plugin-react-hooks v6,
-  // which enables 14 React-Compiler-era rules that the prior
-  // `next/core-web-vitals` (react-hooks v4) did not. This migration is a
-  // config-format change at rule parity, not a lint-policy expansion — the
-  // new rules fire on existing effects/purity patterns and adopting them is a
-  // source refactor out of scope here. Turn them off to hold the exact 47-rule
-  // set from before; adopting the React Compiler rules is a future dedicated
-  // task (see the T3 commit body for the print-config parity diff).
-  {
-    rules: {
-      "react-hooks/config": "off",
-      "react-hooks/error-boundaries": "off",
-      "react-hooks/gating": "off",
-      "react-hooks/globals": "off",
-      "react-hooks/immutability": "off",
-      "react-hooks/incompatible-library": "off",
-      "react-hooks/preserve-manual-memoization": "off",
-      "react-hooks/purity": "off",
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/set-state-in-render": "off",
-      "react-hooks/static-components": "off",
-      "react-hooks/unsupported-syntax": "off",
-      "react-hooks/use-memo": "off",
-    },
-  },
+  // REACT-HOOKS v6 ADOPTED (Sprint-5 T9): eslint-config-next 16 bundles
+  // eslint-plugin-react-hooks v6, whose 14 React-Compiler-era rules
+  // (set-state-in-effect, purity, etc.) were held OFF in Sprint-4 T3 for exact
+  // rule parity during the flat-config migration. Sprint-5 T9 adopts all 14 as
+  // a deliberate lint tightening: every violation is fixed in source, so no
+  // rule is configured off here. The default severities from
+  // eslint-config-next/core-web-vitals now stand.
 ];

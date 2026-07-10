@@ -53,11 +53,13 @@ export function IntakeDocumentsPanel({
 
   React.useEffect(() => {
     let cancelled = false;
-    setError(null);
+    // No synchronous setError(null) here — react-hooks v6 set-state-in-effect
+    // flags it. A stale error clears on the next successful load instead.
     listArtifacts()
       .then((res) => {
         if (cancelled) return;
         setDocs(res.items.filter((a) => a.origin === "client_upload"));
+        setError(null);
       })
       .catch((err) => {
         if (!cancelled) {

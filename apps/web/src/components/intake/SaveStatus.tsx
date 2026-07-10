@@ -22,12 +22,14 @@ export function SaveStatus({
   state,
   className,
 }: SaveStatusProps): JSX.Element | null {
-  const [, force] = React.useReducer((x: number) => x + 1, 0);
-
-  // Re-render once a second so "saved 2 seconds ago" stays accurate.
+  // `now` lives in state, refreshed once a second, so the "saved N seconds ago"
+  // label stays accurate. Reading Date.now() directly during render is an impure
+  // read that react-hooks v6 `purity` flags; the clock is read only in the
+  // interval callback (and the lazy initializer) instead.
+  const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
     if (state.kind !== "saved") return;
-    const id = window.setInterval(() => force(), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [state.kind]);
 
@@ -55,7 +57,7 @@ export function SaveStatus({
     );
   }
 
-  const elapsed = Date.now() - state.at;
+  const elapsed = now - state.at;
   const label =
     elapsed < 5_000
       ? "Saved"
