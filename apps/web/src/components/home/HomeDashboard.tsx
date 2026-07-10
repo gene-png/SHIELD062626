@@ -12,6 +12,10 @@ import {
 
 import type { ClientDeliverable } from "@/components/documents/DocumentsList";
 import {
+  ValueLoopCard,
+  type ValueSummary,
+} from "@/components/home/ValueLoopCard";
+import {
   ASSESSMENT_SERVICE_TYPES,
   SERVICE_LABELS,
   type AssessmentResponse,
@@ -44,6 +48,7 @@ export interface HomeDashboardProps {
   deliverables: ClientDeliverable[];
   engagements: AssessmentResponse[];
   unreadMessages: number;
+  valueSummary: ValueSummary | null;
 }
 
 const DATE_FMT = new Intl.DateTimeFormat("en-US", {
@@ -92,6 +97,7 @@ export function HomeDashboard({
   deliverables,
   engagements,
   unreadMessages,
+  valueSummary,
 }: HomeDashboardProps): JSX.Element {
   // Which services already have a released report (drives the grid + hero).
   const releasedServiceIds = new Set(deliverables.map((d) => d.service_id));
@@ -192,6 +198,9 @@ export function HomeDashboard({
           </div>
         </section>
       )}
+
+      {/* Band 2.5: cross-service value loop (§2.5), only once data is released. */}
+      {valueSummary ? <ValueLoopCard summary={valueSummary} /> : null}
 
       {/* Band 3: per-service status grid. */}
       <section aria-labelledby="services-heading" className="space-y-3">

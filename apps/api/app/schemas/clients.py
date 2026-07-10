@@ -35,3 +35,21 @@ class ClientDeliverableResponse(BaseModel):
 
 class ClientDeliverableListResponse(BaseModel):
     items: list[ClientDeliverableResponse]
+
+
+class ValueSummaryResponse(BaseModel):
+    """Cross-service executive value loop (Master Spec §2.5).
+
+    A DETERMINISTIC synthesis of already-computed engine outputs — no LLM, no new
+    scoring. Each slot is `None` until the service has a RELEASED deliverable
+    (§12 visibility): the card renders "pending" for a null, never a fake number.
+    `tech_debt_savings_cost_known` is False when a cut capability lacked a cost,
+    so the UI can flag the savings figure as a floor.
+    """
+
+    tech_debt_savings_usd: float | None
+    tech_debt_savings_cost_known: bool
+    zt_gap_count: int | None
+    attack_uncovered_count: int | None
+    csf_gap_count: int | None
+    has_any_data: bool

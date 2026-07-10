@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import type { ClientDeliverableListResponse } from "@/components/documents/DocumentsList";
 import { HomeDashboard } from "@/components/home/HomeDashboard";
+import type { ValueSummary } from "@/components/home/ValueLoopCard";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 import { SkipToContent } from "@/components/site/SkipToContent";
@@ -62,18 +63,27 @@ export default async function HomePage(): Promise<JSX.Element> {
   let deliverables: ClientDeliverableListResponse["items"] = [];
   let engagements: AssessmentResponse[] = [];
   let unreadMessages = 0;
+  let valueSummary: ValueSummary | null = null;
   if (clientId) {
-    const [deliverableData, engagementData, inbox] = await Promise.all([
-      apiFetch<ClientDeliverableListResponse>(
-        `/clients/${clientId}/deliverables`,
-        { bearer: token },
-      ),
-      apiFetch<AssessmentResponse[]>("/intake/engagements", { bearer: token }),
-      apiFetch<InboxResponse>("/messages/inbox", { bearer: token }),
-    ]);
+    const [deliverableData, engagementData, inbox, summary] = await Promise.all(
+      [
+        apiFetch<ClientDeliverableListResponse>(
+          `/clients/${clientId}/deliverables`,
+          { bearer: token },
+        ),
+        apiFetch<AssessmentResponse[]>("/intake/engagements", {
+          bearer: token,
+        }),
+        apiFetch<InboxResponse>("/messages/inbox", { bearer: token }),
+        apiFetch<ValueSummary>(`/clients/${clientId}/value-summary`, {
+          bearer: token,
+        }),
+      ],
+    );
     deliverables = deliverableData.items;
     engagements = engagementData;
     unreadMessages = inbox.unread_total;
+    valueSummary = summary;
   }
 
   const greetingName = me.display_name?.trim() || me.email;
@@ -92,6 +102,7 @@ export default async function HomePage(): Promise<JSX.Element> {
           deliverables={deliverables}
           engagements={engagements}
           unreadMessages={unreadMessages}
+          valueSummary={valueSummary}
         />
       </main>
       <PublicFooter />
