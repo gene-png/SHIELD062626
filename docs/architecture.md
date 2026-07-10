@@ -74,16 +74,16 @@ loud warning if Redis is down.
 
 ## Tech stack
 
-| Layer          | Choice                                                                   | Notes                                                       |
-| -------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| Frontend       | Next.js 14 App Router + React 18 + TypeScript strict + Tailwind + shadcn | Round 6 design language; `@shield/design-system` package    |
-| Backend        | FastAPI on Python 3.12                                                   | OpenAPI at `:8000/docs`                                     |
-| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                            | Alembic migrations, `batch_alter_table` for SQLite safety   |
-| Cache          | Redis 7                                                                  | Rate limiting only — no queue, no Celery                    |
-| Object storage | S3-compatible (MinIO in dev)                                             | Artifact uploads + generated deliverables                   |
-| IdP            | SHIELD-issued JWT (HS256) via NextAuth Credentials                       | Keycloak realm scaffolded under `infra/keycloak/` for later |
-| AI             | Single egress client `app/ai/llm.py`; Anthropic provider or fixtures     | `SHIELD_LLM_MODE=fixture` is the offline default (D-017)    |
-| Tests          | pytest (unit, SQLite) + Playwright e2e (host-run) + axe sweep            | See `docs/development.md` for the real command matrix       |
+| Layer          | Choice                                                                    | Notes                                                                                                |
+| -------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Frontend       | Next.js 14 App Router + React 18 + TypeScript strict + Tailwind + shadcn  | Round 6 design language; `@shield/design-system` package                                             |
+| Backend        | FastAPI on Python 3.12                                                    | OpenAPI at `:8000/docs`                                                                              |
+| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                             | Alembic migrations, `batch_alter_table` for SQLite safety                                            |
+| Cache          | Redis 7                                                                   | Rate limiting only — no queue, no Celery                                                             |
+| Object storage | S3-compatible (MinIO in dev)                                              | Artifact uploads + generated deliverables                                                            |
+| IdP            | SHIELD-issued JWT (HS256) via NextAuth Credentials                        | Keycloak realm scaffolded under `infra/keycloak/` for later                                          |
+| AI             | Single egress client `app/ai/llm.py`; Anthropic/OpenAI/Gemini or fixtures | `SHIELD_LLM_MODE=fixture` is the offline default (D-017); provider via `SHIELD_LLM_PROVIDER` (D-024) |
+| Tests          | pytest (unit, SQLite) + Playwright e2e (host-run) + axe sweep             | See `docs/development.md` for the real command matrix                                                |
 
 ## Data isolation (multi-tenant, D-015)
 
@@ -116,7 +116,7 @@ engines (`app/csf/playbook.py`, `app/risk/engine.py`, `app/zt/scoring.py`).
 route → engine.run_job(purpose, payload, client_id)
           → redact_payload(payload)            # app/ai/redact.py, counts only
           → llm_calls row opened (status=running, client_id, service_id)
-          → provider call (Anthropic | runtime fixtures)
+          → provider call (Anthropic | OpenAI | Gemini | runtime fixtures)
           → llm_calls row finalized (tokens, duration, redacted_counts)
           → route parses the draft and writes rows; engines compute totals
 ```
@@ -130,7 +130,27 @@ route → engine.run_job(purpose, payload, client_id)
 - Five job purposes: `extract.capabilities`, `mitre_map`, `zt_score`,
   `csf_score`, `risk_synthesize`. In fixture mode (the offline default,
   D-017) each has a deterministic, payload-aware canned response; live mode
-  needs `ANTHROPIC_API_KEY` + `SHIELD_LLM_MODE=live`.
+  needs `SHIELD_LLM_MODE=live` plus the selected provider's API key.
+- **Provider seam (D-024).** `SHIELD_LLM_PROVIDER` selects the live adapter;
+  every adapter lives below the egress seam and only translates prompt +
+  redacted payload → provider REST API → text back. Redaction, the
+  `llm_calls` audit row, and "AI suggests, code computes" all sit _above_ the
+  seam and are provider-independent. Thin `httpx` adapters (no SDK) for
+  OpenAI (chat/completions) and Gemini (generateContent); Anthropic
+  lazy-imports its SDK.
+
+  | Provider              | Status          | Key env var         |
+  | --------------------- | --------------- | ------------------- |
+  | `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY` |
+  | `openai`              | Implemented     | `OPENAI_API_KEY`    |
+  | `gemini`              | Implemented     | `GEMINI_API_KEY`    |
+  | `azure_openai`        | Not implemented | —                   |
+  | `bedrock`             | Not implemented | —                   |
+  | `local`               | Not implemented | —                   |
+
+  A missing key for the selected provider, or a not-implemented provider,
+  raises a loud `RuntimeError` at construction.
+
 - Run-AI endpoints are rate-limited per client (T3).
 
 ## Auth

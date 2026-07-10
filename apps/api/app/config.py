@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     shield_llm_model: str = "claude-opus-4-7"
     shield_llm_mode: Literal["fixture", "live"] = "fixture"
     anthropic_api_key: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
 
     # Feature flags (Master Spec §2 - deferred for v1)
     shield_auth_require_mfa: bool = False

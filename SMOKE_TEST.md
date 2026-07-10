@@ -135,16 +135,17 @@ The part only a human can do — confirm the documents actually _look_ right.
 
 ## 14. Live AI (optional but recommended)
 
-> **Now meaningful (Sprint 3 T0):** before T0, a live `csf_score` run silently
-> discarded its response — the prompt asked for a `{subcategories:[…]}` shape the
-> parser never read. T0 aligned the prompt/parser schema and grounded the payload
-> in the interview answers, so a live run now actually applies suggestions. This
-> is the run that proves it. Left **unchecked on purpose**: it needs David's
-> machine with a real `ANTHROPIC_API_KEY` — no committed spec can prove it, and
-> the fixture-mode suite (D-017) does not exercise the live provider path.
+> **Provider-agnostic (Sprint 4 T6):** the live path is now selectable across
+> `anthropic` / `openai` / `gemini` via `SHIELD_LLM_PROVIDER` (D-024). The egress
+> contract is identical for all three — redaction and the `llm_calls` audit row
+> run above the provider seam — so this check proves the *selected* provider,
+> whichever it is. Left **unchecked on purpose**: it needs a real API key on
+> David's machine; no committed spec can prove it, and the fixture-mode suite
+> (D-017) does not exercise any live provider path.
 
-- [ ] Set `ANTHROPIC_API_KEY` (and `SHIELD_LLM_MODE=live`) in `.env`; restart `api`.
-- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
+- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching `SHIELD_LLM_MODEL` (e.g. `claude-opus-4-7` / `gpt-4o-mini` / `gemini-1.5-pro`) in `.env`; restart `api`.
+- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
+- [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
 
 ## 15. Security headers
 

@@ -94,11 +94,32 @@ Every variable in [`.env.example`](.env.example) is required. Summary:
 | Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID`                                                              | MinIO in dev, S3+KMS in prod                  |
 | OIDC           | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`                                      |                                               |
 | NextAuth       | `NEXTAUTH_URL`, `NEXTAUTH_SECRET`                                                                                                              | Generate secret with `openssl rand -hex 32`   |
-| LLM            | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY`                                                              | `MODE=fixture` for offline tests              |
+| LLM            | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`                          | `MODE=fixture` for offline tests              |
 | Feature flags  | `SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`, `SHIELD_EMAIL_DELIVERY_ENABLED`                                                 | All `false` for v1                            |
 | Redaction      | `SHIELD_REDACTION_MODE`                                                                                                                        | `strict` in prod; `off` forbidden outside dev |
 | Sessions       | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`, `SHIELD_ACCOUNT_LOCKOUT_*`, `SHIELD_IDLE_TIMEOUT_SECONDS`, `SHIELD_FORCED_REAUTH_SECONDS` | Compensating controls for deferred MFA        |
 | Mail           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`                                                                                                          | MailHog locally                               |
+
+### LLM providers
+
+`SHIELD_LLM_PROVIDER` selects the live egress adapter; `SHIELD_LLM_MODEL` is
+the single model knob (set it to a model the chosen provider serves). Fixture
+mode (`SHIELD_LLM_MODE=fixture`, the default) is fully offline and never touches
+any provider. Every provider sits below the same egress seam — redaction and the
+`llm_calls` audit row run identically regardless of provider.
+
+| Provider              | Status          | Key env var         | Example `SHIELD_LLM_MODEL` |
+| --------------------- | --------------- | ------------------- | -------------------------- |
+| `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY` | `claude-opus-4-7`          |
+| `openai`              | Implemented     | `OPENAI_API_KEY`    | `gpt-4o-mini`              |
+| `gemini`              | Implemented     | `GEMINI_API_KEY`    | `gemini-1.5-pro`           |
+| `azure_openai`        | Not implemented | —                   | —                          |
+| `bedrock`             | Not implemented | —                   | —                          |
+| `local`               | Not implemented | —                   | —                          |
+
+Selecting a provider whose key is unset fails loudly at construction; selecting
+a not-implemented provider raises a loud `RuntimeError`. FedRAMP deployments pick
+the provider that sits inside their authorization boundary (D-024).
 
 ## Running tests
 
