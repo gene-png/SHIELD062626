@@ -317,3 +317,53 @@ class CsfPlaybookExportResponse(BaseModel):
     full playbook, each as a downloadable file (Work Order D4)."""
 
     artifacts: list[ExportedArtifact]
+
+
+# ---------------------------------------------------------------------------
+# POA&M / gap action plan (Sprint 5 T5, spec step 10)
+# ---------------------------------------------------------------------------
+
+# Allowed enumerations, validated in-route so a bad value returns a D-016 typed
+# error instead of a raw pydantic validation dump.
+GAP_CHARACTERIZATIONS = ("accept", "mitigate", "transfer", "avoid")
+GAP_PRIORITY_OVERRIDES = ("P1", "P2", "P3")
+
+
+class CsfGapActionUpsert(BaseModel):
+    """Autosave body for one gap's POA&M annotation. Every field optional; only
+    the fields sent are written (partial update / upsert). Send an explicit
+    empty string to clear a text field back to unset."""
+
+    characterization: str | None = None
+    priority_override: str | None = None
+    owner: str | None = Field(default=None, max_length=255)
+    deadline: str | None = Field(default=None, max_length=64)
+    resources: str | None = Field(default=None, max_length=4000)
+    success_criteria: str | None = Field(default=None, max_length=4000)
+    poam_ref: str | None = Field(default=None, max_length=255)
+
+
+class CsfGapActionResponse(BaseModel):
+    """One enterprise gap plus its (possibly empty) POA&M annotation."""
+
+    subcategory_code: str
+    name: str
+    function: str
+    enterprise_level: int
+    target_level: int | None
+    # Code-computed default from gap_priority() via the Enterprise roll-up.
+    default_priority: str | None
+    characterization: str | None
+    priority_override: str | None
+    owner: str | None
+    deadline: str | None
+    resources: str | None
+    success_criteria: str | None
+    poam_ref: str | None
+    # priority_override where set, else default_priority.
+    effective_priority: str | None
+
+
+class CsfGapActionsResponse(BaseModel):
+    assessment_id: uuid.UUID
+    actions: list[CsfGapActionResponse]

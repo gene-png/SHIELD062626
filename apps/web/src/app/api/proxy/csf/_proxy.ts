@@ -14,7 +14,10 @@ import { authOptions } from "@/lib/auth/options";
 
 export async function proxyJson<T = unknown>(
   upstream: string,
-  init: { method: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {
+  init: {
+    method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+    body?: unknown;
+  } = {
     method: "GET",
   },
 ): Promise<NextResponse> {
@@ -49,7 +52,7 @@ export async function proxyJson<T = unknown>(
 export async function proxyJsonFromRequest(
   request: Request,
   upstream: string,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "PUT",
 ): Promise<NextResponse> {
   let body: unknown;
   try {

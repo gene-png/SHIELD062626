@@ -20,6 +20,7 @@ import {
 } from "@/lib/csf/client";
 
 import { CsfDimensionEditor } from "./CsfDimensionEditor";
+import { CsfGapActionEditor } from "./CsfGapActionEditor";
 import type {
   CsfPlaybookExport,
   CsfRunAiResponse,
@@ -326,6 +327,9 @@ export function CsfPlaybookPanel({
           readOnly={readOnly}
           onChanged={() => void onDimensionChanged()}
         />
+      ) : null}
+      {seeded && gapCount > 0 ? (
+        <CsfGapActionEditor serviceId={serviceId} readOnly={readOnly} />
       ) : null}
     </div>
   );

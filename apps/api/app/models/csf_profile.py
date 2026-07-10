@@ -63,3 +63,45 @@ class CsfDimensionScore(UUIDPKMixin, TimestampMixin, Base):
 
     # Work Order C2: locked rows are untouched by a Run-AI rerun.
     locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class CsfGapAction(UUIDPKMixin, TimestampMixin, Base):
+    """POA&M / action-plan annotation for one enterprise gap (Sprint 5 T5).
+
+    One row per (assessment, subcategory): the admin's remediation plan for a
+    gap surfaced by the Enterprise roll-up — Characterize (accept/mitigate/
+    transfer/avoid), an optional Priority override (the default is code-computed
+    by `gap_priority()`), and free-text Action-item fields (owner, deadline,
+    resources, success criteria, POA&M reference). Every field is nullable so an
+    older assessment parses with zero actions (C0 additive pattern). The scoring
+    engine (`app/csf/playbook.py`) is never modified by these annotations — it is
+    only read for the default priority.
+    """
+
+    __tablename__ = "csf_gap_actions"
+    __table_args__ = (
+        UniqueConstraint(
+            "assessment_id",
+            "subcategory_code",
+            name="uq_csf_gap_actions_assessment_subcat",
+        ),
+    )
+
+    assessment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("csf_assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("client.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    subcategory_code: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    # Step 10 fields — all nullable (POA&M annotations are optional per gap).
+    # characterization: accept/mitigate/transfer/avoid.
+    characterization: Mapped[str | None] = mapped_column(String(16))
+    # priority_override: P1/P2/P3, overrides the code-computed default.
+    priority_override: Mapped[str | None] = mapped_column(String(2))
+    owner: Mapped[str | None] = mapped_column(String(255))
+    deadline: Mapped[str | None] = mapped_column(String(64))
+    resources: Mapped[str | None] = mapped_column(Text)
+    success_criteria: Mapped[str | None] = mapped_column(Text)
+    poam_ref: Mapped[str | None] = mapped_column(String(255))

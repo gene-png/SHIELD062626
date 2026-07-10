@@ -127,6 +127,26 @@ async function patched(page: Page, action: () => Promise<void>): Promise<void> {
   await done;
 }
 
+/**
+ * Wait for one gap-actions PUT (POA&M autosave, T5) triggered by `action`.
+ * The editor auto-saves on select-change and input-blur — click()/selectOption()
+ * + waitForResponse, never check(), per the auto-save gotcha.
+ */
+async function poamSaved(
+  page: Page,
+  action: () => Promise<void>,
+): Promise<void> {
+  const done = page.waitForResponse(
+    (r) =>
+      r.url().includes("/gap-actions/") &&
+      r.request().method() === "PUT" &&
+      r.ok(),
+    { timeout: 90000 },
+  );
+  await action();
+  await done;
+}
+
 test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative, editor math is live with the evidence cap", async ({
   page,
 }) => {
@@ -357,6 +377,31 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
   await expect(tableRow).toContainText(`#${row!.rollup_rule}`);
   await expect(tableRow).toContainText(row!.priority!);
   await expect(tableRow).toContainText(`L${row!.enterprise_level}`);
+
+  // --- T5 POA&M: annotate the gap, autosave, survive a reload ---------------
+  // The Action Plan editor renders one card per enterprise gap; `code` is the
+  // gap we just created, so its card is present with the code-computed default
+  // priority. Characterize + set an owner (each auto-saves via a gap-actions
+  // PUT), reload, and confirm the values persisted.
+  const gapCard = page.getByTestId(`gap-action-${code!}`);
+  await expect(gapCard).toBeVisible({ timeout: 30000 });
+  const charSelect = gapCard.getByRole("combobox", {
+    name: `Characterization ${code!}`,
+  });
+  await poamSaved(page, () => charSelect.selectOption("mitigate"));
+  const ownerInput = gapCard.getByRole("textbox", { name: `Owner ${code!}` });
+  await ownerInput.fill("Priya Nair");
+  await poamSaved(page, () => ownerInput.blur());
+
+  await page.reload();
+  const gapCardAfter = page.getByTestId(`gap-action-${code!}`);
+  await expect(gapCardAfter).toBeVisible({ timeout: 30000 });
+  await expect(
+    gapCardAfter.getByRole("combobox", { name: `Characterization ${code!}` }),
+  ).toHaveValue("mitigate", { timeout: 30000 });
+  await expect(
+    gapCardAfter.getByRole("textbox", { name: `Owner ${code!}` }),
+  ).toHaveValue("Priya Nair", { timeout: 30000 });
 
   // --- Export: 5 files, each link streaming the right content-type ---------
   const exportDone = page.waitForResponse(

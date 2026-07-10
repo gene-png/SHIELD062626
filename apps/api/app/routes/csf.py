@@ -70,7 +70,7 @@ from app.models.csf_assessment import (
     CsfAssessment,
     CsfAssessmentStatus,
 )
-from app.models.csf_profile import CsfDimensionScore
+from app.models.csf_profile import CsfDimensionScore, CsfGapAction
 from app.models.deliverable import Deliverable
 from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
@@ -78,6 +78,8 @@ from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
 from app.schemas.csf import (
+    GAP_CHARACTERIZATIONS,
+    GAP_PRIORITY_OVERRIDES,
     CatalogCategory,
     CatalogFunction,
     CatalogResponse,
@@ -89,6 +91,9 @@ from app.schemas.csf import (
     CsfDimensionChange,
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
+    CsfGapActionResponse,
+    CsfGapActionsResponse,
+    CsfGapActionUpsert,
     CsfPlaybookExportResponse,
     CsfProfileResponse,
     CsfQuestionnaireResponse,
@@ -1044,6 +1049,188 @@ def _enterprise_subcategories(
     return out, tiers_in_use
 
 
+# ---------------------------------------------------------------------------
+# POA&M / gap action plan (Sprint 5 T5, spec step 10)
+# ---------------------------------------------------------------------------
+
+_GAP_ACTION_FIELDS = (
+    "characterization",
+    "priority_override",
+    "owner",
+    "deadline",
+    "resources",
+    "success_criteria",
+    "poam_ref",
+)
+
+
+def _gap_action_response(
+    ent: EnterpriseSubcategory, action: CsfGapAction | None
+) -> CsfGapActionResponse:
+    """Merge one enterprise gap with its stored POA&M annotation. The default
+    priority is the code-computed roll-up priority (`gap_priority()`); a stored
+    `priority_override` wins for the effective value — the engine is untouched."""
+    override = action.priority_override if action else None
+    return CsfGapActionResponse(
+        subcategory_code=ent.subcategory_code,
+        name=ent.name,
+        function=ent.function,
+        enterprise_level=ent.enterprise_level,
+        target_level=ent.target_level,
+        default_priority=ent.priority,
+        characterization=action.characterization if action else None,
+        priority_override=override,
+        owner=action.owner if action else None,
+        deadline=action.deadline if action else None,
+        resources=action.resources if action else None,
+        success_criteria=action.success_criteria if action else None,
+        poam_ref=action.poam_ref if action else None,
+        effective_priority=override or ent.priority,
+    )
+
+
+def _load_gap_actions(db: Session, assessment_id: uuid.UUID) -> dict[str, CsfGapAction]:
+    rows = (
+        db.execute(select(CsfGapAction).where(CsfGapAction.assessment_id == assessment_id))
+        .scalars()
+        .all()
+    )
+    return {r.subcategory_code: r for r in rows}
+
+
+@router.get(
+    "/services/{service_id}/gap-actions",
+    response_model=CsfGapActionsResponse,
+    summary="Enterprise gaps with their POA&M action-plan annotations (admin)",
+)
+def list_gap_actions(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfGapActionsResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    ent_rows, _ = _enterprise_subcategories(db, a)
+    actions = _load_gap_actions(db, a.id)
+    gaps = [r for r in ent_rows if r.gap]
+    _log.info(
+        "csf.gap_actions.list assessment=%s gaps=%d annotated=%d",
+        a.id,
+        len(gaps),
+        len(actions),
+    )
+    return CsfGapActionsResponse(
+        assessment_id=a.id,
+        actions=[_gap_action_response(r, actions.get(r.subcategory_code)) for r in gaps],
+    )
+
+
+@router.put(
+    "/services/{service_id}/gap-actions/{subcategory_code}",
+    response_model=CsfGapActionResponse,
+    summary="Upsert one gap's POA&M annotation (admin, autosave)",
+)
+def upsert_gap_action(
+    service_id: uuid.UUID,
+    subcategory_code: str,
+    body: CsfGapActionUpsert,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfGapActionResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    if subcategory_code not in all_codes():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "reason": "unknown_subcategory",
+                "message": f"'{subcategory_code}' is not a NIST CSF 2.0 subcategory.",
+            },
+        )
+
+    data = body.model_dump(exclude_unset=True)
+    # D-016 typed validation for the two enumerated fields (empty string clears).
+    ch = data.get("characterization")
+    if ch and ch not in GAP_CHARACTERIZATIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": "invalid_characterization",
+                "message": "Characterization must be accept, mitigate, transfer, or avoid.",
+            },
+        )
+    po = data.get("priority_override")
+    if po and po not in GAP_PRIORITY_OVERRIDES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": "invalid_priority",
+                "message": "Priority override must be P1, P2, or P3.",
+            },
+        )
+
+    row = db.execute(
+        select(CsfGapAction).where(
+            CsfGapAction.assessment_id == a.id,
+            CsfGapAction.subcategory_code == subcategory_code,
+        )
+    ).scalar_one_or_none()
+    created = row is None
+    if row is None:
+        row = CsfGapAction(
+            assessment_id=a.id,
+            client_id=client.id,
+            subcategory_code=subcategory_code,
+        )
+        db.add(row)
+    for f in _GAP_ACTION_FIELDS:
+        if f in data:
+            # Empty string means "clear" for the nullable annotation fields.
+            setattr(row, f, data[f] or None)
+    audit(
+        db,
+        action="csf.gap_action.upserted",
+        target_type="csf_gap_action",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"subcategory_code": subcategory_code, "created": created},
+    )
+    db.commit()
+    db.refresh(row)
+    _log.info(
+        "csf.gap_action.upserted assessment=%s subcat=%s created=%s",
+        a.id,
+        subcategory_code,
+        created,
+    )
+
+    # Recompute the enterprise row so the response carries the up-to-date
+    # default/effective priority (the engine is only read, never mutated).
+    ent_rows, _ = _enterprise_subcategories(db, a)
+    ent = next((r for r in ent_rows if r.subcategory_code == subcategory_code), None)
+    if ent is None:
+        # Annotated a subcategory that is not currently a gap (e.g. out of scope
+        # or no target). Still return the stored values; no roll-up default.
+        ent = EnterpriseSubcategory(
+            subcategory_code=subcategory_code,
+            name=getattr(subcategory_by_code(subcategory_code), "name", subcategory_code),
+            function=str(getattr(subcategory_by_code(subcategory_code), "function", "")),
+            tier_levels={},
+            enterprise_level=0,
+            rollup_rule=0,
+            target_level=None,
+            gap=False,
+            priority=None,
+        )
+    return _gap_action_response(ent, row)
+
+
 def _llm_dep() -> LLMClient:
     return LLMClient.from_settings()
 
@@ -1223,6 +1410,7 @@ def export_playbook(
             detail="Seed the Working Profile before exporting.",
         )
     enterprise_rows, _ = _enterprise_subcategories(db, a)
+    gap_actions = _load_gap_actions(db, a.id)
     tier_profiles: dict[str, list] = {}
     for tier in ("high", "moderate", "low"):
         trows = sorted(
@@ -1263,6 +1451,7 @@ def export_playbook(
                 version=a.version,
                 enterprise_rows=enterprise_rows,
                 tier_profiles=tier_profiles,
+                gap_actions=gap_actions,
             ),
         ),
         (
