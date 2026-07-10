@@ -5,48 +5,56 @@ _Last updated: 2026-07-09_
 
 ## Branch / in flight
 
-- **Sprint 3 MERGED** (PR #26, merge commit `995b403`): all 8 tasks via the
-  `/loop-sprint-cron` autonomous loop + closing audit (which caught a real
-  non-atomic INCR/EXPIRE lockout bug in the new rate limiter) + one manual
-  ruff fix (`753d765` — in-container lint missed the root config; becomes
-  Sprint 4 T0). Branch deleted after merge.
-- `chore/sprint-4-plan` — **Sprint 4 planned**: SPRINT_4.md + staged queue
-  `.claude/sprint-queue.sprint-4.json`. Theme: D-018 framework majors
-  (Next 15/React 19/Tailwind 4/ESLint 10/Node 22 → audit-to-zero) +
-  **multi-provider LLM** (OpenAI + Gemini adapters behind the existing
-  `_build_provider` seam — Dave asked "do we have to use anthropic?" — no,
-  spec §4.4 already mandates env-configurable provider) + T0 lint-gate CI
-  parity. SMOKE_TEST §10 checked off in this PR (Dave eyeballed the v19/v22
-  §15.5 artifacts 2026-07-09).
+- **Sprint 4 EXECUTED — PR #28 OPEN, awaiting my review/merge**
+  (`feat/majors-providers-sprint-4`, final commit `7ec01a3`,
+  https://github.com/gene-png/SHIELD062626/pull/28). All 9 tasks (T0–T8)
+  via `/loop-sprint-cron` + 2 checkpoints + shutdown deep audit. Highlights:
+  - Framework majors landed: Next 15.5.20 / React 19.2.7 / Tailwind 4 /
+    **ESLint 9 flat config** (ESLint 10 blocked upstream — no published
+    eslint-plugin-react supports v10; deferral annotated on D-018) / Node 22.
+    Audit-to-zero met (0 high/critical; 2 documented moderates postcss/uuid).
+  - Multi-provider LLM: OpenAI + Gemini httpx adapters below the egress seam
+    (D-024); fixture default untouched.
+  - 3 stale-fetch race bugs found+fixed along the way (CsfPlaybookPanel s7,
+    MessageThread s9/T8, plus panel error-swallowing at shutdown audit);
+    shutdown audit also moved the Gemini key from URL param to header
+    (key was leaking into `llm_calls.error_message` on HTTP errors).
+  - next-auth needed NO Auth.js v5 migration (peer range already allows
+    Next 15/React 19 — the planning-time risk note was stale).
+  - Mid-sprint I approved: dev-DB cleanup of 26 QA-junk clients (unblocked
+    s2), and the T3 retarget to ESLint 9.
 
 ## Next steps
 
-1. Merge the sprint-4 planning PR.
-2. **SMOKE_TEST §14** (live AI): Dave getting an `ANTHROPIC_API_KEY` shortly.
-   Set it + `SHIELD_LLM_MODE=live` in `.env`, restart api, one CSF Run-AI,
-   verify redacted `llm_calls` row with `client_id` set, no PII; revert to
-   fixture. Any defects found → append as tasks to the sprint-4 queue.
-3. Launch Sprint 4: cut `feat/majors-providers-sprint-4` from `main`, swap
-   the staged queue in, `/loop-sprint-cron` (checklist in SPRINT_4.md).
-4. Sprint 5 candidates: client deliverable release + /home value loop +
-   POA&M + redaction preview + audit viewer (audit §4c). Needs-me:
-   cloud/account/region decisions (gates terraform/deploy/DR).
+1. **Review + merge PR #28** (full task table and follow-ups in the PR body).
+2. **SMOKE_TEST §14** (live AI — now provider-agnostic after T6): set a
+   provider key + `SHIELD_LLM_MODE=live` in `.env`, restart api, one CSF
+   Run-AI, verify redacted `llm_calls` row with `client_id`, no PII; revert
+   to fixture. Defects → tasks in the next sprint queue.
+3. Plan Sprint 5: client deliverable release + /home value loop + POA&M +
+   redaction preview + audit viewer. Follow-ups from Sprint 4 to consider:
+   ESLint 10 (when eslint-plugin-react ships v10 support), adopting the 14
+   parity-disabled react-hooks v6 rules, OpenAI `max_tokens` note.
+4. Needs-me: cloud/account/region decisions (gates terraform/deploy/DR).
 
 ## Personal todos (human-only)
 
-- SMOKE_TEST §14 live-AI run (see step 2 above). §10 done 2026-07-09.
+- Merge PR #28.
+- SMOKE_TEST §14 live-AI run (see step 2). §10 done 2026-07-09.
 - Decide cloud/account/region for the infra work (Sprint 5+/6).
-- Optional: OpenAI/Gemini API keys if I want a live smoke of the new
-  adapters after Sprint 4 T6 (unit tests don't need them).
+- Optional: OpenAI/Gemini API keys for a live smoke of the new adapters
+  (unit tests don't need them).
 
 ## Notes for Gene
 
 - This box runs SHIELD web on **:3001** (machine-local `.env WEB_PORT`);
   canonical/CI port stays 3000 — see CONTEXT.md machine-local facts.
-- Loop lesson from Sprint 3: in-container ruff/black DON'T see the root
-  pyproject config (api container mounts only apps/api) — CI does. Sprint 4
-  T0 fixes it with a compose mount; until then run lint checks from a full
-  checkout context before pushing python changes.
+- The T0 compose mount fixed in-container ruff/black root-config parity —
+  the loop's lint gate now equals CI (new 4th gate in the runtime queue).
+- Loop lesson (recurred all sprint): dispatched iteration agents tend to
+  park on background monitors mid-e2e-gate; the orchestrator must nudge
+  them to foreground-poll. Logged as `stage=agent-stalled-resumed` in
+  `.claude/scheduler-debug.log`.
 - The cron loop is session-bound: if the Claude session dies, re-invoking
   `/loop-sprint-cron` re-bootstraps from the queue file — state lives in
   `.claude/sprint-queue.json`, nothing is lost.
