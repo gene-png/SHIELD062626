@@ -152,6 +152,52 @@ The part only a human can do — confirm the documents actually _look_ right.
 - [x] `curl -I http://localhost:3000`: confirm **CSP**, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Strict-Transport-Security`, `Permissions-Policy`. (s15-headers.spec.ts — all six present, set in `apps/web/next.config.mjs`)
 - [x] App still functions under CSP (no blocked resources in the console). (s15-headers.spec.ts — signed-in admin dashboard shows zero CSP-blocked resources)
 
+## 16. Deliverable release flow (Sprint 5, §12 / §6.7 — T1)
+
+The §12 release rule: a client sees a deliverable ONLY after a consultant
+explicitly releases the finalized deliverable. Backend contract (release route,
+client list, artifact access) is `pytest -m unit` covered; the runtime effects
+below are e2e-proven.
+
+- [x] Admin finalizes a deliverable, then **releases** it; a real client of that tenant sees the released row. (s17-documents.spec.ts — API finalize+release v1, client sees the row)
+- [x] A **finalized-but-unreleased** deliverable never appears for the client. (s17-documents.spec.ts — v2 finalized, left unreleased, absent from the client page)
+- [x] A client can **download** an artifact of a released own-tenant deliverable (200 + §15.5 filename). (s17-documents.spec.ts — client PDF download 200, content-disposition carries the §15.5 name)
+- [ ] Release requires `finalized_at` (typed 409 `not_finalized`); re-release is an idempotent 200 no-op; audit row `*.deliverable.released` written; artifact deny paths (unreleased / cross-tenant / non-deliverable). (`pytest -m unit` contract tests, not an e2e checkbox — no runtime UI eyeball surface)
+
+## 17. Client `/documents` — WHAT YOU'VE RECEIVED (Sprint 5, §6.7 — T2)
+
+- [x] Client nav gains a **Documents** entry; the page lists released deliverables (service label, title, **Final** badge). (s17-documents.spec.ts)
+- [x] Per-format **download link** streams 200 with a §15.5 filename. (s17-documents.spec.ts — PDF download 200, `application/pdf`, §15.5 content-disposition)
+- [ ] Empty state renders per the no-dead-ends rule when a client has no released deliverables (§12). (built; not asserted by a dedicated spec — the s17 tenant always has a released row)
+
+## 18. Client `/home` dashboard + value-loop card (Sprint 5, §6.4 / §2.5 — T3/T4)
+
+- [x] Client with **no** released report sees next-step guidance (Welcome heading + "Start an assessment"), **not** the "report is ready" hero. (s18-home.spec.ts — hero-absent guidance state)
+- [x] After a release, the same client's `/home` shows the **hero** ("report is ready" + View reports / Download PDF). (s18-home.spec.ts — hero-present state)
+- [x] A signed-in **client** hitting `/` lands on `/home`; a signed-in **admin** lands on `/admin`. (s18-home.spec.ts — both role landings)
+- [x] `/home` leaks **no scoring math** (§6.4) — no percentage renders. (s18-home.spec.ts — `/\d+%/` count 0)
+- [x] **Value-loop card** (§2.5) is absent before any release and, after a scored+released CSF, renders a **NIST CSF 2.0** gap count with **Pending** for services lacking released data (never a fake 0). (s19-value-loop.spec.ts)
+- [x] The value card leaks no scoring math — no percentage renders. (s19-value-loop.spec.ts — `/\d+%/` count 0)
+
+## 19. CSF POA&M / action plan (Sprint 5, step 10 — T5)
+
+- [x] The gap-analysis view renders an **action-plan editor** card per enterprise gap; Characterize (accept/mitigate/transfer/avoid) + owner **auto-save** and survive a `page.reload()`. (s7-csf-playbook.spec.ts — `gap-action-{code}` card, `selectOption("mitigate")` + owner blur each waits on the gap-actions PUT, values survive reload)
+- [ ] The playbook **XLSX** gains an **Action Plan** sheet (characterization / owner / deadline / resources / success criteria / poam_ref; priority defaults from `gap_priority()`, override wins). (`pytest -m unit` export-content test; the s7 5-file export assertion covers download presence, not the sheet's cell content — that stays a §10 human eyeball item)
+
+## 20. Redaction preview gate (Sprint 5 — T6)
+
+- [x] From a Run-AI surface, the **offered** "preview what will be sent" affordance shows the **redacted payload** + **removed counts** WITHOUT egress, then Run-AI still works. (s7-csf-playbook.spec.ts — `ai-preview-button` → POST `/ai/preview`, payload has `subcategories`, `ai-preview-removed-total` visible, then the real Run-AI runs)
+- [ ] Preview creates **no** `llm_calls` row and constructs no provider; admin-only; the AI rate limiter applies; preview output equals `redact_payload()` of the run-ai builder's payload for the same state. (`pytest -m unit` contract tests — no runtime eyeball surface for the "no row created" invariant)
+
+## 21. `/admin/audit` viewer (Sprint 5 — T7)
+
+- [x] Admin nav gains **Audit**; the page renders the **Audit log** two-tab viewer (Activity / AI calls). (s20-audit.spec.ts)
+- [x] An audited action performed in-test (`csf.run_ai`) appears in the **Activity** tab (filter by action prefix). (s20-audit.spec.ts)
+- [x] The **AI calls** tab lists the fixture-mode `llm_calls` row (purpose `csf_score`, `fixture`). (s20-audit.spec.ts)
+- [x] **Correlation-id click-through** links the two tabs (clicking an AI call's correlation jumps to Activity filtered by that id). (s20-audit.spec.ts)
+- [x] The viewer is **read-only** — no mutation affordances on the append-only store. (s20-audit.spec.ts — only filter/apply/clear controls; construction-level per T7)
+- [ ] Every filter (target_type, actor, date range / client_id, provider, status) and cursor pagination; client-role 403. (`pytest -m unit` filter/pagination contract tests)
+
 ---
 
 ## Sign-off
