@@ -325,6 +325,42 @@ def test_llm_calls_filters_and_cursor(ctx) -> None:
 
 
 @pytest.mark.unit
+def test_llm_calls_filter_client_id(ctx) -> None:
+    """The client_id filter returns only that tenant's llm_calls rows."""
+    c, admin_bearer, admin_id = _admin(ctx)
+    _, TestSession = ctx
+    admin_uuid = uuid.UUID(admin_id)
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    _seed_llm_call(TestSession, requested_by=admin_uuid, client_id=tenant_a)
+    _seed_llm_call(TestSession, requested_by=admin_uuid, client_id=tenant_b)
+
+    r = c.get(f"/admin/llm-calls?client_id={tenant_a}", headers=_auth(admin_bearer))
+    assert r.status_code == 200, r.text
+    calls = r.json()["calls"]
+    assert len(calls) == 1
+    assert calls[0]["client_id"] == str(tenant_a)
+
+
+@pytest.mark.unit
+def test_llm_calls_date_range(ctx) -> None:
+    """A far-future at_from returns nothing; an all-time window returns the rows."""
+    c, admin_bearer, admin_id = _admin(ctx)
+    _, TestSession = ctx
+    _seed_llm_call(TestSession, requested_by=uuid.UUID(admin_id))
+
+    future = (datetime.now(UTC) + timedelta(days=3650)).isoformat()
+    r = c.get("/admin/llm-calls", params={"at_from": future}, headers=_auth(admin_bearer))
+    assert r.status_code == 200, r.text
+    assert r.json()["calls"] == []
+
+    past = (datetime.now(UTC) - timedelta(days=3650)).isoformat()
+    r2 = c.get("/admin/llm-calls", params={"at_from": past}, headers=_auth(admin_bearer))
+    assert r2.status_code == 200
+    assert len(r2.json()["calls"]) >= 1
+
+
+@pytest.mark.unit
 def test_correlation_id_links_activity_and_ai_tabs(ctx) -> None:
     """A shared correlation_id joins an audit row to its llm_calls row."""
     c, admin_bearer, admin_id = _admin(ctx)

@@ -121,11 +121,19 @@ revival of the removed D-005/D-006 reviewer gate; D-023 anticipated it).
 
 - Backend: full `pytest -m unit` green in-container. Sprint 5 added contract
   tests for the release route (409 not_finalized, idempotency, audit row), the
-  client deliverable list + artifact allow/deny matrix (T1), the value-summary
-  aggregation with full/partial/no data + the zero-`llm_calls`/no-`app.ai`-import
-  invariant (T4), `csf_gap_actions` CRUD + default-vs-override priority + XLSX
-  Action Plan sheet (T5), `/ai/preview` equals-redaction + no-row/no-egress (T6),
-  and the audit read routes' filters/cursor pagination + client-role 403 (T7).
+  client deliverable list + artifact allow/deny matrix incl. the cross-tenant
+  download deny (T1), the value-summary aggregation with full/partial/no data +
+  the zero-`llm_calls`/no-`app.ai`-import invariant + the post-release-draft
+  §12 pin (T4), `csf_gap_actions` CRUD + default-vs-override priority +
+  empty-string-clears + XLSX Action Plan sheet (T5), `/ai/preview`
+  equals-redaction + no-row/no-egress (T6), and the audit read routes'
+  filters/cursor pagination (incl. `client_id` + date range on llm-calls) +
+  client-role 403 (T7). The final-audit pass (post-T10) hardened these: it
+  fixed a §12 leak where the value summary recomputed from the LATEST assessment
+  version instead of the released/finalized one (a post-release DRAFT
+  re-assessment would have leaked its in-progress numbers to the client card),
+  and gave the tech-debt release audit action its `tech_debt.` prefix so it
+  groups/filters like the other three services in the audit viewer.
 - Web unit tests (NEW, T8): `pnpm -F web test` (vitest + testing-library + jsdom)
   runs 4 deterministic tests covering the two `reqSeq` stale-fetch guards
   (`MessageThread`, `CsfPlaybookPanel`) — stale-response discard + error surfaces
@@ -148,7 +156,13 @@ revival of the removed D-005/D-006 reviewer gate; D-023 anticipated it).
   so the client list route, the artifact download path, AND the value-loop card's
   per-service numbers all gate on `released_at`. The card renders "Pending" for
   an unreleased service rather than a fake 0; leaking a draft number would be the
-  same class of bug as leaking a draft document.
+  same class of bug as leaking a draft document. **The final audit caught the
+  subtle half of this:** gating the card's *visibility* on `released_at` is not
+  enough — the *number itself* must be recomputed from the finalized
+  (approved/released) assessment version, not merely the latest one, or a
+  post-release DRAFT re-assessment leaks its working numbers. The
+  `_latest_finalized` helper now pins the recompute to `status in
+  (APPROVED, RELEASED)`.
 - **"AI suggests, code computes" extends to aggregation.** The §2.5 value card is
   the most valuable page in the platform, and the temptation is to have the LLM
   "summarize the engagement." T4 kept it a deterministic sum over already-computed

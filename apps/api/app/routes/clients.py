@@ -24,18 +24,28 @@ from app.db.session import get_db
 from app.dependencies import current_client, current_user
 from app.logging import get_logger
 from app.models.artifact import Artifact
-from app.models.attack_assessment import AttackAssessment, AttackCoverage
+from app.models.attack_assessment import (
+    AttackAssessment,
+    AttackAssessmentStatus,
+    AttackCoverage,
+)
 from app.models.capability import (
     CapabilityDisposition,
     CapabilityItem,
     CapabilityList,
+    CapabilityListStatus,
 )
 from app.models.client import Client
-from app.models.csf_assessment import CsfAnswer, CsfAssessment
+from app.models.csf_assessment import CsfAnswer, CsfAssessment, CsfAssessmentStatus
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind
 from app.models.user import User
-from app.models.zt_assessment import ZtAnswer, ZtAssessment, ZtFramework
+from app.models.zt_assessment import (
+    ZtAnswer,
+    ZtAssessment,
+    ZtAssessmentStatus,
+    ZtFramework,
+)
 from app.schemas.clients import (
     ClientDeliverableListResponse,
     ClientDeliverableResponse,
@@ -129,11 +139,20 @@ def list_client_deliverables(
 # ---------------------------------------------------------------------------
 
 
-def _latest_by_version(db: Session, model, service_id: uuid.UUID):
-    """The highest-version row of `model` for a service (mirrors each service's
-    `_latest_assessment` / `_latest_list_or_none` helper)."""
+def _latest_finalized(db: Session, model, service_id: uuid.UUID, statuses):
+    """The highest-version FINALIZED (status in `statuses`) row of `model` for a
+    service.
+
+    Only finalized (approved/released) assessments feed the client-visible value
+    summary. A released deliverable's assessment is APPROVED/RELEASED; a
+    re-assessment opened AFTER release is a new higher-version DRAFT. Filtering to
+    finalized statuses keeps the summary pinned to released work so a post-release
+    draft can never leak its in-progress numbers to the client (§12)."""
     return db.execute(
-        select(model).where(model.service_id == service_id).order_by(model.version.desc()).limit(1)
+        select(model)
+        .where(model.service_id == service_id, model.status.in_(statuses))
+        .order_by(model.version.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
 
@@ -167,7 +186,12 @@ def _csf_gap_total(db: Session, service_ids: list[uuid.UUID]) -> int | None:
     total = 0
     found = False
     for sid in service_ids:
-        a = _latest_by_version(db, CsfAssessment, sid)
+        a = _latest_finalized(
+            db,
+            CsfAssessment,
+            sid,
+            (CsfAssessmentStatus.APPROVED, CsfAssessmentStatus.RELEASED),
+        )
         if a is None:
             continue
         found = True
@@ -183,7 +207,12 @@ def _zt_gap_total(db: Session, service_ids: list[uuid.UUID]) -> int | None:
     total = 0
     found = False
     for sid in service_ids:
-        a = _latest_by_version(db, ZtAssessment, sid)
+        a = _latest_finalized(
+            db,
+            ZtAssessment,
+            sid,
+            (ZtAssessmentStatus.APPROVED, ZtAssessmentStatus.RELEASED),
+        )
         if a is None:
             continue
         found = True
@@ -205,7 +234,12 @@ def _attack_uncovered_total(db: Session, service_ids: list[uuid.UUID]) -> int | 
     total = 0
     found = False
     for sid in service_ids:
-        a = _latest_by_version(db, AttackAssessment, sid)
+        a = _latest_finalized(
+            db,
+            AttackAssessment,
+            sid,
+            (AttackAssessmentStatus.APPROVED, AttackAssessmentStatus.RELEASED),
+        )
         if a is None:
             continue
         found = True
@@ -229,7 +263,12 @@ def _tech_debt_savings(db: Session, service_ids: list[uuid.UUID]) -> tuple[float
     cost_known = True
     found = False
     for sid in service_ids:
-        cl = _latest_by_version(db, CapabilityList, sid)
+        cl = _latest_finalized(
+            db,
+            CapabilityList,
+            sid,
+            (CapabilityListStatus.APPROVED, CapabilityListStatus.RELEASED),
+        )
         if cl is None:
             continue
         found = True

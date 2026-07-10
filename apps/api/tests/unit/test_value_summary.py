@@ -438,6 +438,58 @@ def test_value_summary_no_llm_call(app_client) -> None:
 
 
 @pytest.mark.unit
+def test_value_summary_ignores_post_release_draft(app_client) -> None:
+    """A re-assessment started AFTER release must not leak into the client card.
+
+    Spec §12: the client only ever sees released work. Once v1 is released, a
+    consultant may open a new (higher-version) DRAFT assessment; its in-progress
+    answers must NOT change the client-visible value numbers. The summary stays
+    pinned to the released/finalized version.
+    """
+    c = app_client
+    admin = _register(c, "admin@example.com")
+    client = _register(c, "client@example.com")
+    bearer_client = client["tokens"]["access_token"]
+    cid = client["user"]["client_id"]
+    admin_id = admin["user"]["id"]
+
+    from app.models.csf_assessment import CsfAnswer, CsfAssessment, CsfAssessmentStatus
+
+    db = _session(c)
+    # Released v1 with 5 gaps.
+    _make_released_csf(db, _uuid.UUID(cid), _uuid.UUID(admin_id), gap_codes=_csf_codes(5))
+    # A NEW v2 DRAFT re-assessment with MORE gaps (9), never released.
+    svc_id = db.execute(select(CsfAssessment.service_id)).scalar_one()
+    v2 = CsfAssessment(
+        service_id=svc_id,
+        client_id=_uuid.UUID(cid),
+        version=2,
+        status=CsfAssessmentStatus.DRAFT,
+    )
+    db.add(v2)
+    db.flush()
+    for code in _csf_codes(9):
+        db.add(
+            CsfAnswer(
+                assessment_id=v2.id,
+                client_id=_uuid.UUID(cid),
+                subcategory_code=code,
+                maturity_tier=1,
+            )
+        )
+    db.commit()
+    db.close()
+
+    r = c.get(
+        f"/clients/{cid}/value-summary",
+        headers={"Authorization": f"Bearer {bearer_client}"},
+    )
+    assert r.status_code == 200, r.text
+    # Still the released v1's 5 gaps — NOT the v2 draft's 9.
+    assert r.json()["csf_gap_count"] == 5
+
+
+@pytest.mark.unit
 def test_value_summary_cross_tenant_404(app_client) -> None:
     """A client asking for another tenant's summary gets 404 (never 403)."""
     c = app_client

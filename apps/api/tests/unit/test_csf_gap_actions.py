@@ -167,6 +167,43 @@ def test_default_priority_from_engine_and_override_wins(app_client) -> None:
 
 
 @pytest.mark.unit
+def test_empty_string_clears_annotation(app_client) -> None:
+    """Autosave with an empty string clears a field back to None (and a cleared
+    priority_override reverts the effective priority to the engine default)."""
+    c = app_client
+    h = _admin_headers(c)
+    svc_id, code = _seed_gap(c, h)
+
+    default = c.put(
+        f"/csf/services/{svc_id}/gap-actions/{code}",
+        headers=h,
+        json={"owner": "Alice", "priority_override": "P1"},
+    ).json()
+    engine_default = default["default_priority"]
+    assert default["owner"] == "Alice"
+    assert default["effective_priority"] == "P1"
+
+    cleared = c.put(
+        f"/csf/services/{svc_id}/gap-actions/{code}",
+        headers=h,
+        json={"owner": "", "priority_override": ""},
+    )
+    assert cleared.status_code == 200, cleared.text
+    body = cleared.json()
+    assert body["owner"] is None
+    assert body["priority_override"] is None
+    assert body["effective_priority"] == engine_default  # reverts to the default
+
+    # Reload confirms the clear persisted.
+    reloaded = {
+        a["subcategory_code"]: a
+        for a in c.get(f"/csf/services/{svc_id}/gap-actions", headers=h).json()["actions"]
+    }[code]
+    assert reloaded["owner"] is None
+    assert reloaded["priority_override"] is None
+
+
+@pytest.mark.unit
 def test_typed_errors_on_bad_enum_and_unknown_subcategory(app_client) -> None:
     c = app_client
     h = _admin_headers(c)

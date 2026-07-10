@@ -748,6 +748,6 @@ def release_tech_debt_deliverable(
         tenant_client_id=client.id,
         user=user,
         kinds=(ServiceKind.TECH_DEBT,),
-        action="deliverable.released",
+        action="tech_debt.deliverable.released",
     )
     return _serialize_deliverable(db, deliv)
