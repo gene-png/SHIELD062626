@@ -1,11 +1,26 @@
 import { StatusPill } from "@shield/design-system";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
 import { Hero } from "@/components/marketing/Hero";
 import { ServiceGrid } from "@/components/marketing/ServiceGrid";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
+import { authOptions } from "@/lib/auth/options";
 
-export default function HomePage() {
+import type { JSX } from "react";
+
+export default async function HomePage(): Promise<JSX.Element> {
+  // Signed-in users don't need the marketing page: clients land on their /home
+  // dashboard (§6.4), admins on the consultant console. Anonymous visitors keep
+  // the public marketing page.
+  const session = await getServerSession(authOptions);
+  if (session?.role === "client") {
+    redirect("/home");
+  }
+  if (session?.role === "admin") {
+    redirect("/admin");
+  }
   return (
     <>
       <PublicHeader />
