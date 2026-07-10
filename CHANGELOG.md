@@ -7,6 +7,101 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.1.0] — Sprint 4 · framework majors + multi-provider LLM — 2026-07-09
+
+Branch `feat/majors-providers-sprint-4`. The D-018 framework-majors bundle
+deferred from Sprint 2/3 landed one major at a time with the full Playwright
+suite as the regression net, plus multi-provider LLM egress. The bundle of
+runtime/framework majors (Next 14→15, React 18→19, Tailwind 3→4, ESLint 8→9,
+Node 20→22) justifies the **minor** version bump. All exit gates green: the
+full e2e suite (34 tests), `pytest -m unit`, web `tsc --noEmit`, host prettier
+`--check` (lockfile-pinned 3.9.4), and the new in-container ruff/black gate
+(root-config parity, T0).
+
+- **Lint-gate CI parity (T0, `4c068d0`):** Sprint 3's only red CI was 6
+  ruff/black findings the loop never saw — CI runs from a full checkout where
+  config discovery walks up to the ROOT `pyproject.toml [tool.ruff]`, but the
+  api container mounts only `apps/api`, so in-container runs silently used
+  defaults. Fixed with a read-only compose mount of the root config into the
+  api service (parent of `/app`, so discovery finds it naturally); the
+  `ruff check --no-cache . && black --check .` gate is now in the runtime queue
+  `gates` array and documented in CLAUDE.md. The loop's lint gate now equals
+  CI's.
+- **Next 15 + React 19 (T1, `77bd360`):** bumped `next` → 15.5.20, `react` /
+  `react-dom` → 19.2.7 (plus `@types/react*` and `eslint-config-next`) together;
+  ran the official `@next/codemod`. Reviewed the breaking surfaces that touch
+  us: async request APIs (`cookies()`/`headers()` in `app/api/proxy/*` routes)
+  and the fetch/route-handler caching default change (the app relies on dynamic
+  rendering — each proxy route verified). `next-auth` 4.24.x runs on Next 15
+  without forcing the Auth.js v5 migration (verified sign-in/session/middleware
+  early). The full e2e suite is green on the new stack; the `next < 15.5.16`
+  advisories that dominated the root audit are cleared.
+- **Tailwind 4 (T2, `f6d816a`):** CSS-first migration — `@tailwindcss/postcss`
+  plugin, `@theme` in CSS replacing most of `tailwind.config`, breaking utility
+  renames swept across `apps/web/src` and `packages/`. The
+  `packages/design-system/src/tokens.css` custom properties survive; the s16 axe
+  sweep asserts the Sprint 2 `--ink-tertiary` contrast fix still holds. Full
+  e2e + axe green; in-container `pnpm -F web build` clean.
+- **ESLint 9 flat config (T3, `bf82fd2`):** migrated `apps/web` to
+  `eslint.config.js` flat config on ESLint 9 (9.39.4) with
+  `eslint-config-next` 16's `./core-web-vitals` flat export, preserving the
+  exact 47-rule set from the old `next/core-web-vitals` (verified via
+  `eslint --print-config` diff); old `.eslintrc*` deleted, prettier compat kept.
+  **ESLint 10 is honestly deferred upstream** (Dave decision 2026-07-09,
+  superseding SPRINT_4.md's ESLint-10 target): no published Next lint stack runs
+  on 10 today — `eslint-plugin-react` 7.37.5 uses the removed
+  `context.getFilename()` and Next's compiled babel parser hits an
+  `eslint-scope` `scopeManager.addGlobals` gap. Revisit when
+  `eslint-plugin-react` ships v10 support. See DECISIONS **D-018** annotation.
+- **Node 22 (T4, `bf6ccdd`):** `node:20-bookworm-slim` → `node:22-bookworm-slim`
+  in the three `apps/web/Dockerfile` stages, `node:20-bookworm` → `node:22`
+  compose web image, `engines.node >= 22` in the web package.json, both CI
+  `setup-node` steps (web + e2e jobs) to `22`, and the ONBOARDING host-Node
+  note. Web force-recreated on node 22.23.1; full e2e green on the rebuilt
+  stack. Deliberately after T1–T3 so a Node failure would not be confounded with
+  framework breakage.
+- **Audit to zero (T5, `987a4f2`):** root `pnpm audit` reports 0 critical / 0
+  high (T1's Next 15 cleared the 17 `next < 15.5.16` advisories); `e2e/` `npm
+audit` 0 total. Two root **moderates** are deliberately left open and
+  documented: `postcss` 8.4.31 (pinned inside `next@15.5.20`; the XSS-stringify
+  path only fires on untrusted CSS, N/A at build time) and `uuid` 8.3.2 (via
+  `next-auth@4.24.14`; the buffer-bounds bug is v3/v5/v6-only). Neither is
+  overridden — forcing a bump would risk regressing the e2e-validated stack for
+  zero real security gain; both clear on the upstream / Auth.js v5 bumps.
+  `dependabot.yml` D-018 major-suppression posture is unchanged (this sprint IS
+  that plan executing); only the stale policy comment was refreshed.
+- **Multi-provider LLM egress (T6, `05121de`):** live `OpenAIProvider`
+  (chat/completions) and `GeminiProvider` (`generateContent`) added beside
+  `AnthropicProvider` in `app/ai/llm.py`, both thin `httpx` adapters (no new SDK
+  dependency). `_build_provider` now routes `anthropic`/`openai`/`gemini`;
+  `azure_openai`/`bedrock`/`local` stay loud not-implemented `RuntimeError`s. The
+  egress contract above the seam is untouched — redaction, the `llm_calls` audit
+  row (provider/model/client_id), and "AI suggests, code computes" all unchanged;
+  adapters only translate prompt+redacted-payload → provider REST → text+tokens.
+  New settings `OPENAI_API_KEY` / `GEMINI_API_KEY` (empty default); a missing key
+  for the selected provider raises the same loud `RuntimeError` at construction
+  as Anthropic. `SHIELD_LLM_MODEL` stays the single model knob. 11 new unit tests
+  (`test_llm_providers.py`) monkeypatch `httpx` — request shape, response
+  parsing, token counts, missing-key raise, unimplemented-provider raise, and
+  HTTP 500 → `llm_calls` status=failed — with **no** live calls. Fixture mode
+  stays the default and byte-identical deterministic (D-017 untouched). Docs:
+  README AI provider matrix, `docs/architecture.md` AI-flow matrix, SMOKE_TEST
+  §14 rewritten provider-agnostic, DECISIONS **D-024**.
+- **MessageThread stale-fetch race (T8, `67e79ad`):** `MessageThread.onSend`
+  POSTed a message (201, row in DB, draft cleared) but a slow mount-time `load()`
+  GET could resolve after the POST-append and `setMessages(rows)` would clobber
+  the just-sent message. Fixed with the `efcbbfc` request-sequence-guard pattern
+  — a `reqSeq` ref, only the newest GET writes state, and `onSend` bumps the seq
+  so an in-flight mount GET is discarded. s9-messaging now green
+  deterministically (previously a deterministic failure in isolation).
+- **Checkpoint fixes:** checkpoint 1 (`efcbbfc`) fixed the same class of
+  stale-fetch race in `CsfPlaybookPanel` breaking s7 (request-sequence guard +
+  content-aware spec waiter — the pattern T8 reused); checkpoint 2 was a clean
+  pass at `05121de` (full e2e green, security clean) with no fix needed.
+- **Wrap-up (T7, this entry):** SMOKE_TEST §14 provider-agnostic wording
+  verified landed (T6); BUILD_REPORT A06 row updated to the zero-audit state;
+  CHANGELOG `[3.1.0]`; CONTEXT.md end-of-sprint snapshot.
+
 ## [3.0.3] — Sprint 3 · audit correctness & honesty — 2026-07-09
 
 Branch `fix/audit-correctness-sprint-3`. Eight tasks (T0–T7) burning down the
