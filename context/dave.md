@@ -5,10 +5,16 @@ _Last updated: 2026-07-09_
 
 ## Branch / in flight
 
-- **Sprint 4 EXECUTED — PR #28 OPEN, awaiting my review/merge**
-  (`feat/majors-providers-sprint-4`, final commit `7ec01a3`,
-  https://github.com/gene-png/SHIELD062626/pull/28). All 9 tasks (T0–T8)
-  via `/loop-sprint-cron` + 2 checkpoints + shutdown deep audit. Highlights:
+- **Sprint 5 PLANNED — PR #30 open** (`chore/sprint-5-plan`,
+  https://github.com/gene-png/SHIELD062626/pull/30): SPRINT_5.md + staged
+  queue (11 tasks). Theme: client value loop — deliverable release-to-client
+  (D-025), /documents (§6.7), /home dashboard (§6.4) + value card (§2.5),
+  CSF POA&M step, redaction preview, /admin/audit viewer, vitest harness,
+  react-hooks v6 adoption, prettier 3.9.5 pin sync (supersedes dependabot
+  #29). DELIVERY_PLAN.md refreshed to match real sprint history.
+- **Sprint 4 MERGED** (PR #28, merge commit `c5f9367`, `v3.1.0`). All 9
+  tasks via `/loop-sprint-cron` + 2 checkpoints + shutdown deep audit.
+  Highlights:
   - Framework majors landed: Next 15.5.20 / React 19.2.7 / Tailwind 4 /
     **ESLint 9 flat config** (ESLint 10 blocked upstream — no published
     eslint-plugin-react supports v10; deferral annotated on D-018) / Node 22.
@@ -26,21 +32,20 @@ _Last updated: 2026-07-09_
 
 ## Next steps
 
-1. **Review + merge PR #28** (full task table and follow-ups in the PR body).
-2. **SMOKE_TEST §14** (live AI — now provider-agnostic after T6): set a
-   provider key + `SHIELD_LLM_MODE=live` in `.env`, restart api, one CSF
-   Run-AI, verify redacted `llm_calls` row with `client_id`, no PII; revert
-   to fixture. Defects → tasks in the next sprint queue.
-3. Plan Sprint 5: client deliverable release + /home value loop + POA&M +
-   redaction preview + audit viewer. Follow-ups from Sprint 4 to consider:
-   ESLint 10 (when eslint-plugin-react ships v10 support), adopting the 14
-   parity-disabled react-hooks v6 rules, OpenAI `max_tokens` note.
+1. **Review + merge PR #30** (Sprint 5 plan).
+2. Launch Sprint 5: cut `feat/client-value-loop-sprint-5` from `main`, swap
+   the staged queue in, `/loop-sprint-cron` (checklist in SPRINT_5.md).
+   Leave dependabot #29 open until T0 lands, then close as superseded.
+3. **SMOKE_TEST §14** (live AI — provider-agnostic): no key in `.env` yet
+   (confirmed 2026-07-10). Add a provider key + `SHIELD_LLM_MODE=live`,
+   restart api, one CSF Run-AI, verify redacted `llm_calls` row with
+   `client_id`, no PII; revert to fixture. Defects → sprint-5 queue tasks.
 4. Needs-me: cloud/account/region decisions (gates terraform/deploy/DR).
 
 ## Personal todos (human-only)
 
-- Merge PR #28.
-- SMOKE_TEST §14 live-AI run (see step 2). §10 done 2026-07-09.
+- Merge PR #30; launch the Sprint 5 loop.
+- SMOKE_TEST §14 live-AI run (see step 3). §10 done 2026-07-09.
 - Decide cloud/account/region for the infra work (Sprint 5+/6).
 - Optional: OpenAI/Gemini API keys for a live smoke of the new adapters
   (unit tests don't need them).
