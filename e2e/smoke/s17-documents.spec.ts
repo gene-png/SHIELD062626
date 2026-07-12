@@ -1,7 +1,13 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { register, uniqueEmail } from "../helpers/auth";
-import { adminApiToken, API_BASE } from "../helpers/ids";
+import {
+  CLIENT_EMAIL,
+  CLIENT_PASSWORD,
+  register,
+  signIn,
+  uniqueEmail,
+} from "../helpers/auth";
+import { adminApiToken, API_BASE, atlasClientIdViaApi } from "../helpers/ids";
 
 /**
  * SMOKE_TEST §6.7 (Sprint 5 T2): the client "WHAT YOU'VE RECEIVED" page.
@@ -13,12 +19,16 @@ import { adminApiToken, API_BASE } from "../helpers/ids";
  *      and the download link streams 200 with a §15.5 filename.
  *   2. A finalized-but-UNRELEASED deliverable never appears for the client.
  *
- * Fully ISOLATED in its own throwaway tenant (mirrors s13-isolation), for two
- * reasons: (a) it never perturbs the shared seeded Atlas services other specs
- * resolve by type; (b) the download assertion needs artifact BYTES in the live
- * object store, and only deliverables finalized through the API at runtime land
- * there — the seed writes to a local-FS stub the S3-backed API can't read. So
- * this spec finalizes fresh (v1 released, v2 kept back) inside its own tenant.
+ * Fully ISOLATED in its own throwaway tenant (mirrors s13-isolation): it never
+ * perturbs the shared seeded Atlas services other specs resolve by type, and it
+ * proves the negative case (a finalized-but-unreleased deliverable stays hidden)
+ * without touching the seed.
+ *
+ * A SECOND test proves seed → storage parity (Sprint 6 T2): the seed now writes
+ * artifact bytes through get_storage() (the SAME backend the API reads — MinIO
+ * under compose) and actually RELEASES its deliverables, so the real seeded
+ * client (client@atlas.example) downloads a seeded released report → 200. Before
+ * T2 this 410'd (bytes written to a local-FS stub the S3-backed API can't read).
  */
 
 const TENANT_NAME = "Documents QA";
@@ -184,5 +194,55 @@ test.describe("s17 /documents — released deliverables for the client", () => {
     );
     const body = await download.body();
     expect(body.length, "PDF byte size").toBeGreaterThan(0);
+  });
+
+  test("seeded Atlas client downloads a SEEDED released deliverable (T2 storage parity)", async ({
+    page,
+    request,
+  }) => {
+    test.slow();
+    // Resolve a seeded released deliverable straight from the API (admin-direct,
+    // tenant-scoped by X-Client-Id) so we know its artifact id + §15.5 filename.
+    const token = await adminApiToken(request);
+    const clientId = await atlasClientIdViaApi(request, token);
+    const listed = await request.get(
+      `${API_BASE}/clients/${clientId}/deliverables`,
+      {
+        headers: { Authorization: `Bearer ${token}`, "X-Client-Id": clientId },
+      },
+    );
+    expect(
+      listed.ok(),
+      `list seeded deliverables (${listed.status()})`,
+    ).toBeTruthy();
+    const items = ((await listed.json()) as { items: DeliverableRow[] }).items;
+    const seeded = items.find((d) => d.pdf_artifact_id);
+    expect(
+      seeded,
+      "seed must release at least one deliverable with a PDF artifact",
+    ).toBeTruthy();
+    const deliverable = seeded as DeliverableRow;
+
+    // The REAL seeded client of the Atlas tenant signs in and opens /documents.
+    await signIn(page, CLIENT_EMAIL, CLIENT_PASSWORD);
+    await page.goto("/documents");
+    const table = page.getByRole("table");
+    await expect(table).toBeVisible({ timeout: 20000 });
+    await expect(
+      page.getByRole("row").filter({ hasText: deliverable.title }),
+    ).toBeVisible();
+
+    // The seeded deliverable's bytes are in the SAME store the API reads: the
+    // client download streams 200 (this 410'd before the seed→storage fix).
+    const download = await page.request.get(
+      `/api/proxy/artifacts/${deliverable.pdf_artifact_id}/download`,
+    );
+    expect(download.status(), "seeded PDF download status").toBe(200);
+    expect(download.headers()["content-type"]).toContain("application/pdf");
+    expect(download.headers()["content-disposition"] ?? "").toContain(
+      deliverable.pdf_filename ?? "__no_filename__",
+    );
+    const body = await download.body();
+    expect(body.length, "seeded PDF byte size").toBeGreaterThan(0);
   });
 });

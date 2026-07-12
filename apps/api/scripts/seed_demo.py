@@ -86,7 +86,7 @@ from app.models._common import utcnow  # noqa: E402
 from app.models.capability import CapabilityDisposition  # noqa: E402
 from app.security.email_domains import domain_of  # noqa: E402
 from app.security.password import hash_password  # noqa: E402
-from app.storage.local import LocalFilesystemStorage  # noqa: E402
+from app.storage import StorageBackend, get_storage  # noqa: E402
 from app.tech_debt.exporters import (  # noqa: E402
     build_context as build_td_context,
 )
@@ -116,8 +116,6 @@ ADMIN_EMAIL = "admin@kentro.example"
 CLIENT_EMAIL = "client@atlas.example"
 PASSWORD = "DemoPass!2026"
 COMPANY = "Atlas Defense Solutions"
-
-STORAGE_ROOT = Path(os.environ.get("SHIELD_DEMO_ARTIFACTS", "/tmp/shield-demo-artifacts"))
 
 
 def _upgrade_head() -> None:
@@ -228,7 +226,7 @@ def _ensure_client_domain(db: Session, org: Client, admin: User) -> None:
 
 def _write_artifact(
     db: Session,
-    storage: LocalFilesystemStorage,
+    storage: StorageBackend,
     *,
     user: User,
     filename: str,
@@ -256,7 +254,7 @@ def _write_artifact(
 
 def _release(
     db: Session,
-    storage: LocalFilesystemStorage,
+    storage: StorageBackend,
     *,
     user: User,
     service: Service,
@@ -285,6 +283,7 @@ def _release(
         data=xlsx_bytes,
         stage=stage,
     )
+    now = utcnow()
     deliv = Deliverable(
         service_id=service.id,
         title=f"{service.title} v1",
@@ -292,14 +291,28 @@ def _release(
         version=1,
         pdf_artifact_id=pdf_art.id,
         xlsx_artifact_id=xlsx_art.id,
-        finalized_at=utcnow(),
+        finalized_at=now,
         finalized_by=user.id,
+        # Actually RELEASE to the client (D-025 / §12): the client list route and
+        # the artifact-download gate both require released_at, so a finalize-only
+        # deliverable stays invisible to client@atlas.example. The demo story
+        # needs downloadable reports, so the seed releases as well as finalizes.
+        released_at=now,
+        released_by=user.id,
     )
     db.add(deliv)
     db.flush()
     audit(
         db,
         action=f"{stage}.finalized",
+        target_type="deliverable",
+        target_id=deliv.id,
+        actor_user_id=user.id,
+        details={"service_id": str(service.id), "demo": True},
+    )
+    audit(
+        db,
+        action=f"{stage}.released",
         target_type="deliverable",
         target_id=deliv.id,
         actor_user_id=user.id,
@@ -337,9 +350,7 @@ _TD_ITEMS = [
 ]
 
 
-def _seed_tech_debt(
-    db: Session, storage: LocalFilesystemStorage, admin: User, org: Client
-) -> Service:
+def _seed_tech_debt(db: Session, storage: StorageBackend, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.TECH_DEBT,
         status=ServiceStatus.RELEASED,
@@ -433,7 +444,7 @@ def _csf_tier_for(index: int) -> int:
     return pattern[index % len(pattern)]
 
 
-def _seed_csf(db: Session, storage: LocalFilesystemStorage, admin: User, org: Client) -> Service:
+def _seed_csf(db: Session, storage: StorageBackend, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.NIST_CSF,
         status=ServiceStatus.RELEASED,
@@ -528,7 +539,7 @@ def _zt_stage_for(index: int) -> int:
 
 def _seed_zt(
     db: Session,
-    storage: LocalFilesystemStorage,
+    storage: StorageBackend,
     admin: User,
     org: Client,
     *,
@@ -644,7 +655,7 @@ def _attack_status_for(index: int, is_sub: bool) -> str | None:
     return None
 
 
-def _seed_attack(db: Session, storage: LocalFilesystemStorage, admin: User, org: Client) -> Service:
+def _seed_attack(db: Session, storage: StorageBackend, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.ATTACK_COVERAGE,
         status=ServiceStatus.RELEASED,
@@ -742,8 +753,11 @@ def main() -> None:
     print("Applying migrations...")
     _upgrade_head()
 
-    STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
-    storage = LocalFilesystemStorage(STORAGE_ROOT)
+    # Write artifacts through the SAME backend the API reads from (get_storage
+    # picks MinIO/S3 vs local from Settings.s3_endpoint_url). Previously the seed
+    # wrote to a local-FS stub the S3-backed API couldn't read -> seeded
+    # deliverable downloads 410'd (Sprint 6 T2).
+    storage = get_storage()
 
     engine = _engine()
     with Session(engine, future=True) as db:
