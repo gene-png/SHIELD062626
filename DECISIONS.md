@@ -419,3 +419,31 @@ invisible to clients by construction.
 `app/deliverable_release.py`, `app/routes/clients.py`, `app/routes/artifacts.py`,
 `alembic/versions/0028_deliverable_release.py`,
 `tests/unit/test_deliverable_release.py`; DECISIONS D-023, D-016.
+
+## D-026 — Live-AI enablement: `anthropic` is a real runtime dep + a live-mode boot preflight
+
+**2026-07-12 · ai/config**
+Make the live-AI path actually runnable rather than a config that 500s on first
+use. Three changes: (1) declare `anthropic>=0.40,<1` in `apps/api`
+dependencies — the `AnthropicProvider` lazy-imports `from anthropic import
+Anthropic` (`app/ai/llm.py`), so an undeclared SDK surfaced only as an
+`ImportError` on the first live Run-AI; it is now a real runtime dependency and
+the image must be rebuilt (a plain restart won't install it). (2) Replace the
+stale default model `claude-opus-4-7` (invalid → 404) with `claude-sonnet-5`
+in both `app/config.py` and `docker-compose.yml`. (3) Add a live-mode boot
+preflight: `Settings.live_llm_readiness()` is the single source of truth for
+"will a live call succeed" — anthropic needs its key AND an importable SDK,
+openai/gemini (httpx adapters) need only their key, every other provider value
+has no adapter, and the model must not be a known placeholder. It never raises;
+`assert_safe_for_runtime()` wraps a false result in a loud `RuntimeError` at
+boot (lifespan `app/main.py`), and `GET /admin/ai-status` surfaces the same
+detail to operators. Fixture mode is entirely unaffected.
+**Rationale:** FAIL LOUDLY at boot beats a 404/500 mid-engagement. The
+2026-07-12 manual smoke PROVED the path works end-to-end against a live
+`claude-sonnet-5` call (2.6s, redaction stripped `{client_org:2,name:2,email:2}`,
+correct `llm_calls` row, no PII egress) — the only blockers were the missing
+dep, the stale model, and the absent preflight. The SDK-importable check
+guards specifically against the "declared but image not rebuilt" trap.
+**Ref:** SPRINT_6.md T0; `apps/api/pyproject.toml`, `app/config.py`,
+`app/main.py`, `app/routes/admin.py`, `docker-compose.yml`,
+`tests/unit/test_config.py`; DECISIONS D-017, D-024.
