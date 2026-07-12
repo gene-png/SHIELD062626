@@ -18,10 +18,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.models import AuditEntry, Client, User, UserRole
-from app.models.audit_entry import AuditEntryImmutableError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+from app.models import AuditEntry, Client, User, UserRole
+from app.models.audit_entry import AuditEntryImmutableError
 
 
 @pytest.fixture()

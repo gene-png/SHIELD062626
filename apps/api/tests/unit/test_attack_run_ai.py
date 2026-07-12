@@ -9,12 +9,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
-from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
-from app.models.service import Service, ServiceKind, ServiceStatus
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
+from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
+from app.models.service import Service, ServiceKind, ServiceStatus
 
 
 @pytest.fixture()

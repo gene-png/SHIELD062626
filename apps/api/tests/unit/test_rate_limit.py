@@ -118,8 +118,9 @@ class _FakeRedis:
 
 @pytest.mark.unit
 def test_check_allows_up_to_limit_then_raises_typed_429() -> None:
-    from app.security.rate_limit import RateLimit, RateLimiter
     from fastapi import HTTPException
+
+    from app.security.rate_limit import RateLimit, RateLimiter
 
     limiter = RateLimiter(_FakeBackend())
     rate = RateLimit(limit=3, window_seconds=60)
@@ -193,9 +194,10 @@ def test_redis_backend_arms_ttl_atomically_with_the_counter() -> None:
 def test_enforce_ai_blocks_per_client_after_limit() -> None:
     import uuid
 
+    from fastapi import HTTPException
+
     from app.config import Settings
     from app.security.rate_limit import RateLimiter
-    from fastapi import HTTPException
 
     settings = Settings(shield_rate_limit_ai_max=2, shield_rate_limit_ai_window_seconds=60)
     limiter = RateLimiter(_FakeBackend(), settings)
@@ -216,9 +218,10 @@ def test_enforce_ai_rate_limit_dependency_yields_typed_429() -> None:
     import uuid
     from types import SimpleNamespace
 
+    from fastapi import HTTPException
+
     from app.config import Settings
     from app.security.rate_limit import RateLimiter, enforce_ai_rate_limit
-    from fastapi import HTTPException
 
     settings = Settings(shield_rate_limit_ai_max=1, shield_rate_limit_ai_window_seconds=60)
     limiter = RateLimiter(_FakeBackend(), settings)

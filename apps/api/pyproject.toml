@@ -40,11 +40,13 @@ dev = [
     # NOTE: ruff/black only see the ROOT pyproject's [tool.*] config when the
     # full repo is checked out — the api container mounts only apps/api, so
     # in-container runs use tool defaults and disagree with CI.
-    # PINNED EXACTLY (Sprint 5): a floating range let CI resolve a newer ruff
-    # 0.15.x whose isort re-flagged test_llm_providers.py imports the loop's
-    # in-container ruff (0.15.20) considered clean — a gate divergence that
-    # blocked PR #31. Exact pins keep the loop gate and CI byte-for-byte equal;
-    # bump deliberately with a format pass, never float.
+    # PINNED EXACTLY (Sprint 5) for reproducibility so the loop's in-container
+    # tools and CI resolve identical versions. (The PR #31 gate divergence was
+    # NOT a version drift — it was ruff isort auto-detecting `app` as
+    # first-party in the container but third-party on CI; that is fixed
+    # separately by known-first-party=["app"] in the ROOT pyproject's
+    # [tool.ruff.lint.isort]. The exact pins are belt-and-suspenders.)
+    # Bump deliberately with a format pass, never float.
     "ruff==0.15.20",
     "black==26.5.1",
     "mypy>=1.11",

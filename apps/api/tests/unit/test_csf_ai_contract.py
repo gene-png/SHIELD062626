@@ -24,13 +24,14 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.ai.jobs import _CSF_SCORE_PROMPT
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
 from app.csf.catalog import SUBCATEGORIES
 from app.routes.csf import _DIM_FIELDS
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 # The exact keys routes/csf.py:run_ai depends on when parsing the response.
 _PARSER_TOP_LEVEL_KEY = "scores"

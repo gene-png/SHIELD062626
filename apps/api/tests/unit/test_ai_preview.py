@@ -16,12 +16,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
-from app.csf.catalog import SUBCATEGORIES
-from app.models.llm_call import LLMCall
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
+from app.csf.catalog import SUBCATEGORIES
+from app.models.llm_call import LLMCall
 
 
 @pytest.fixture()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+
 from app.models.capability import CapabilityItem
 from app.tech_debt.overlap import analyze_overlap
 

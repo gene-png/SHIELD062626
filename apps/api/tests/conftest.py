@@ -15,8 +15,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://test:test@localhost:
 
 @pytest.fixture()
 def client():
-    from app.main import create_app
     from fastapi.testclient import TestClient
+
+    from app.main import create_app
 
     app = create_app()
     with TestClient(app) as c:

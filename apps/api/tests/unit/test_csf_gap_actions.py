@@ -17,12 +17,13 @@ from types import SimpleNamespace
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.csf import playbook_export
-from app.csf.catalog import SUBCATEGORIES
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.csf import playbook_export
+from app.csf.catalog import SUBCATEGORIES
 
 
 @pytest.fixture()

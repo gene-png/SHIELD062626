@@ -7,6 +7,7 @@ import uuid
 from datetime import date
 
 import pytest
+
 from app.models.capability import (
     CapabilityDisposition,
     CapabilityItem,

@@ -22,10 +22,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.storage.local import LocalFilesystemStorage
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.storage.local import LocalFilesystemStorage
 
 
 @pytest.fixture()

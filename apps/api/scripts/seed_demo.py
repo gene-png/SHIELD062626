@@ -35,6 +35,9 @@ _ensure_db_url()
 
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
+from sqlalchemy import create_engine, select  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
 from app.attack.analytics import compute as compute_attack  # noqa: E402
 from app.attack.catalog import TECHNIQUES, parent_techniques  # noqa: E402
 from app.attack.coverage import CoverageStatus  # noqa: E402
@@ -108,8 +111,6 @@ from app.zt.exporters import render_xlsx as render_zt_xlsx  # noqa: E402
 from app.zt.maturity import ZtFrameworkCode  # noqa: E402
 from app.zt.scoring import analyze_gaps as analyze_zt_gap  # noqa: E402
 from app.zt.scoring import compute as compute_zt  # noqa: E402
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
 
 ADMIN_EMAIL = "admin@kentro.example"
 CLIENT_EMAIL = "client@atlas.example"

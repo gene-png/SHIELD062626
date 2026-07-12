@@ -6,6 +6,7 @@ import io
 import uuid
 
 import pytest
+
 from app.attack.analytics import compute as compute_heatmap
 from app.attack.catalog import TECHNIQUES
 from app.attack.coverage import CoverageStatus

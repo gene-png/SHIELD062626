@@ -9,6 +9,7 @@ egress security boundary; over-redaction is preferable to under-redaction.
 from __future__ import annotations
 
 import pytest
+
 from app.ai.redact import redact_for_ai, redact_payload
 
 # ---------------------------------------------------------------------------

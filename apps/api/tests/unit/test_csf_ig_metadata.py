@@ -20,6 +20,7 @@ pattern: older assessments roll up unchanged).
 from __future__ import annotations
 
 import pytest
+
 from app.csf.catalog import (
     SUBCATEGORIES,
     Alignment,

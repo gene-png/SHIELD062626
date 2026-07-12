@@ -25,6 +25,10 @@ import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+
+from app import ai
 from app.ai import llm as llm_mod
 from app.ai.llm import (
     GeminiProvider,
@@ -35,10 +39,6 @@ from app.ai.llm import (
 from app.config import Settings
 from app.models.llm_call import LLMCall, LLMCallMode, LLMCallStatus
 from app.models.user import User, UserRole
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
-
-from app import ai
 
 # --------------------------------------------------------------------------- #
 # httpx fake — captures the outgoing request and returns a canned response.

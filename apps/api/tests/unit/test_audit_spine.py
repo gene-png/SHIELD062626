@@ -9,11 +9,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
 from app.audit import audit
 from app.logging import correlation_id_var
 from app.models.audit_entry import AuditEntry
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session
 
 
 @pytest.fixture()

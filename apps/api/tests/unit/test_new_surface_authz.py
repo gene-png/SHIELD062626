@@ -14,10 +14,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.csf.catalog import SUBCATEGORIES
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.csf.catalog import SUBCATEGORIES
 
 
 @pytest.fixture()

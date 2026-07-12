@@ -10,11 +10,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.models.audit_entry import AuditEntry
-from app.storage.local import LocalFilesystemStorage
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.models.audit_entry import AuditEntry
+from app.storage.local import LocalFilesystemStorage
 
 
 @pytest.fixture()

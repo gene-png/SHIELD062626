@@ -16,14 +16,15 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
 from app.models.capability import CapabilityList
 from app.models.llm_call import LLMCall
 from app.models.service import Service
 from app.storage.local import LocalFilesystemStorage
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
 
 
 @pytest.fixture()
