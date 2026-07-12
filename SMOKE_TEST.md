@@ -157,6 +157,29 @@ The part only a human can do — confirm the documents actually _look_ right.
 - [ ] Run **one** Run-AI through the UI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 - [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
 
+### 14.1 Live-AI parity sweep — all five purposes (Sprint 6 T7, opt-in)
+
+> **Extended from CSF-only to every AI purpose, still key-gated.** T1 codified
+> the `csf_score` path; T7 extends the SAME opt-in spec
+> (`apps/api/tests/live/test_live_ai.py`) to a parametrized sweep over all five
+> purposes — `csf_score`, `zt_score`, `mitre_map`, `risk_synthesize`,
+> `tech_debt_extract`. Every case plants the identical canonical PII (org/name/
+> email, twice each) so `redacted_counts` must equal `{email: 2, name: 2,
+> client_org: 2}` for every purpose, asserts a complete live `llm_calls` row and
+> no PII in the response, **and** asserts the response parses into the container
+> the route layer reads (`scores` / `capabilities` / `techniques` / `entries` /
+> `ExtractedCapability` rows) — the per-adapter parse check. Like §14 it is
+> `@pytest.mark.live` only, lives outside `tests/unit`, and **self-skips without
+> a key**, so CI (`pytest -m unit tests/unit`) never collects it and the boxes
+> below stay **unchecked on purpose** until run with a real key.
+
+- [ ] Run the full sweep with a key: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api pytest -m live tests/live -q` → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape).
+- [ ] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
+- [ ] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
+- [ ] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
+- [ ] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
+- [ ] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
+
 ## 15. Security headers
 
 - [x] `curl -I http://localhost:3000`: confirm **CSP**, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Strict-Transport-Security`, `Permissions-Policy`. (s15-headers.spec.ts — all six present, set in `apps/web/next.config.mjs`)
