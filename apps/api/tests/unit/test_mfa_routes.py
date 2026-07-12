@@ -216,3 +216,74 @@ def test_recovery_code_login_is_single_use(app_client: TestClient) -> None:
         json={"mfa_pending_token": _challenge(), "code": recovery},
     )
     assert second.status_code == 401
+
+
+@pytest.mark.unit
+def test_verify_login_failures_feed_account_lockout(app_client: TestClient) -> None:
+    """Second-factor guesses at /auth/mfa/verify-login must count toward the
+    same account-lockout budget as password failures (Sprint 6 T10). A single
+    reusable mfa_pending token models an attacker hammering the code — once the
+    budget is exhausted, even a CORRECT TOTP is refused (423) and password
+    login is locked too (one shared counter)."""
+    from app.config import get_settings
+
+    body = _register(app_client)
+    access = body["tokens"]["access_token"]
+    secret, _codes = _enroll_and_verify(app_client, access)
+
+    login = app_client.post(
+        "/auth/login", json={"email": "first@example.com", "password": _PASSWORD}
+    )
+    pending = login.json()["mfa_pending_token"]
+
+    max_attempts = get_settings().shield_account_lockout_max_attempts
+    for _ in range(max_attempts):
+        r = app_client.post(
+            "/auth/mfa/verify-login",
+            json={"mfa_pending_token": pending, "code": "000000"},
+        )
+        assert r.status_code == 401, r.text
+
+    # Budget exhausted → account locked: a correct TOTP now yields 423, not 200.
+    locked = app_client.post(
+        "/auth/mfa/verify-login",
+        json={"mfa_pending_token": pending, "code": totp.totp_now(secret)},
+    )
+    assert locked.status_code == 423, locked.text
+
+    # The lockout is shared: password login is locked too.
+    pw = app_client.post("/auth/login", json={"email": "first@example.com", "password": _PASSWORD})
+    assert pw.status_code == 423
+
+
+@pytest.mark.unit
+def test_enroll_verify_failures_feed_account_lockout(app_client: TestClient) -> None:
+    """Wrong codes at /auth/mfa/verify (enrollment confirmation) must also feed
+    the account-lockout counter (Sprint 6 T10), so the enrollment-confirm code
+    cannot be brute-forced without tripping lockout."""
+    from app.config import get_settings
+
+    body = _register(app_client)
+    access = body["tokens"]["access_token"]
+    app_client.post("/auth/mfa/enroll", headers={"Authorization": f"Bearer {access}"})
+
+    max_attempts = get_settings().shield_account_lockout_max_attempts
+    for _ in range(max_attempts):
+        r = app_client.post(
+            "/auth/mfa/verify",
+            headers={"Authorization": f"Bearer {access}"},
+            json={"code": "000000"},
+        )
+        assert r.status_code == 400, r.text
+
+    # Budget exhausted → account locked. A further verify is refused with 423.
+    locked = app_client.post(
+        "/auth/mfa/verify",
+        headers={"Authorization": f"Bearer {access}"},
+        json={"code": "000000"},
+    )
+    assert locked.status_code == 423, locked.text
+
+    # And password login is locked too (shared counter).
+    pw = app_client.post("/auth/login", json={"email": "first@example.com", "password": _PASSWORD})
+    assert pw.status_code == 423

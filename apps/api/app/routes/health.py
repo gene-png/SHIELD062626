@@ -18,7 +18,7 @@ can simulate a down dependency by monkeypatching it.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -27,8 +27,20 @@ from app import __version__
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.logging import get_logger
+from app.security.jwt import TokenError, verify_token
 
 log = get_logger("app.routes.health")
+
+# /ready is public (load balancers and k8s probe it unauthenticated), so the
+# per-dependency `detail` — which carries exception types/messages and the LLM
+# config state — is reduced to a generic per-status string for anonymous
+# callers (Sprint 6 T10). The offender NAMES and each status are still exposed
+# (operators and orchestrators need them); only the internal detail is withheld.
+_REDACTED_DETAIL = {
+    "ok": "ok",
+    "down": "unavailable",
+    "dormant": "dormant",
+}
 
 router = APIRouter(tags=["health"])
 
@@ -129,12 +141,39 @@ def _probe_llm(settings: Settings) -> DependencyStatus:
     return DependencyStatus(status="ok" if ready else "down", required=False, detail=detail)
 
 
+def _caller_is_authenticated(request: Request) -> bool:
+    """True when the request carries a structurally valid, unexpired access
+    token. Token-signature only (no DB load) so /ready stays cheap — the gated
+    payload is diagnostic operator detail, not user data. Anonymous callers get
+    the reduced matrix; authenticated callers get full detail."""
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        return False
+    token = auth.split(" ", 1)[1].strip()
+    try:
+        verify_token(token, expected_type="access")
+    except TokenError:
+        return False
+    return True
+
+
+def _redacted(check: DependencyStatus) -> DependencyStatus:
+    return DependencyStatus(
+        status=check.status,
+        required=check.required,
+        detail=_REDACTED_DETAIL.get(check.status, check.status),
+    )
+
+
 @router.get(
     "/ready",
     response_model=ReadyResponse,
     summary="Readiness probe (per-dependency matrix)",
 )
-def ready(db: Session = Depends(get_db)) -> ReadyResponse:  # noqa: B008 - FastAPI DI idiom
+def ready(
+    request: Request,
+    db: Session = Depends(get_db),  # noqa: B008 - FastAPI DI idiom
+) -> ReadyResponse:
     settings = get_settings()
     checks: dict[str, DependencyStatus] = {
         "db": _probe_db(db),
@@ -149,6 +188,11 @@ def ready(db: Session = Depends(get_db)) -> ReadyResponse:  # noqa: B008 - FastA
         log.debug("ready.ok", checks={n: c.status for n, c in checks.items()})
     else:
         log.warning("ready.degraded", offenders=offenders)
+
+    # Withhold internal detail from anonymous callers (offenders + statuses stay).
+    if not _caller_is_authenticated(request):
+        checks = {name: _redacted(c) for name, c in checks.items()}
+
     return ReadyResponse(
         status="ok" if is_ready else "degraded",
         ready=is_ready,

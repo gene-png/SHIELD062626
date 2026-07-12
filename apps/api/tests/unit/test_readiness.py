@@ -152,6 +152,62 @@ def test_ready_stays_true_when_only_informational_check_off(
 
 
 @pytest.mark.unit
+def test_ready_redacts_detail_for_anonymous_callers(ready_client: TestClient, monkeypatch) -> None:
+    # /ready is public (LBs/k8s hit it unauthenticated). It must still name the
+    # offender and report each status, but NOT leak internal exception detail or
+    # LLM config state to anonymous callers (Sprint 6 T10).
+    import app.routes.health as health_mod
+
+    monkeypatch.setattr(
+        health_mod,
+        "_probe_redis",
+        lambda settings: health_mod.DependencyStatus(
+            status="down",
+            required=True,
+            detail="ConnectionError: refused to redis://secret-internal-host:6379",
+        ),
+    )
+    body = ready_client.get("/ready").json()
+
+    # Operator-actionable signal is preserved.
+    assert body["ready"] is False
+    assert "redis" in body["offenders"]
+    assert body["checks"]["redis"]["status"] == "down"
+
+    # Internal exception detail is NOT exposed to anonymous callers.
+    for check in body["checks"].values():
+        assert "ConnectionError" not in check["detail"]
+        assert "secret-internal-host" not in check["detail"]
+    # LLM config state is likewise not disclosed.
+    assert "fixture" not in body["checks"]["llm"]["detail"].lower()
+
+
+@pytest.mark.unit
+def test_ready_full_detail_for_authenticated_caller(ready_client: TestClient, monkeypatch) -> None:
+    # An authenticated caller (valid access token) DOES get the full operator
+    # detail — the reduction only applies to anonymous callers.
+    import uuid
+
+    import app.routes.health as health_mod
+    from app.security.jwt import issue_token
+
+    monkeypatch.setattr(
+        health_mod,
+        "_probe_redis",
+        lambda settings: health_mod.DependencyStatus(
+            status="down",
+            required=True,
+            detail="ConnectionError: refused to redis://secret-internal-host:6379",
+        ),
+    )
+    token, _payload = issue_token(subject=uuid.uuid4(), role="admin", typ="access")
+    body = ready_client.get("/ready", headers={"Authorization": f"Bearer {token}"}).json()
+
+    assert "ConnectionError" in body["checks"]["redis"]["detail"]
+    assert "secret-internal-host" in body["checks"]["redis"]["detail"]
+
+
+@pytest.mark.unit
 def test_probe_redis_reports_down_on_unreachable_server() -> None:
     # Real probe against a dead address fails loudly-but-caught into a "down"
     # status (readiness must never raise 500 — it reports the offender).

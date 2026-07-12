@@ -141,15 +141,6 @@ def _login_result_from_pair(pair: TokenPairResponse) -> LoginResult:
     )
 
 
-def _clear_password_failures(user: User) -> None:
-    """Correct password → reset the password-lockout counters. Used on the MFA
-    challenge path where login is not yet complete, so we must NOT stamp
-    last_login_at / audit a login until the second factor is satisfied."""
-    user.failed_login_count = 0
-    user.last_failed_login_at = None
-    user.locked_until_at = None
-
-
 def _as_aware(dt: datetime | None) -> datetime | None:
     """SQLite returns naive datetimes; coerce to UTC-aware for comparison."""
     if dt is None:
@@ -451,10 +442,12 @@ def login(
 
     # Email verification gate (Sprint 6 T5, D-028). When the flag is on, a user
     # whose address is not yet verified cannot complete login (nor start the MFA
-    # step). The password was correct, so clear the password-lockout counters —
-    # but do NOT stamp last_login_at or audit a login (login is not complete).
+    # step). Do NOT reset the lockout counters here: login is not complete, and
+    # resetting on a correct password before the second gate is cleared would
+    # let an attacker who has the password wipe accrued failures at will
+    # (counters reset only on a fully successful login, T10). commit() persists
+    # any password rehash above.
     if get_settings().shield_auth_require_email_verify and user.email_verified_at is None:
-        _clear_password_failures(user)
         db.commit()
         log.info("auth.login_blocked_unverified", user_id=str(user.id))
         raise HTTPException(
@@ -471,10 +464,11 @@ def login(
     # Second factor (Sprint 6 T4, D-027). If the user has TOTP MFA enrolled, the
     # password is only the FIRST factor: issue a short-lived mfa_pending token
     # (good for nothing but /auth/mfa/verify-login) INSTEAD of the real pair.
-    # Login is not complete, so reset only the password-lockout counters here;
-    # last_login_at + the login audit are stamped once the code is verified.
+    # Login is NOT complete, so the lockout counters are NOT reset here — they
+    # clear only once BOTH factors succeed (_register_successful_login). Resetting
+    # at the challenge would let an attacker with the password evade second-factor
+    # lockout by re-logging between guesses (T10). commit() persists any rehash.
     if user.mfa_enrolled:
-        _clear_password_failures(user)
         pending_token, _payload = issue_token(
             subject=user.id, role=user.role.value, typ="mfa_pending"
         )
@@ -647,6 +641,15 @@ def mfa_verify(
     fresh set of one-time recovery codes (returned in plaintext exactly once)."""
     limiter.enforce_auth(request, user.email)
 
+    # A locked account cannot brute-force the enrollment-confirm code either
+    # (T10): the second-factor guesses feed the same lockout counter as password
+    # failures, so once locked we refuse until the window elapses.
+    if _is_locked(user):
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Account is temporarily locked. Try again later.",
+        )
+
     if not user.mfa_totp_secret:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -657,6 +660,9 @@ def mfa_verify(
         )
 
     if not verify_totp(decrypt_secret(user.mfa_totp_secret), body.code):
+        # A wrong confirmation code counts toward account lockout (T10).
+        _register_failed_attempt(db, user)
+        db.commit()
         log.info("auth.mfa_verify_rejected", user_id=str(user.id))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -724,6 +730,15 @@ def mfa_verify_login(
     # short-lived, but rate-limiting still blunts online code guessing).
     limiter.enforce_auth(request, user.email)
 
+    # A locked account cannot complete the challenge (T10): once the shared
+    # lockout counter is tripped — by password OR second-factor failures — even
+    # a correct code is refused until the window elapses.
+    if _is_locked(user):
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Account is temporarily locked. Try again later.",
+        )
+
     verified = user.mfa_totp_secret is not None and verify_totp(
         decrypt_secret(user.mfa_totp_secret), body.code
     )
@@ -743,6 +758,10 @@ def mfa_verify_login(
                 break
 
     if not verified:
+        # A wrong second factor counts toward account lockout (T10), so an
+        # attacker holding a valid mfa_pending token cannot grind codes forever.
+        _register_failed_attempt(db, user)
+        db.commit()
         log.info("auth.mfa_login_rejected", user_id=str(user.id))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
