@@ -54,6 +54,12 @@ class S3Storage(StorageBackend):
         except Exception:  # noqa: BLE001 - boto raises a family of errors here
             return False
 
+    def health_check(self) -> None:
+        # head_bucket is the cheapest reachability + auth + bucket-exists probe
+        # boto3 offers. Raises (ClientError / EndpointConnectionError) if the
+        # endpoint is unreachable or the bucket is missing.
+        self._client.head_bucket(Bucket=self._bucket)
+
     def signed_url(self, key: str, *, ttl_seconds: int = 600) -> str:
         return self._client.generate_presigned_url(
             "get_object",

@@ -40,3 +40,11 @@ class StorageBackend(Protocol):
     def signed_url(self, key: str, *, ttl_seconds: int = 600) -> str:
         """Return a short-lived read URL for the object at `key`."""
         ...
+
+    def health_check(self) -> None:
+        """Confirm the backing store is reachable; raise on failure.
+
+        Used by the `/ready` readiness probe. Must raise (not return a bool)
+        so the caller sees the underlying error type in the offender detail.
+        """
+        ...
