@@ -53,6 +53,15 @@ export default async function SignInPage(props: {
             Create an account
           </Link>
         </p>
+        <p className="text-sm text-ink-secondary">
+          Forgot your password?{" "}
+          <Link
+            href="/forgot-password"
+            className="font-medium text-brand-500 hover:text-brand-600"
+          >
+            Reset it
+          </Link>
+        </p>
       </main>
     </>
   );

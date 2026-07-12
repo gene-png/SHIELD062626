@@ -506,3 +506,62 @@ flag-off = no challenge for non-enrolled users (back-compat).
 `tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/options.ts`,
 `apps/web/src/components/auth/{SignInForm,MfaEnrollment}.tsx`,
 `apps/web/src/app/account/page.tsx`; DECISIONS D-020.
+
+## D-028 — Real email verification + password reset over SMTP/MailHog
+
+**2026-07-12 · auth**
+Ship real email-address verification and self-service password reset on the
+existing custom-JWT auth stack (MailHog in dev; any SMTP host in prod). Four new
+endpoints on `routes/auth.py`: `POST /auth/verify-email` (consumes a token and
+stamps `users.email_verified_at`), `POST /auth/resend-verification`,
+`POST /auth/forgot-password`, and `POST /auth/reset-password`. Registration now
+mints a verification token and sends the email as part of the same transaction.
+All four are rate-limited via the existing per-account auth limiter.
+
+**Token model.** A new additive/SQLite-safe migration `0031` adds an
+`email_tokens` table holding only the SHA-256 hash of each opaque token (the raw
+token — ~256 bits from `secrets.token_urlsafe` — lives only in the emailed
+link), a `purpose` (`email_verify` | `password_reset`), an `expires_at`, and a
+`used_at`. Tokens are single-use (stamped `used_at` on success only, so a failed
+action leaves them replayable within their window) and time-bounded
+(verification 24h, reset 1h). SHA-256 is deliberate, not a KDF: these are
+already high-entropy, so lookup must be one indexed query and a slow hash buys
+nothing. A completed reset voids every other outstanding reset token for the
+user, clears any lockout, and nulls `active_refresh_jti` so live sessions must
+re-auth.
+
+**No enumeration.** `resend-verification` and `forgot-password` always return an
+identical uniform message whether or not the account exists; only a real account
+produces a token/email. `verify-email` / `reset-password` fail on the token
+itself (typed `invalid_token`), never on account existence.
+
+**Delivery gating + flag semantics.** The SMTP sender is gated by
+`SHIELD_EMAIL_DELIVERY_ENABLED` (default off): with delivery off the send is a
+logged no-op (subject/recipient only — never the token-bearing body), so the
+token flow still works in dev/tests without MailHog; with delivery on but no
+`SMTP_HOST`, `assert_safe_for_runtime` refuses to boot rather than silently drop
+mail. The old `config.py` boot-refusal on `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=true`
+is removed (mirroring D-027): the flag now GATES login enforcement — an
+unverified user is rejected at `/auth/login` with a typed `email_not_verified`
+403 when the flag is on, and login proceeds normally when off.
+
+**Web.** Net-new `/verify-email`, `/forgot-password`, and `/reset-password`
+pages (+ server proxies) drive the flows; the verify page reads the token from
+`?token=` and auto-submits, offering an enumeration-safe resend on failure. A
+"Reset it" link is added to sign-in.
+
+**Rationale:** email verification + password reset are baseline account-security
+controls; a flag that refused to boot was worse than a real flow. The design
+keeps the whole thing in the same deterministic, testable seam as the rest of
+auth ("AI suggests, code computes" untouched). TDD: register→verify happy path,
+bad/expired/used token rejected, enumeration-safe resend + forgot, reset changes
+the password and is single-use, weak-password policy enforced, and the login
+gate blocks-then-allows across the flag.
+**Ref:** SPRINT_6.md T5; `apps/api/alembic/versions/0031_email_tokens.py`,
+`app/models/email_token.py`, `app/email/{sender,tokens}.py`,
+`app/routes/auth.py`, `app/config.py`, `app/schemas/auth.py`,
+`tests/unit/test_email_verification.py`, `tests/unit/test_auth_reauth.py`,
+`apps/web/src/app/{verify-email,forgot-password,reset-password}/page.tsx`,
+`apps/web/src/components/auth/{VerifyEmailClient,ForgotPasswordForm,ResetPasswordForm}.tsx`,
+`apps/web/src/app/api/proxy/auth/{verify-email,resend-verification,forgot-password,reset-password}/route.ts`,
+`e2e/smoke/s21-email-verify.spec.ts`; DECISIONS D-020, D-027.

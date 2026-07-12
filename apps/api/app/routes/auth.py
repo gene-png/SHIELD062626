@@ -27,13 +27,22 @@ from app.audit import audit
 from app.config import get_settings
 from app.db.session import get_db
 from app.dependencies import current_user
+from app.email import (
+    generate_token,
+    hash_token,
+    send_password_reset_email,
+    send_verification_email,
+)
 from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.client import Client
 from app.models.client_domain import ClientDomain
+from app.models.email_token import EmailToken, EmailTokenPurpose
 from app.models.user import User, UserRole
 from app.models.user_recovery_code import UserRecoveryCode
 from app.schemas.auth import (
+    EmailActionResponse,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResult,
     MfaEnrollResponse,
@@ -43,8 +52,12 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
     TokenPairResponse,
     UserResponse,
+    VerifyEmailRequest,
+    VerifyEmailResponse,
 )
 from app.security.email_domains import domain_of, is_generic_provider
 from app.security.jwt import TokenError, issue_token, verify_token
@@ -188,6 +201,58 @@ def _register_successful_login(db: Session, user: User) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Email tokens (verification + password reset) — Sprint 6 T5, D-028
+# -----------------------------------------------------------------------------
+
+# One uniform message for every enumeration-safe endpoint (resend / forgot /
+# reset). Returned whether or not the account existed, so a caller can never
+# probe which emails are registered (OWASP A07 / A01).
+_UNIFORM_EMAIL_ACTION_MSG = (
+    "If an account matches that email, we've sent a message with next steps. "
+    "Check your inbox (and spam)."
+)
+
+
+def _issue_email_token(
+    db: Session, user: User, purpose: EmailTokenPurpose, ttl_seconds: int
+) -> str:
+    """Create a single-use token row (storing only its hash) and return the raw
+    token for the email link. Callers commit as part of their own transaction."""
+    raw = generate_token()
+    db.add(
+        EmailToken(
+            user_id=user.id,
+            token_hash=hash_token(raw),
+            purpose=purpose,
+            expires_at=utcnow() + timedelta(seconds=ttl_seconds),
+        )
+    )
+    return raw
+
+
+def _consume_email_token(
+    db: Session, raw_token: str, purpose: EmailTokenPurpose
+) -> EmailToken | None:
+    """Return the matching unused, unexpired token for ``purpose`` or None.
+
+    Does NOT mark it used — the caller stamps ``used_at`` only after the action
+    it authorizes succeeds, so a failed action leaves the token replayable.
+    """
+    token = db.execute(
+        select(EmailToken).where(
+            EmailToken.token_hash == hash_token(raw_token),
+            EmailToken.purpose == purpose,
+            EmailToken.used_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if token is None:
+        return None
+    if _as_aware(token.expires_at) is None or _as_aware(token.expires_at) < utcnow():
+        return None
+    return token
+
+
+# -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
 
@@ -310,9 +375,23 @@ def register(
         },
     )
 
+    # Email verification (D-028): always mint a verification token so the flow
+    # works even in dev with delivery off; the SEND is gated inside the sender.
+    # Failure to send (delivery on but SMTP down) propagates loudly.
+    settings = get_settings()
+    verify_raw = _issue_email_token(
+        db,
+        user,
+        EmailTokenPurpose.EMAIL_VERIFY,
+        settings.email_verify_token_ttl_seconds,
+    )
+
     tokens = _issue_pair(user)
     db.commit()
     db.refresh(user)
+
+    send_verification_email(to=user.email, token=verify_raw)
+    log.info("auth.verification_email_issued", user_id=str(user.id))
 
     return RegisterResponse(
         user=UserResponse.model_validate(user, from_attributes=True),
@@ -369,6 +448,25 @@ def login(
 
     if needs_rehash:
         user.password_hash = hash_password(body.password)
+
+    # Email verification gate (Sprint 6 T5, D-028). When the flag is on, a user
+    # whose address is not yet verified cannot complete login (nor start the MFA
+    # step). The password was correct, so clear the password-lockout counters —
+    # but do NOT stamp last_login_at or audit a login (login is not complete).
+    if get_settings().shield_auth_require_email_verify and user.email_verified_at is None:
+        _clear_password_failures(user)
+        db.commit()
+        log.info("auth.login_blocked_unverified", user_id=str(user.id))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "reason": "email_not_verified",
+                "message": (
+                    "Please verify your email address before signing in. Check your "
+                    "inbox for the confirmation link, or request a new one."
+                ),
+            },
+        )
 
     # Second factor (Sprint 6 T4, D-027). If the user has TOTP MFA enrolled, the
     # password is only the FIRST factor: issue a short-lived mfa_pending token
@@ -667,3 +765,219 @@ def mfa_verify_login(
     db.commit()
     log.info("auth.mfa_login_verified", user_id=str(user.id), via_recovery=used_recovery)
     return pair
+
+
+# -----------------------------------------------------------------------------
+# Email verification + password reset (Sprint 6 T5, D-028)
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/verify-email",
+    response_model=VerifyEmailResponse,
+    summary="Confirm an email address from a verification token",
+)
+def verify_email(
+    body: VerifyEmailRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> VerifyEmailResponse:
+    """Consume an email-verification token and stamp ``email_verified_at``.
+
+    The token is the secret, so there is no account-enumeration concern here: an
+    invalid/expired/spent token is rejected with a typed 400. Single-use — a
+    valid token is marked spent on success.
+    """
+    limiter.enforce_auth(request, "verify-email")
+
+    token = _consume_email_token(db, body.token, EmailTokenPurpose.EMAIL_VERIFY)
+    if token is None:
+        log.info("auth.verify_email_rejected")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "invalid_token",
+                "message": "That verification link is invalid or has expired. "
+                "Request a new one.",
+            },
+        )
+
+    user = db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "invalid_token",
+                "message": "That verification link is invalid or has expired. "
+                "Request a new one.",
+            },
+        )
+
+    token.used_at = utcnow()
+    if user.email_verified_at is None:
+        user.email_verified_at = utcnow()
+    audit(
+        db,
+        action="user.email_verified",
+        target_type="user",
+        target_id=user.id,
+        actor_user_id=user.id,
+    )
+    db.commit()
+    log.info("auth.email_verified", user_id=str(user.id))
+    return VerifyEmailResponse(email_verified=True)
+
+
+@router.post(
+    "/resend-verification",
+    response_model=EmailActionResponse,
+    summary="Resend the email-verification link (enumeration-safe)",
+)
+def resend_verification(
+    body: ResendVerificationRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> EmailActionResponse:
+    """Issue a fresh verification token when the account exists and is unverified.
+
+    Always returns the same uniform message so a caller cannot learn whether an
+    email is registered (OWASP A07).
+    """
+    email = _normalize_email(body.email)
+    limiter.enforce_auth(request, email)
+
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is not None and user.email_verified_at is None:
+        settings = get_settings()
+        raw = _issue_email_token(
+            db, user, EmailTokenPurpose.EMAIL_VERIFY, settings.email_verify_token_ttl_seconds
+        )
+        db.commit()
+        send_verification_email(to=user.email, token=raw)
+        log.info("auth.verification_email_resent", user_id=str(user.id))
+    else:
+        log.info("auth.resend_verification_noop")
+
+    return EmailActionResponse(message=_UNIFORM_EMAIL_ACTION_MSG)
+
+
+@router.post(
+    "/forgot-password",
+    response_model=EmailActionResponse,
+    summary="Request a password-reset link (enumeration-safe)",
+)
+def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> EmailActionResponse:
+    """Issue a password-reset token when the account exists.
+
+    Uniform response regardless of existence (no enumeration). The reset token
+    is short-lived (``password_reset_token_ttl_seconds``).
+    """
+    email = _normalize_email(body.email)
+    limiter.enforce_auth(request, email)
+
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is not None and user.is_active:
+        settings = get_settings()
+        raw = _issue_email_token(
+            db, user, EmailTokenPurpose.PASSWORD_RESET, settings.password_reset_token_ttl_seconds
+        )
+        audit(
+            db,
+            action="user.password_reset_requested",
+            target_type="user",
+            target_id=user.id,
+            actor_user_id=user.id,
+        )
+        db.commit()
+        send_password_reset_email(to=user.email, token=raw)
+        log.info("auth.password_reset_requested", user_id=str(user.id))
+    else:
+        log.info("auth.forgot_password_noop")
+
+    return EmailActionResponse(message=_UNIFORM_EMAIL_ACTION_MSG)
+
+
+@router.post(
+    "/reset-password",
+    response_model=EmailActionResponse,
+    summary="Set a new password from a reset token",
+)
+def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> EmailActionResponse:
+    """Consume a password-reset token and set the new password.
+
+    Single-use token; on success we also rotate out the current refresh token
+    (``active_refresh_jti`` cleared) so any live session must re-authenticate,
+    and clear any lockout so the user can immediately sign in.
+    """
+    limiter.enforce_auth(request, "reset-password")
+
+    token = _consume_email_token(db, body.token, EmailTokenPurpose.PASSWORD_RESET)
+    if token is None:
+        log.info("auth.reset_password_rejected")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "invalid_token",
+                "message": "That reset link is invalid or has expired. Request a new one.",
+            },
+        )
+
+    user = db.get(User, token.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "invalid_token",
+                "message": "That reset link is invalid or has expired. Request a new one.",
+            },
+        )
+
+    try:
+        new_hash = hash_password(body.password)
+    except PasswordPolicyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"reason": "password_policy", "message": str(exc)},
+        ) from exc
+
+    user.password_hash = new_hash
+    token.used_at = utcnow()
+    # Invalidate any other outstanding reset tokens for this user (a completed
+    # reset should void every earlier request).
+    for other in db.execute(
+        select(EmailToken).where(
+            EmailToken.user_id == user.id,
+            EmailToken.purpose == EmailTokenPurpose.PASSWORD_RESET,
+            EmailToken.used_at.is_(None),
+        )
+    ).scalars():
+        other.used_at = utcnow()
+    # Force re-auth on all sessions + clear lockout.
+    user.active_refresh_jti = None
+    user.failed_login_count = 0
+    user.last_failed_login_at = None
+    user.locked_until_at = None
+    audit(
+        db,
+        action="user.password_reset",
+        target_type="user",
+        target_id=user.id,
+        actor_user_id=user.id,
+    )
+    db.commit()
+    log.info("auth.password_reset_completed", user_id=str(user.id))
+    return EmailActionResponse(
+        message="Your password has been reset. You can now sign in with your new password."
+    )

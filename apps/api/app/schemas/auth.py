@@ -85,6 +85,34 @@ class MfaLoginRequest(BaseModel):
     code: str = Field(min_length=1, max_length=64)
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+class VerifyEmailResponse(BaseModel):
+    email_verified: bool = True
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+    password: str = Field(min_length=12, max_length=256)
+
+
+class EmailActionResponse(BaseModel):
+    """Uniform response for the enumeration-safe endpoints (resend, forgot,
+    reset). The same message is returned whether or not the account existed."""
+
+    message: str
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr

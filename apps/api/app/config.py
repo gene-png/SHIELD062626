@@ -113,6 +113,14 @@ class Settings(BaseSettings):
     smtp_host: str = "mailhog"
     smtp_port: int = 1025
     smtp_from: str = "no-reply@shield.local"
+    # Base URL the web app is reachable at, used to build email verification /
+    # password-reset links (Sprint 6 T5, D-028).
+    web_base_url: str = "http://localhost:3000"
+    # Single-use email-token lifetimes (D-028). Verification is generous (a user
+    # may not check mail immediately); reset is short (a live reset link is a
+    # bearer credential).
+    email_verify_token_ttl_seconds: int = Field(default=86400, ge=300)
+    password_reset_token_ttl_seconds: int = Field(default=3600, ge=300)
 
     def is_production(self) -> bool:
         return self.environment == "production"
@@ -169,18 +177,18 @@ class Settings(BaseSettings):
             )
         if self.is_production() and self.jwt_signing_secret.startswith("dev-only"):
             raise RuntimeError("JWT_SIGNING_SECRET is still the default placeholder in production.")
-        # Fail loudly on dead feature flags. Email verification does not exist
-        # yet (Master Spec §2 deferred it); flipping the flag true would silently
-        # do nothing, which is worse than refusing — an operator would believe a
-        # control is active when it is not. Refuse to boot until the flow lands
-        # (T5). NOTE: shield_auth_require_mfa is NO LONGER a boot refusal as of
-        # Sprint 6 T4 (D-027) — the TOTP enroll/verify/login-challenge flow now
-        # exists, so the flag GATES enforcement (require enrollment at login) in
-        # routes/auth.py rather than refusing to start.
-        if self.shield_auth_require_email_verify:
+        # Feature flags gate ENFORCEMENT, not boot, as of Sprint 6 (D-027/D-028):
+        # shield_auth_require_mfa and shield_auth_require_email_verify now have real
+        # flows behind them (routes/auth.py), so the flag requires the control at
+        # login rather than refusing to start. The old boot-refusals are removed.
+        #
+        # Email delivery, however, still fails loudly on obvious misconfiguration:
+        # turning delivery on without an SMTP host would silently drop every
+        # verification / reset email — worse than refusing (D-028).
+        if self.shield_email_delivery_enabled and not self.smtp_host.strip():
             raise RuntimeError(
-                "SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=true but no email-verification flow "
-                "exists yet. Refusing to start rather than silently ignore the flag."
+                "SHIELD_EMAIL_DELIVERY_ENABLED=true but SMTP_HOST is empty. Configure "
+                "SMTP (MailHog in dev) or disable delivery rather than drop mail silently."
             )
         # Live-AI boot preflight (D-026): refuse to start in live mode unless a
         # real provider call would actually succeed, rather than degrade to a
