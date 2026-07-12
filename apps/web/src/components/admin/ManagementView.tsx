@@ -30,7 +30,9 @@ export function ManagementView(): JSX.Element {
   }, []);
 
   React.useEffect(() => {
-    void reload();
+    void (async () => {
+      await reload();
+    })();
   }, [reload]);
 
   async function onCreate(e: React.FormEvent): Promise<void> {
@@ -123,7 +125,9 @@ function ClientRow({ client }: { client: ClientSummary }): JSX.Element {
   }, [client.id]);
 
   React.useEffect(() => {
-    void reload();
+    void (async () => {
+      await reload();
+    })();
   }, [reload]);
 
   async function onAdd(e: React.FormEvent): Promise<void> {

@@ -6,6 +6,7 @@ import io
 import uuid
 
 import pytest
+
 from app.csf.catalog import SUBCATEGORIES
 from app.csf.exporters import build_context, render_pdf, render_xlsx
 from app.csf.gap import analyze as analyze_gaps

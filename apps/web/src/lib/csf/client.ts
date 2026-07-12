@@ -8,6 +8,9 @@ import type {
   CsfDeliverable,
   CsfDimensionScore,
   CsfDimensionScorePatch,
+  CsfGapAction,
+  CsfGapActions,
+  CsfGapActionUpsert,
   CsfInterviewQuestionnaire,
   CsfPlaybookExport,
   CsfProfile,
@@ -289,5 +292,33 @@ export async function exportPlaybook(
   return jsonRequest<CsfPlaybookExport>(
     `/api/proxy/csf/services/${serviceId}/playbook/export`,
     { method: "POST" },
+  );
+}
+
+// --- POA&M / gap action plan (Sprint 5 T5) ---
+
+export async function fetchGapActions(
+  serviceId: string,
+): Promise<CsfGapActions | null> {
+  try {
+    return await jsonRequest<CsfGapActions>(
+      `/api/proxy/csf/services/${serviceId}/gap-actions`,
+    );
+  } catch (err) {
+    if (err instanceof CsfProxyError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function upsertGapAction(
+  serviceId: string,
+  subcategoryCode: string,
+  patch: CsfGapActionUpsert,
+): Promise<CsfGapAction> {
+  return jsonRequest<CsfGapAction>(
+    `/api/proxy/csf/services/${serviceId}/gap-actions/${encodeURIComponent(
+      subcategoryCode,
+    )}`,
+    { method: "PUT", body: patch },
   );
 }

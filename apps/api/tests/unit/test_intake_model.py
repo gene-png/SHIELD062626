@@ -8,10 +8,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.models import Client, ServiceRequest, ServiceType, User, UserRole
-from app.models._common import utcnow
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+from app.models import Client, ServiceRequest, ServiceType, User, UserRole
+from app.models._common import utcnow
 
 
 @pytest.fixture()

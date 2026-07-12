@@ -26,6 +26,7 @@ from app.db.session import get_db
 from app.dependencies import current_client, current_user
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.client import Client
+from app.models.deliverable import Deliverable
 from app.models.user import User, UserRole
 from app.schemas.artifact import ArtifactListResponse, ArtifactResponse
 from app.storage import StorageBackend, get_storage
@@ -60,6 +61,26 @@ def _safe_title(name: str) -> str:
 
 def _storage_dep() -> StorageBackend:
     return get_storage()
+
+
+def _in_released_deliverable(db: Session, artifact_id: uuid.UUID) -> bool:
+    """True if the artifact is a format (PDF/XLSX/DOCX) of a RELEASED deliverable.
+
+    The artifact's tenant is already verified by the caller (row.client_id ==
+    client.id), so a match here means "this is a released deliverable file of
+    the caller's own tenant" — the only deliverable artifact a client may read.
+    """
+    match = db.execute(
+        select(Deliverable.id)
+        .where(
+            Deliverable.released_at.is_not(None),
+            (Deliverable.pdf_artifact_id == artifact_id)
+            | (Deliverable.xlsx_artifact_id == artifact_id)
+            | (Deliverable.docx_artifact_id == artifact_id),
+        )
+        .limit(1)
+    ).first()
+    return match is not None
 
 
 @router.post(
@@ -197,14 +218,18 @@ def download_artifact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",
         )
-    # Two permitted readers within the active tenant:
+    # Permitted readers within the active tenant:
     #   1. the uploader;
-    #   2. any admin (audit + ops).
-    # Clients never download deliverables in-app (Work Order A1): deliverable
-    # artifacts are admin-only and an admin shares them outside the app.
+    #   2. any admin (audit + ops);
+    #   3. a client, ONLY for artifacts of a RELEASED deliverable of their
+    #      tenant (D-025 / §12): pre-release, deliverable artifacts stay
+    #      invisible to the client exactly like every other draft.
     is_uploader = row.uploaded_by == user.id
     is_staff = user.role == UserRole.ADMIN
-    if not (is_uploader or is_staff):
+    is_released_deliverable = user.role == UserRole.CLIENT and _in_released_deliverable(
+        db, artifact_id
+    )
+    if not (is_uploader or is_staff or is_released_deliverable):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artifact not found.",

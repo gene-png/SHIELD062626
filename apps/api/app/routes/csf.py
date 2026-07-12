@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.ai.diff import diff_keyed_rows
 from app.ai.engine import run_job
 from app.ai.llm import LLMClient
+from app.ai.preview import AiPreviewPayload
 from app.audit import audit
 from app.csf import playbook_export as csf_playbook_export
 from app.csf.catalog import (
@@ -59,6 +61,7 @@ from app.csf.playbook import (
 )
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
+from app.deliverable_release import release_deliverable
 from app.dependencies import current_client, current_user, require_role
 from app.logging import get_logger
 from app.models._common import utcnow
@@ -69,7 +72,7 @@ from app.models.csf_assessment import (
     CsfAssessment,
     CsfAssessmentStatus,
 )
-from app.models.csf_profile import CsfDimensionScore
+from app.models.csf_profile import CsfDimensionScore, CsfGapAction
 from app.models.deliverable import Deliverable
 from app.models.questionnaire import Question
 from app.models.service import Service, ServiceKind, ServiceStatus
@@ -77,6 +80,8 @@ from app.models.service_request import ServiceRequest
 from app.models.user import User, UserRole
 from app.routes.artifacts import _storage_dep
 from app.schemas.csf import (
+    GAP_CHARACTERIZATIONS,
+    GAP_PRIORITY_OVERRIDES,
     CatalogCategory,
     CatalogFunction,
     CatalogResponse,
@@ -88,6 +93,9 @@ from app.schemas.csf import (
     CsfDimensionChange,
     CsfDimensionScorePatch,
     CsfDimensionScoreResponse,
+    CsfGapActionResponse,
+    CsfGapActionsResponse,
+    CsfGapActionUpsert,
     CsfPlaybookExportResponse,
     CsfProfileResponse,
     CsfQuestionnaireResponse,
@@ -1043,6 +1051,188 @@ def _enterprise_subcategories(
     return out, tiers_in_use
 
 
+# ---------------------------------------------------------------------------
+# POA&M / gap action plan (Sprint 5 T5, spec step 10)
+# ---------------------------------------------------------------------------
+
+_GAP_ACTION_FIELDS = (
+    "characterization",
+    "priority_override",
+    "owner",
+    "deadline",
+    "resources",
+    "success_criteria",
+    "poam_ref",
+)
+
+
+def _gap_action_response(
+    ent: EnterpriseSubcategory, action: CsfGapAction | None
+) -> CsfGapActionResponse:
+    """Merge one enterprise gap with its stored POA&M annotation. The default
+    priority is the code-computed roll-up priority (`gap_priority()`); a stored
+    `priority_override` wins for the effective value — the engine is untouched."""
+    override = action.priority_override if action else None
+    return CsfGapActionResponse(
+        subcategory_code=ent.subcategory_code,
+        name=ent.name,
+        function=ent.function,
+        enterprise_level=ent.enterprise_level,
+        target_level=ent.target_level,
+        default_priority=ent.priority,
+        characterization=action.characterization if action else None,
+        priority_override=override,
+        owner=action.owner if action else None,
+        deadline=action.deadline if action else None,
+        resources=action.resources if action else None,
+        success_criteria=action.success_criteria if action else None,
+        poam_ref=action.poam_ref if action else None,
+        effective_priority=override or ent.priority,
+    )
+
+
+def _load_gap_actions(db: Session, assessment_id: uuid.UUID) -> dict[str, CsfGapAction]:
+    rows = (
+        db.execute(select(CsfGapAction).where(CsfGapAction.assessment_id == assessment_id))
+        .scalars()
+        .all()
+    )
+    return {r.subcategory_code: r for r in rows}
+
+
+@router.get(
+    "/services/{service_id}/gap-actions",
+    response_model=CsfGapActionsResponse,
+    summary="Enterprise gaps with their POA&M action-plan annotations (admin)",
+)
+def list_gap_actions(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfGapActionsResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    ent_rows, _ = _enterprise_subcategories(db, a)
+    actions = _load_gap_actions(db, a.id)
+    gaps = [r for r in ent_rows if r.gap]
+    _log.info(
+        "csf.gap_actions.list assessment=%s gaps=%d annotated=%d",
+        a.id,
+        len(gaps),
+        len(actions),
+    )
+    return CsfGapActionsResponse(
+        assessment_id=a.id,
+        actions=[_gap_action_response(r, actions.get(r.subcategory_code)) for r in gaps],
+    )
+
+
+@router.put(
+    "/services/{service_id}/gap-actions/{subcategory_code}",
+    response_model=CsfGapActionResponse,
+    summary="Upsert one gap's POA&M annotation (admin, autosave)",
+)
+def upsert_gap_action(
+    service_id: uuid.UUID,
+    subcategory_code: str,
+    body: CsfGapActionUpsert,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CsfGapActionResponse:
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    a = _latest_assessment(db, svc.id)
+    if a is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No assessment yet.")
+    if subcategory_code not in all_codes():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "reason": "unknown_subcategory",
+                "message": f"'{subcategory_code}' is not a NIST CSF 2.0 subcategory.",
+            },
+        )
+
+    data = body.model_dump(exclude_unset=True)
+    # D-016 typed validation for the two enumerated fields (empty string clears).
+    ch = data.get("characterization")
+    if ch and ch not in GAP_CHARACTERIZATIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": "invalid_characterization",
+                "message": "Characterization must be accept, mitigate, transfer, or avoid.",
+            },
+        )
+    po = data.get("priority_override")
+    if po and po not in GAP_PRIORITY_OVERRIDES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "reason": "invalid_priority",
+                "message": "Priority override must be P1, P2, or P3.",
+            },
+        )
+
+    row = db.execute(
+        select(CsfGapAction).where(
+            CsfGapAction.assessment_id == a.id,
+            CsfGapAction.subcategory_code == subcategory_code,
+        )
+    ).scalar_one_or_none()
+    created = row is None
+    if row is None:
+        row = CsfGapAction(
+            assessment_id=a.id,
+            client_id=client.id,
+            subcategory_code=subcategory_code,
+        )
+        db.add(row)
+    for f in _GAP_ACTION_FIELDS:
+        if f in data:
+            # Empty string means "clear" for the nullable annotation fields.
+            setattr(row, f, data[f] or None)
+    audit(
+        db,
+        action="csf.gap_action.upserted",
+        target_type="csf_gap_action",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={"subcategory_code": subcategory_code, "created": created},
+    )
+    db.commit()
+    db.refresh(row)
+    _log.info(
+        "csf.gap_action.upserted assessment=%s subcat=%s created=%s",
+        a.id,
+        subcategory_code,
+        created,
+    )
+
+    # Recompute the enterprise row so the response carries the up-to-date
+    # default/effective priority (the engine is only read, never mutated).
+    ent_rows, _ = _enterprise_subcategories(db, a)
+    ent = next((r for r in ent_rows if r.subcategory_code == subcategory_code), None)
+    if ent is None:
+        # Annotated a subcategory that is not currently a gap (e.g. out of scope
+        # or no target). Still return the stored values; no roll-up default.
+        ent = EnterpriseSubcategory(
+            subcategory_code=subcategory_code,
+            name=getattr(subcategory_by_code(subcategory_code), "name", subcategory_code),
+            function=str(getattr(subcategory_by_code(subcategory_code), "function", "")),
+            tier_levels={},
+            enterprise_level=0,
+            rollup_rule=0,
+            target_level=None,
+            gap=False,
+            priority=None,
+        )
+    return _gap_action_response(ent, row)
+
+
 def _llm_dep() -> LLMClient:
     return LLMClient.from_settings()
 
@@ -1051,25 +1241,29 @@ _DIM_FIELDS = ("governance", "policy", "implementation", "monitoring", "improvem
 _RUN_FIELDS = (*_DIM_FIELDS, "what_we_found")
 
 
-@router.post(
-    "/services/{service_id}/run-ai",
-    response_model=CsfRunAiResponse,
-    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
-)
-def run_ai(
-    service_id: uuid.UUID,
-    user: Annotated[User, _admin_required],
-    client: Annotated[Client, Depends(current_client)],
-    db: Annotated[Session, Depends(get_db)],
-    llm: Annotated[LLMClient, Depends(_llm_dep)],
-    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
-) -> CsfRunAiResponse:
-    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
-    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
-    rows are untouched; code does the total/level/cap + Enterprise roll-up.
-    Returns a 'what changed' list.
+@dataclass(frozen=True)
+class CsfAiRequest:
+    """Loaded state + outbound payload for the CSF csf_score run-ai job.
+
+    Built once by :func:`build_csf_ai_request`; consumed by both run-ai (which
+    needs ``rows``/``locked_keys`` to apply and diff the suggestions) and the
+    redaction-preview route (which only needs ``.preview``). Single source of the
+    egress payload so preview can never diverge from what actually egresses.
     """
-    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+
+    assessment: CsfAssessment
+    rows: dict[str, CsfDimensionScore]
+    locked_keys: frozenset[str]
+    preview: AiPreviewPayload
+
+
+def build_csf_ai_request(db: Session, svc: Service, client: Client) -> CsfAiRequest:
+    """Load the latest CSF assessment and build the csf_score run-ai payload.
+
+    Raises the same typed 404/409s run-ai does (no assessment / locked / not
+    seeded) so preview and run-ai agree on when a run is even possible. Reads
+    only — never mutates.
+    """
     a = _latest_assessment(db, svc.id)
     if a is None:
         raise HTTPException(
@@ -1094,17 +1288,11 @@ def run_ai(
         )
     locked_keys = frozenset(k for k, r in rows.items() if r.locked)
 
-    def _snap() -> dict[str, dict]:
-        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
-
-    before = _snap()
     # Ground the suggestion in the client's interview answers + evidence flags,
-    # the way ZT's run-ai does (routes/zt.py). Before Sprint 3 T0 the payload
-    # carried only tier/subcategory codes even though the prompt claimed the
-    # answers were supplied. Only answers with actual signal are sent (a scored
-    # tier, notes, or attached evidence) so the model sees what the analyst
-    # captured rather than ~106 empty rows. The payload goes through the
-    # redactor (nested note strings included) as designed.
+    # the way ZT's run-ai does (routes/zt.py). Only answers with actual signal
+    # are sent (a scored tier, notes, or attached evidence) so the model sees
+    # what the analyst captured rather than ~106 empty rows. The payload goes
+    # through the redactor (nested note strings included) as designed.
     answer_rows = (
         db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == a.id)).scalars().all()
     )
@@ -1118,19 +1306,58 @@ def run_ai(
         if ans.maturity_tier is not None or ans.notes or ans.evidence_artifact_id is not None
     }
     client_org = None if client.legal_name == "(pending intake)" else client.legal_name
+    return CsfAiRequest(
+        assessment=a,
+        rows=rows,
+        locked_keys=locked_keys,
+        preview=AiPreviewPayload(
+            job_name="csf_score",
+            inputs={
+                "tiers": sorted({r.tier for r in rows.values()}),
+                "subcategories": sorted({r.subcategory_code for r in rows.values()}),
+                "answers": answers,
+            },
+            client_org_name=client_org,
+        ),
+    )
+
+
+@router.post(
+    "/services/{service_id}/run-ai",
+    response_model=CsfRunAiResponse,
+    summary="Run the csf_score AI job: suggest dimension scores + narrative (admin)",
+)
+def run_ai(
+    service_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+    llm: Annotated[LLMClient, Depends(_llm_dep)],
+    _rl: Annotated[None, Depends(enforce_ai_rate_limit)],
+) -> CsfRunAiResponse:
+    """The CSF full-Playbook 'Run AI'. Suggests the five dimension scores (0-2)
+    + a 'what we found' narrative per (tier, subcategory). AI suggests; locked
+    rows are untouched; code does the total/level/cap + Enterprise roll-up.
+    Returns a 'what changed' list.
+    """
+    svc = require_service_in_tenant(db, service_id, client.id, kind=ServiceKind.NIST_CSF)
+    req = build_csf_ai_request(db, svc, client)
+    a, rows, locked_keys = req.assessment, req.rows, req.locked_keys
+
+    def _snap() -> dict[str, dict]:
+        return {k: {f: getattr(r, f) for f in _RUN_FIELDS} for k, r in rows.items()}
+
+    before = _snap()
     result = run_job(
         db,
         llm,
-        "csf_score",
-        inputs={
-            "tiers": sorted({r.tier for r in rows.values()}),
-            "subcategories": sorted({r.subcategory_code for r in rows.values()}),
-            "answers": answers,
-        },
+        req.preview.job_name,
+        inputs=req.preview.inputs,
         requested_by=user.id,
         service_id=svc.id,
         client_id=client.id,
-        client_org_name=client_org,
+        client_org_name=req.preview.client_org_name,
+        name_hints=req.preview.name_hints,
     )
     data = result.data if isinstance(result.data, dict) else {}
 
@@ -1222,6 +1449,7 @@ def export_playbook(
             detail="Seed the Working Profile before exporting.",
         )
     enterprise_rows, _ = _enterprise_subcategories(db, a)
+    gap_actions = _load_gap_actions(db, a.id)
     tier_profiles: dict[str, list] = {}
     for tier in ("high", "moderate", "low"):
         trows = sorted(
@@ -1262,6 +1490,7 @@ def export_playbook(
                 version=a.version,
                 enterprise_rows=enterprise_rows,
                 tier_profiles=tier_profiles,
+                gap_actions=gap_actions,
             ),
         ),
         (
@@ -1374,6 +1603,8 @@ def _serialize_deliverable(db: Session, deliv: Deliverable) -> DeliverableRespon
         finalized_at=deliv.finalized_at,
         finalized_by=deliv.finalized_by,
         superseded_by=deliv.superseded_by,
+        released_at=deliv.released_at,
+        released_by=deliv.released_by,
     )
 
 
@@ -1591,4 +1822,26 @@ def latest_csf_deliverable(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No deliverable yet. Finalize one first.",
         )
+    return _serialize_deliverable(db, deliv)
+
+
+@router.post(
+    "/deliverables/{deliverable_id}/release",
+    response_model=DeliverableResponse,
+    summary="Release a finalized CSF deliverable to the client (admin, D-025)",
+)
+def release_csf_deliverable(
+    deliverable_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> DeliverableResponse:
+    deliv = release_deliverable(
+        db,
+        deliverable_id=deliverable_id,
+        tenant_client_id=client.id,
+        user=user,
+        kinds=(ServiceKind.NIST_CSF,),
+        action="csf.deliverable.released",
+    )
     return _serialize_deliverable(db, deliv)

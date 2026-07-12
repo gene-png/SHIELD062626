@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from app.csf.catalog import SUBCATEGORIES, FunctionCode
 from app.csf.scoring import WEAKEST_PER_FUNCTION, compute
 

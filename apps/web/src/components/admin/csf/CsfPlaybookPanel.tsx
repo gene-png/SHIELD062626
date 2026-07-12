@@ -19,7 +19,9 @@ import {
   seedProfiles,
 } from "@/lib/csf/client";
 
+import { AiPreviewButton } from "../AiPreviewButton";
 import { CsfDimensionEditor } from "./CsfDimensionEditor";
+import { CsfGapActionEditor } from "./CsfGapActionEditor";
 import type {
   CsfPlaybookExport,
   CsfRunAiResponse,
@@ -285,6 +287,10 @@ export function CsfPlaybookPanel({
             ) : null}
           </div>
 
+          {seeded ? (
+            <AiPreviewButton serviceId={serviceId} disabled={busy !== null} />
+          ) : null}
+
           {runResult ? (
             <p className="text-sm text-ink-secondary" aria-live="polite">
               AI updated{" "}
@@ -326,6 +332,9 @@ export function CsfPlaybookPanel({
           readOnly={readOnly}
           onChanged={() => void onDimensionChanged()}
         />
+      ) : null}
+      {seeded && gapCount > 0 ? (
+        <CsfGapActionEditor serviceId={serviceId} readOnly={readOnly} />
       ) : null}
     </div>
   );

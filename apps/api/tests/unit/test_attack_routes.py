@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.attack.catalog import TACTICS, TECHNIQUES
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.attack.catalog import TACTICS, TECHNIQUES
 
 
 @pytest.fixture()

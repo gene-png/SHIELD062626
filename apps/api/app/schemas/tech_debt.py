@@ -147,3 +147,5 @@ class DeliverableResponse(BaseModel):
     finalized_at: datetime | None
     finalized_by: uuid.UUID | None
     superseded_by: uuid.UUID | None
+    released_at: datetime | None = None
+    released_by: uuid.UUID | None = None

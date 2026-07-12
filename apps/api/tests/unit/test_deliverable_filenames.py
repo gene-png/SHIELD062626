@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+
 from app.tech_debt.filename import (
     SERVICE_SLUG_CSF_PLAYBOOK,
     SERVICE_SLUG_RISK_REGISTER,

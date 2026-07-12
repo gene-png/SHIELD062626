@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, inspect
+
 from app.zt.catalog import (
     CISA_CAPABILITIES,
     CISA_PILLARS,
@@ -28,7 +30,6 @@ from app.zt.maturity import (
     level_count,
     stage_label,
 )
-from sqlalchemy import create_engine, inspect
 
 CISA_CODE_PATTERN = re.compile(r"^CISA\.[A-Z]{2}\.\d{2}$")
 DOD_CODE_PATTERN = re.compile(r"^DOD\.[A-Z]{3}\.\d{2}$")

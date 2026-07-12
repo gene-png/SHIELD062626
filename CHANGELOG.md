@@ -7,6 +7,127 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.2.0] — Sprint 5 · client value loop — 2026-07-10
+
+Branch `feat/client-value-loop-sprint-5`. Eleven tasks (T0–T10) turning
+consultant output into client-visible value: a deliverable release-to-client
+flow, the `/home` executive dashboard with the §2.5 value-loop card, the
+`/documents` page, a CSF POA&M action-plan step, a pre-egress redaction preview,
+and the first read surface over the append-only audit stores — plus a web
+unit-test harness, adoption of the 14 react-hooks v6 rules, and a prettier pin
+sync. New client-facing features justify the **minor** bump. All exit gates
+green: the full Playwright suite, `pytest -m unit`, web `tsc --noEmit`, host
+prettier `--check` (3.9.5), in-container ruff/black (root-config parity), and
+the new in-container web vitest gate (T8).
+
+- **Prettier 3.9.5 pin sync (T0, `37330cc`):** landed dependabot #29's
+  3.9.4→3.9.5 bump on the sprint branch and synced the four gate pins the bot
+  can't touch (CLAUDE.md real-commands, CONTEXT.md machine-local facts, the
+  runtime queue `gates` array, and the staged sprint-5 queue). A format gate that
+  diverges from the lockfile ships red CI (the Sprint 2 lesson). #29 closed as
+  superseded.
+- **Deliverable release flow, backend (T1, `1863f9a`):** migration `0028`
+  (additive/C0) adds `deliverables.released_at` + `released_by` (nullable; old
+  rows parse as unreleased). A shared `app/deliverable_release.py` helper backs
+  four per-service `POST /{svc}/deliverables/{id}/release` routes — admin-only,
+  requires `finalized_at` (typed 409 `not_finalized`, D-016), idempotent 200
+  no-op on re-release with a loud log, audit row `*.deliverable.released`. New
+  `GET /clients/{cid}/deliverables` returns ONLY released deliverables of the
+  caller's tenant (404 cross-tenant, never 403). Artifact download now admits a
+  client for the formats of a released own-tenant deliverable, and nothing else
+  (unit-tested allow/deny matrix). The model docstring's "no client release
+  path" note is updated by design. See DECISIONS **D-025** (a new admin-only
+  release action, explicitly not a revival of the removed D-005/D-006 reviewer
+  gate — D-023).
+- **`/documents` client page (T2, `dd2ff1b`):** server component
+  `app/documents/page.tsx` resolves the tenant (client `client_id` or admin
+  active-client cookie) and renders the T1 client list as a table — service
+  label, title, version, released date, Final / Superseded badge, per-format
+  download links. Client nav gains **Documents**; admin nav unchanged. Empty
+  state per the no-dead-ends rule. e2e `s17-documents.spec.ts` (isolated tenant):
+  admin finalize+release v1, client sees the row + PDF download 200 with the
+  §15.5 filename, unreleased v2 hidden.
+- **`/home` client dashboard (T3, `bb981a5`):** server component
+  `app/home/page.tsx` fetches existing endpoints only (deliverables, per-service
+  intake status, unread messages) — no new scoring. Presentational
+  `HomeDashboard`: greeting, a hero band shown ONLY when a released deliverable
+  exists (else next-step guidance — no dead ends), a per-service status grid of
+  phase labels (report ready / finalizing / under review / in progress / getting
+  started — never numbers), waiting-on-you, and recent activity. §6.4 enforced:
+  no scoring math, audit internals, or raw AI output. Role landing: a signed-in
+  client on `/` redirects to `/home`, admin to `/admin`. e2e
+  `s18-home.spec.ts`: hero-absent → release → hero-present, both role landings,
+  no-percentage guard.
+- **Cross-service value-loop card (T4, `3ccddca`):** `GET
+/clients/{cid}/value-summary` — a DETERMINISTIC aggregation over
+  already-computed engine outputs (CSF/ZT/ATT&CK gap counts + Tech Debt annual
+  savings), no LLM and no new scoring (a unit test asserts zero `llm_calls` rows
+  and no `app.ai` import in the module). A service feeds a client-visible number
+  ONLY once it has a RELEASED deliverable (spec-12 visibility); otherwise the
+  slot is null and the card renders **Pending** — never a fake 0.
+  `ValueLoopCard` renders on `/home` when the tenant has any data. e2e
+  `s19-value-loop.spec.ts`: no card pre-release → scored+released CSF → gap count
+  - Pending, no percentage leak.
+- **CSF POA&M / action plan (T5, `2a43a13`):** migration `0029` (additive/C0)
+  adds `csf_gap_actions` keyed (assessment_id, subcategory_code), all annotation
+  fields nullable (characterization / priority_override / owner / deadline /
+  resources / success_criteria / poam_ref). `GET`/`PUT
+/csf/services/{sid}/gap-actions[/{code}]` (admin autosave upsert, D-016 typed
+  errors). The scoring engine (`playbook.py`) is read-only for the default
+  priority (`gap_priority()`); a set `priority_override` wins. The playbook
+  **XLSX** gains an **Action Plan** sheet (backward-compatible optional param).
+  Admin UI `CsfGapActionEditor` (auto-save on change/blur, reqSeq guard). e2e
+  `s7-csf-playbook.spec.ts`: characterize + owner auto-save survive a reload.
+- **Redaction preview gate (T6, `0a92110`):** `POST /ai/preview` (admin-only,
+  AI-rate-limited) shows the EXACT payload a service's next Run-AI would egress
+  AFTER redaction — WITHOUT egress and WITHOUT an `llm_calls` row (no provider is
+  ever constructed). Each service's inline run-ai payload build was factored into
+  one builder (`build_{csf,zt,attack}_ai_request`) that both run-ai and preview
+  call, so preview can never diverge from egress (a no-behavior-change refactor
+  the run-ai regression suites lock). TECH_DEBT (file-extract, not state-based)
+  returns a typed 422 `preview_unsupported`. Reusable `AiPreviewButton` wired
+  into the CSF/ZT/ATT&CK Run-AI surfaces (non-blocking — an offered gate). e2e
+  `s7-csf-playbook.spec.ts` asserts preview payload + counts, then a real run.
+- **`/admin/audit` viewer (T7, `a14c1b0`):** two admin-only read routes over the
+  append-only stores that had 42 write sites and zero readers — `GET
+/admin/audit-entries` (filters: action prefix, target_type, actor,
+  correlation_id, date range) and `GET /admin/llm-calls` (filters: client_id,
+  purpose, provider, status, date range; projects only audit-safe fields, no API
+  keys). Keyset cursor pagination on `(at/requested_at desc, id desc)` — no
+  OFFSET; a bad cursor is a typed 422. `AuditViewer` is a read-only two-tab UI
+  (Activity / AI calls) with per-tab filters and correlation-id click-through
+  that links the tabs. e2e `s20-audit.spec.ts`: an in-test `csf.run_ai` appears
+  in Activity, its fixture `csf_score` row in AI calls, correlation links them.
+- **Web unit-test harness (T8, `3bc2b54`):** stood up vitest +
+  `@testing-library/react` + jsdom in `apps/web` (no framework existed before —
+  only the root e2e/). `pnpm -F web test` is a single deterministic run with a
+  fail-loud fetch stub for unmocked network. Two guard tests lock the two
+  stale-fetch `reqSeq` guards (`MessageThread`, `CsfPlaybookPanel`): a stale
+  mount GET resolving after a newer request is discarded, and a failed load
+  surfaces to `role=alert` — each verified to bite (defeating the guard fails the
+  test). The web CI job runs the step, and the in-container web test gate was
+  appended to the runtime queue `gates` array (the Sprint-4 T0 pattern).
+- **react-hooks v6 adoption (T9, `f590d99`):** enabled all 14
+  `eslint-plugin-react-hooks` v6 rules that Sprint-4 T3 had configured off for
+  flat-config parity — ZERO rules now configured off. `eslint .` surfaced 14
+  errors (13 set-state-in-effect + 1 purity); fixed by pattern, not suppression:
+  mount-fetch effects wrapped in an async IIFE (the `MessageThread` shape),
+  `AuditViewer`'s pre-await setState moved inside a nested async fn, the
+  Tier/ZtStage focus-sync effects rewritten as the sanctioned adjust-state-during-render
+  pattern, and `SaveStatus`'s render-time `Date.now()` moved into interval-driven
+  state. Behavioral edits to shared components validated by the full e2e suite.
+- **Wrap-up (T10, this entry):** SMOKE_TEST §16–§21 for the release flow,
+  `/documents`, `/home` + value card, POA&M editing, redaction preview, and
+  audit viewer — each box checked only where a green committed spec proves it,
+  annotated by spec filename; CHANGELOG `[3.2.0]`; BUILD_REPORT synced; DECISIONS
+  **D-025** verified landed; the full exit gate set (full e2e, `pytest -m unit`,
+  tsc, prettier 3.9.5, in-container ruff/black, web vitest) re-run green;
+  CONTEXT.md end-of-sprint snapshot.
+
+Migrations this sprint: **0028** (deliverable release fields, T1) and **0029**
+(`csf_gap_actions`, T5), both additive and SQLite-safe (C0). New DECISIONS:
+**D-025** (deliverable release-to-client as a new admin-only action).
+
 ## [3.1.0] — Sprint 4 · framework majors + multi-provider LLM — 2026-07-09
 
 Branch `feat/majors-providers-sprint-4`. The D-018 framework-majors bundle

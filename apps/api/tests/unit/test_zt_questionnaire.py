@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from app.models.questionnaire import Question
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from app.models.questionnaire import Question
 
 
 def _resolve_zt_data_dir() -> Path | None:

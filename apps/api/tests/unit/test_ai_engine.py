@@ -10,11 +10,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.ai.engine import parse_json, registered_jobs, run_job
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
 from app.models.llm_call import LLMCall, LLMCallStatus
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
 
 
 @pytest.fixture()

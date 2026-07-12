@@ -38,9 +38,15 @@ export function TierPicker({
   const [focusIndex, setFocusIndex] = React.useState<number>(
     selectedIndex >= 0 ? selectedIndex : 0,
   );
-  React.useEffect(() => {
+  // Snap the roving tab stop to the selection whenever it changes, without an
+  // effect: the sanctioned "adjust state during render" pattern (guarded by a
+  // stored previous value so it runs once per selection change, not every
+  // render). react-hooks v6 set-state-in-effect flags the effect form.
+  const [prevSelected, setPrevSelected] = React.useState(selectedIndex);
+  if (selectedIndex !== prevSelected) {
+    setPrevSelected(selectedIndex);
     if (selectedIndex >= 0) setFocusIndex(selectedIndex);
-  }, [selectedIndex]);
+  }
 
   function handleKeyDown(
     event: React.KeyboardEvent<HTMLButtonElement>,

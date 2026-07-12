@@ -37,7 +37,7 @@ Risk Register (5x5, NIST 800-30) synthesized from them.
                    │ TLS
                    ▼
 ┌────────────────────────────────────────────────────────────┐
-│  apps/web — Next.js 14 (App Router, TS strict)             │
+│  apps/web — Next.js 15 (App Router, TS strict)             │
 │  • NextAuth Credentials → SHIELD-issued JWT                │
 │    (Keycloak realm scaffolded for later OIDC federation)   │
 │  • Tailwind + shadcn (Round 6 design language)             │
@@ -74,16 +74,16 @@ loud warning if Redis is down.
 
 ## Tech stack
 
-| Layer          | Choice                                                                    | Notes                                                                                                |
-| -------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Frontend       | Next.js 14 App Router + React 18 + TypeScript strict + Tailwind + shadcn  | Round 6 design language; `@shield/design-system` package                                             |
-| Backend        | FastAPI on Python 3.12                                                    | OpenAPI at `:8000/docs`                                                                              |
-| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                             | Alembic migrations, `batch_alter_table` for SQLite safety                                            |
-| Cache          | Redis 7                                                                   | Rate limiting only — no queue, no Celery                                                             |
-| Object storage | S3-compatible (MinIO in dev)                                              | Artifact uploads + generated deliverables                                                            |
-| IdP            | SHIELD-issued JWT (HS256) via NextAuth Credentials                        | Keycloak realm scaffolded under `infra/keycloak/` for later                                          |
-| AI             | Single egress client `app/ai/llm.py`; Anthropic/OpenAI/Gemini or fixtures | `SHIELD_LLM_MODE=fixture` is the offline default (D-017); provider via `SHIELD_LLM_PROVIDER` (D-024) |
-| Tests          | pytest (unit, SQLite) + Playwright e2e (host-run) + axe sweep             | See `docs/development.md` for the real command matrix                                                |
+| Layer          | Choice                                                                             | Notes                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Frontend       | Next.js 15 App Router + React 19 + TypeScript strict + Tailwind 4 + shadcn         | Round 6 design language; `@shield/design-system` package (framework majors bumped Sprint 4)          |
+| Backend        | FastAPI on Python 3.12                                                             | OpenAPI at `:8000/docs`                                                                              |
+| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                                      | Alembic migrations, `batch_alter_table` for SQLite safety                                            |
+| Cache          | Redis 7                                                                            | Rate limiting only — no queue, no Celery                                                             |
+| Object storage | S3-compatible (MinIO in dev)                                                       | Artifact uploads + generated deliverables                                                            |
+| IdP            | SHIELD-issued JWT (HS256) via NextAuth Credentials                                 | Keycloak realm scaffolded under `infra/keycloak/` for later                                          |
+| AI             | Single egress client `app/ai/llm.py`; Anthropic/OpenAI/Gemini or fixtures          | `SHIELD_LLM_MODE=fixture` is the offline default (D-017); provider via `SHIELD_LLM_PROVIDER` (D-024) |
+| Tests          | pytest (unit, SQLite) + web vitest (jsdom) + Playwright e2e (host-run) + axe sweep | Web unit harness added Sprint 5 T8; see `docs/development.md` for the real command matrix            |
 
 ## Data isolation (multi-tenant, D-015)
 
@@ -105,6 +105,48 @@ layers: a Postgres `BEFORE UPDATE/DELETE` trigger in production, plus a
 SQLAlchemy `before_flush` guard that raises `AuditEntryImmutableError` on any
 dialect (so SQLite tests catch violations too). Rows carry actor user id,
 action verb, target type + id, JSON details, and the request correlation id.
+
+Sprint 5 T7 added the first **read** surface over the two append-only stores
+(`audit_entries` and `llm_calls`): admin-only `GET /admin/audit-entries` and
+`GET /admin/llm-calls`, keyset-cursor paginated on `(at/requested_at desc, id
+desc)` (no OFFSET) with filters (action prefix, target type, actor,
+correlation id, date range / client id, purpose, provider, status). The
+`/admin/audit` viewer is a strictly read-only two-tab UI (Activity / AI calls)
+with correlation-id click-through — no mutation affordance, so the append-only
+guarantee is upheld by construction. The `llm_calls` projection exposes only
+audit-safe fields (counts, tokens, duration, status, error message) — never an
+api key or payload content.
+
+## Client portal & deliverable release (Sprint 5, D-025)
+
+Consultant output reaches the **client** role only through an explicit release
+(Master Spec §12): a deliverable is invisible until an admin releases the
+finalized version. `deliverables` carries nullable `released_at`/`released_by`
+(migration 0028); the shared `app/deliverable_release.py` helper backs four
+per-service `POST /{service}/deliverables/{id}/release` routes (typed 409
+`not_finalized`, idempotent, `*.deliverable.released` audit). Client-facing
+reads live in `app/routes/clients.py`:
+
+- `GET /clients/{cid}/deliverables` — released-only, tenant-enforced (404 on
+  mismatch), feeding the `/documents` page (§6.7).
+- `GET /clients/{cid}/value-summary` — the cross-service value loop (§2.5) on
+  `/home` (§6.4). **Deterministic aggregation, no LLM**: it sums already-computed
+  engine outputs and gates every number on the §12 release rule — a service
+  contributes only when it has a released deliverable, and the recompute is
+  pinned to the FINALIZED (approved/released) assessment version so a
+  post-release draft can never leak (a service with no released data renders
+  "Pending", never a fabricated 0).
+
+The artifact download path (`app/routes/artifacts.py`) admits a client to a
+released own-tenant deliverable's artifacts and nothing else. The CSF Playbook
+gained a POA&M / action-plan step (migration 0029 `csf_gap_actions`; per-gap
+characterization/priority-override/owner/deadline/resources/success-criteria/
+POA&M-ref, exported into the playbook XLSX Action Plan sheet).
+
+A pre-egress **redaction preview** (`POST /ai/preview`, `app/routes/ai_preview.py`)
+shows exactly what a Run-AI would send AFTER redaction — reusing each service's
+run-ai payload builder so it cannot diverge — WITHOUT egressing or writing an
+`llm_calls` row.
 
 ## AI integration boundary
 

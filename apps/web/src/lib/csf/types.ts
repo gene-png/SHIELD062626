@@ -229,3 +229,41 @@ export interface ExportedArtifact {
 export interface CsfPlaybookExport {
   artifacts: ExportedArtifact[];
 }
+
+// --- POA&M / gap action plan (Sprint 5 T5, spec step 10) ---
+
+export type GapCharacterization = "accept" | "mitigate" | "transfer" | "avoid";
+
+export interface CsfGapAction {
+  subcategory_code: string;
+  name: string;
+  function: string;
+  enterprise_level: number;
+  target_level: number | null;
+  /** Code-computed default from gap_priority() via the Enterprise roll-up. */
+  default_priority: string | null;
+  characterization: string | null;
+  priority_override: string | null;
+  owner: string | null;
+  deadline: string | null;
+  resources: string | null;
+  success_criteria: string | null;
+  poam_ref: string | null;
+  /** priority_override where set, else default_priority. */
+  effective_priority: string | null;
+}
+
+export interface CsfGapActions {
+  assessment_id: string;
+  actions: CsfGapAction[];
+}
+
+export interface CsfGapActionUpsert {
+  characterization?: string | null;
+  priority_override?: string | null;
+  owner?: string | null;
+  deadline?: string | null;
+  resources?: string | null;
+  success_criteria?: string | null;
+  poam_ref?: string | null;
+}

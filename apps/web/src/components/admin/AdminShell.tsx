@@ -23,6 +23,7 @@ const NAV: NavItem[] = [
   { label: "Active Work", href: "/admin/active" },
   { label: "Risk Register", href: "/admin/risk-register" },
   { label: "Messages", href: "/admin/messages" },
+  { label: "Audit", href: "/admin/audit" },
   { label: "Management", href: "/admin/management" },
 ];
 

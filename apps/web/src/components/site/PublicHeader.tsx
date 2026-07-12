@@ -25,12 +25,28 @@ export async function PublicHeader(): Promise<JSX.Element> {
         <nav aria-label="Primary" className="flex items-center gap-4 text-sm">
           {session ? (
             <>
+              {role === "client" ? (
+                <Link
+                  href="/home"
+                  className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+                >
+                  Home
+                </Link>
+              ) : null}
               <Link
                 href="/assessments"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
               >
                 My Assessments
               </Link>
+              {role === "client" ? (
+                <Link
+                  href="/documents"
+                  className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+                >
+                  Documents
+                </Link>
+              ) : null}
               <Link
                 href="/messages"
                 className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"

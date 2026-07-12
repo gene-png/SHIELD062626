@@ -57,7 +57,9 @@ export function Step5Notes({
   }, []);
 
   React.useEffect(() => {
-    void refreshArtifacts();
+    void (async () => {
+      await refreshArtifacts();
+    })();
   }, [refreshArtifacts]);
 
   function update(svc: ServiceType, patch: Partial<ServiceRequestInput>): void {

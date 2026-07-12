@@ -16,11 +16,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.ai.engine import run_job
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
 from app.models.llm_call import LLMCall
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
 
 _PURPOSES = ("tech_debt_extract", "csf_score", "zt_score", "mitre_map", "risk_synthesize")
 

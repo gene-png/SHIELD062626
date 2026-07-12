@@ -133,7 +133,7 @@ docker compose exec -T api pytest -m unit -q
 docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
 
 # Formatting (lockfile-pinned prettier; CI enforces it)
-npx -y prettier@3.9.4 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
+npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
 
 # End-to-end (Playwright) - host-run against the running stack on :3000.
 # 16 spec files / 34 tests under e2e/smoke/. Chromium only, serialized;

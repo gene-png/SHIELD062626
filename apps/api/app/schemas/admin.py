@@ -136,3 +136,67 @@ class AdminDomainListResponse(BaseModel):
 
 class AdminDomainCreateRequest(BaseModel):
     domain: str
+
+
+# --------------------------------------------------------------------------- #
+# Audit viewer (Sprint 5 T7): read surface over the two append-only stores.
+# Read-only by construction — no create/update schemas exist for these.
+# --------------------------------------------------------------------------- #
+
+
+class AdminAuditEntryRow(BaseModel):
+    """One append-only audit_entries row (Master Spec §11)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    at: datetime
+    actor_user_id: uuid.UUID | None
+    action: str
+    target_type: str
+    target_id: uuid.UUID | None
+    details: dict | None
+    correlation_id: str | None
+
+
+class AdminAuditEntriesResponse(BaseModel):
+    """A page of audit entries, newest first, plus an opaque next-page cursor."""
+
+    entries: list[AdminAuditEntryRow]
+    next_cursor: str | None = None
+
+
+class AdminLlmCallRow(BaseModel):
+    """One llm_calls row, audit-safe fields only.
+
+    The model carries no API key, and error_message was made key-safe in
+    Sprint 4 (Gemini fix), so every field here is safe to surface to an admin.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    service_id: uuid.UUID | None
+    client_id: uuid.UUID | None
+    purpose: str
+    prompt_version: str
+    provider: str
+    model: str
+    mode: str
+    input_tokens: int | None
+    output_tokens: int | None
+    duration_ms: int | None
+    status: str
+    error_message: str | None
+    redacted_counts: dict | None
+    requested_by: uuid.UUID
+    requested_at: datetime
+    completed_at: datetime | None
+    correlation_id: str | None
+
+
+class AdminLlmCallsResponse(BaseModel):
+    """A page of llm_calls, newest first, plus an opaque next-page cursor."""
+
+    calls: list[AdminLlmCallRow]
+    next_cursor: str | None = None

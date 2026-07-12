@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import create_engine, inspect
+
 from app.attack.catalog import (
     TACTICS,
     TECHNIQUES,
@@ -25,7 +27,6 @@ from app.attack.coverage import (
     CoverageStatus,
     coverage_label,
 )
-from sqlalchemy import create_engine, inspect
 
 TACTIC_ID_PATTERN = re.compile(r"^TA\d{4}$")
 TECHNIQUE_ID_PATTERN = re.compile(r"^T\d{4}(\.\d{3})?$")

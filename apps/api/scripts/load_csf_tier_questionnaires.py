@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import json
 
-from app.db.session import SessionLocal
-from app.models.questionnaire import Question
 from sqlalchemy import select
 
+from app.db.session import SessionLocal
+from app.models.questionnaire import Question
 from scripts._common import PACKAGES, print_progress
 
 LOADER = "csf_tier_questionnaires"

@@ -36,9 +36,15 @@ def render_xlsx(
     version: int,
     enterprise_rows: Sequence[Any],
     tier_profiles: Mapping[str, Sequence[Any]],
+    gap_actions: Mapping[str, Any] | None = None,
 ) -> bytes:
     """`enterprise_rows` are EnterpriseSubcategory-like; `tier_profiles` maps a
-    tier name to its CsfDimensionScoreResponse-like rows (total/level computed)."""
+    tier name to its CsfDimensionScoreResponse-like rows (total/level computed).
+
+    `gap_actions` maps a subcategory code to its stored POA&M annotation
+    (CsfGapAction-like: characterization/priority_override/owner/deadline/
+    resources/success_criteria/poam_ref). Optional — when omitted the Action
+    Plan sheet still renders with the code-computed defaults (Sprint 5 T5)."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
 
@@ -127,6 +133,49 @@ def render_xlsx(
                 ]
             )
         _autofit(ts)
+
+    # Action Plan (POA&M) sheet — one row per enterprise gap with its
+    # remediation annotation. Priority defaults to the code-computed roll-up
+    # priority; a stored override wins (Sprint 5 T5, spec step 10).
+    actions = gap_actions or {}
+    aps = wb.create_sheet("Action Plan")
+    _header(
+        aps,
+        [
+            "Subcategory",
+            "Outcome",
+            "Enterprise",
+            "Target",
+            "Priority",
+            "Characterization",
+            "Owner",
+            "Deadline",
+            "Resources",
+            "Success criteria",
+            "POA&M ref",
+        ],
+    )
+    for r in enterprise_rows:
+        if not getattr(r, "gap", False):
+            continue
+        act = actions.get(r.subcategory_code)
+        override = getattr(act, "priority_override", None) if act else None
+        aps.append(
+            [
+                r.subcategory_code,
+                r.name,
+                f"L{r.enterprise_level}",
+                f"L{r.target_level}" if r.target_level else "",
+                override or (r.priority or ""),
+                getattr(act, "characterization", "") or "" if act else "",
+                getattr(act, "owner", "") or "" if act else "",
+                getattr(act, "deadline", "") or "" if act else "",
+                getattr(act, "resources", "") or "" if act else "",
+                getattr(act, "success_criteria", "") or "" if act else "",
+                getattr(act, "poam_ref", "") or "" if act else "",
+            ]
+        )
+    _autofit(aps)
 
     cover = wb.create_sheet("About", 0)
     cover.append(["SHIELD by Kentro — CSF 2.0 Full Playbook"])
