@@ -55,7 +55,12 @@ Version at close: **`3.3.0`** (additive real-auth + live-AI enablement).
 2. `git checkout -b feat/real-demo-sprint-6 main` BEFORE the first fire.
 3. Archive the old runtime queue, COPY `.claude/sprint-queue.sprint-6.json` to
    `.claude/sprint-queue.json`; **set `working_dir` + `expected_gh_user` for
-   YOUR box** (they are placeholders in the staged file).
+   YOUR box** (they are placeholders in the staged file). **Also confirm the
+   `gates` array matches YOUR environment** — the copied gates encode Dave's box
+   (Docker CLI at `/c/Program Files/Docker/...`, the winget Node path in the
+   prettier gate, web on `:3001`). On a different OS / Docker / Node layout,
+   adapt those command strings; the five gates themselves (pytest -m unit, web
+   tsc, prettier 3.9.5, in-container ruff/black, web vitest) are the invariant.
 4. `/loop-sprint-cron` (or run tasks by hand following the per-task notes).
 5. **Anthropic API key** (recommended provider): the live-AI tasks (T1, T7) are
    **opt-in** — their integration tests skip without `SHIELD_LLM_MODE=live` +
