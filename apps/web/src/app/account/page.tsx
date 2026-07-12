@@ -3,13 +3,36 @@ import { getServerSession } from "next-auth";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
+import { MfaEnrollment } from "@/components/auth/MfaEnrollment";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 import { SignOutButton } from "@/components/site/SignOutButton";
 import { SkipToContent } from "@/components/site/SkipToContent";
+import { ApiError, apiFetch } from "@/lib/api";
 import { authOptions } from "@/lib/auth/options";
 
 import type { JSX } from "react";
+
+interface MeResponse {
+  mfa_enrolled: boolean;
+}
+
+/** Read the signed-in user's MFA state; default to "not enrolled" if the
+ * lookup fails so the account page still renders the enable flow. */
+async function fetchMfaEnrolled(bearer: string | undefined): Promise<boolean> {
+  if (!bearer) {
+    return false;
+  }
+  try {
+    const me = await apiFetch<MeResponse>("/auth/me", { bearer, clientId: "" });
+    return Boolean(me.mfa_enrolled);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return false;
+    }
+    throw err;
+  }
+}
 
 export const metadata: Metadata = { title: "Account" };
 
@@ -25,6 +48,7 @@ function Row({ label, value }: { label: string; value: string }): JSX.Element {
 export default async function AccountPage(): Promise<JSX.Element> {
   const session = await getServerSession(authOptions);
   const role = session?.role ?? "—";
+  const mfaEnrolled = await fetchMfaEnrolled(session?.accessToken);
   return (
     <>
       <SkipToContent />
@@ -50,6 +74,14 @@ export default async function AccountPage(): Promise<JSX.Element> {
             <div className="pt-4">
               <SignOutButton />
             </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Two-factor authentication</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <MfaEnrollment initiallyEnrolled={mfaEnrolled} />
           </CardBody>
         </Card>
       </main>

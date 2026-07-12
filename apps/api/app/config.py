@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Session security (Master Spec §4.5)
     jwt_access_ttl_seconds: int = Field(default=900, ge=60)
     jwt_refresh_ttl_seconds: int = Field(default=1800, ge=300)
+    # Short-lived token issued after the password factor when MFA is enrolled;
+    # exchanged for the full pair by POST /auth/mfa/verify-login (Sprint 6 T4).
+    jwt_mfa_pending_ttl_seconds: int = Field(default=300, ge=60)
     shield_account_lockout_max_attempts: int = Field(default=10, ge=1)
     shield_account_lockout_window_seconds: int = Field(default=900, ge=60)
     shield_idle_timeout_seconds: int = Field(default=1800, ge=60)
@@ -166,16 +169,14 @@ class Settings(BaseSettings):
             )
         if self.is_production() and self.jwt_signing_secret.startswith("dev-only"):
             raise RuntimeError("JWT_SIGNING_SECRET is still the default placeholder in production.")
-        # Fail loudly on dead feature flags. The MFA and email-verification
-        # flows do not exist yet (Master Spec §2 deferred them); flipping the
-        # flag true used to silently do nothing, which is worse than refusing —
-        # an operator would believe a control is active when it is not. Refuse
-        # to boot until the flows land (Sprint 5+).
-        if self.shield_auth_require_mfa:
-            raise RuntimeError(
-                "SHIELD_AUTH_REQUIRE_MFA=true but no MFA enrollment/challenge flow "
-                "exists yet. Refusing to start rather than silently ignore the flag."
-            )
+        # Fail loudly on dead feature flags. Email verification does not exist
+        # yet (Master Spec §2 deferred it); flipping the flag true would silently
+        # do nothing, which is worse than refusing — an operator would believe a
+        # control is active when it is not. Refuse to boot until the flow lands
+        # (T5). NOTE: shield_auth_require_mfa is NO LONGER a boot refusal as of
+        # Sprint 6 T4 (D-027) — the TOTP enroll/verify/login-challenge flow now
+        # exists, so the flag GATES enforcement (require enrollment at login) in
+        # routes/auth.py rather than refusing to start.
         if self.shield_auth_require_email_verify:
             raise RuntimeError(
                 "SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=true but no email-verification flow "

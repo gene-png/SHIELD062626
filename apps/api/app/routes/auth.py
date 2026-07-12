@@ -32,8 +32,14 @@ from app.models._common import utcnow
 from app.models.client import Client
 from app.models.client_domain import ClientDomain
 from app.models.user import User, UserRole
+from app.models.user_recovery_code import UserRecoveryCode
 from app.schemas.auth import (
     LoginRequest,
+    LoginResult,
+    MfaEnrollResponse,
+    MfaLoginRequest,
+    MfaVerifyRequest,
+    MfaVerifyResponse,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
@@ -48,6 +54,16 @@ from app.security.password import (
     verify_password,
 )
 from app.security.rate_limit import RateLimiter, get_rate_limiter
+from app.security.totp import (
+    decrypt_secret,
+    encrypt_secret,
+    generate_recovery_codes,
+    generate_secret,
+    hash_recovery_code,
+    provisioning_uri,
+    verify_recovery_code,
+    verify_totp,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -100,6 +116,25 @@ def _issue_pair(user: User, *, auth_time: datetime | None = None) -> TokenPairRe
         access_expires_at=access_payload.exp,
         refresh_expires_at=refresh_payload.exp,
     )
+
+
+def _login_result_from_pair(pair: TokenPairResponse) -> LoginResult:
+    """Wrap a completed token pair in the LoginResult shape (mfa_required=False)."""
+    return LoginResult(
+        access_token=pair.access_token,
+        refresh_token=pair.refresh_token,
+        access_expires_at=pair.access_expires_at,
+        refresh_expires_at=pair.refresh_expires_at,
+    )
+
+
+def _clear_password_failures(user: User) -> None:
+    """Correct password → reset the password-lockout counters. Used on the MFA
+    challenge path where login is not yet complete, so we must NOT stamp
+    last_login_at / audit a login until the second factor is satisfied."""
+    user.failed_login_count = 0
+    user.last_failed_login_at = None
+    user.locked_until_at = None
 
 
 def _as_aware(dt: datetime | None) -> datetime | None:
@@ -288,15 +323,15 @@ def register(
 
 @router.post(
     "/login",
-    response_model=TokenPairResponse,
-    summary="Email + password login",
+    response_model=LoginResult,
+    summary="Email + password login (MFA challenge when enrolled)",
 )
 def login(
     body: LoginRequest,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
-) -> TokenPairResponse:
+) -> LoginResult:
     email = _normalize_email(body.email)
 
     # Throttle before the timing-safe Argon2 verify so a credential-stuffing
@@ -335,10 +370,33 @@ def login(
     if needs_rehash:
         user.password_hash = hash_password(body.password)
 
+    # Second factor (Sprint 6 T4, D-027). If the user has TOTP MFA enrolled, the
+    # password is only the FIRST factor: issue a short-lived mfa_pending token
+    # (good for nothing but /auth/mfa/verify-login) INSTEAD of the real pair.
+    # Login is not complete, so reset only the password-lockout counters here;
+    # last_login_at + the login audit are stamped once the code is verified.
+    if user.mfa_enrolled:
+        _clear_password_failures(user)
+        pending_token, _payload = issue_token(
+            subject=user.id, role=user.role.value, typ="mfa_pending"
+        )
+        db.commit()
+        log.info("auth.mfa_challenge_issued", user_id=str(user.id))
+        return LoginResult(mfa_required=True, mfa_pending_token=pending_token)
+
     _register_successful_login(db, user)
-    tokens = _issue_pair(user)
+    pair = _issue_pair(user)
     db.commit()
-    return tokens
+
+    # SHIELD_AUTH_REQUIRE_MFA gates enforcement (D-027): with the flag on, a user
+    # who has NOT enrolled still gets a session (first enrollment needs one), but
+    # the result flags that the UI must route them to enroll before proceeding.
+    # The flag no longer refuses to boot (that was the old config.py behavior).
+    result = _login_result_from_pair(pair)
+    if get_settings().shield_auth_require_mfa and not user.mfa_enrolled:
+        result.mfa_enrollment_required = True
+        log.info("auth.mfa_enrollment_required", user_id=str(user.id))
+    return result
 
 
 @router.post(
@@ -435,3 +493,177 @@ def logout(
 )
 def me(user: Annotated[User, Depends(current_user)]) -> UserResponse:
     return UserResponse.model_validate(user, from_attributes=True)
+
+
+# -----------------------------------------------------------------------------
+# MFA (TOTP) — enroll, confirm, and the login second factor (Sprint 6 T4, D-027)
+# -----------------------------------------------------------------------------
+
+
+@router.post(
+    "/mfa/enroll",
+    response_model=MfaEnrollResponse,
+    summary="Begin TOTP MFA enrollment (returns provisioning URI + secret)",
+)
+def mfa_enroll(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> MfaEnrollResponse:
+    """Generate a fresh TOTP secret and return its otpauth:// provisioning URI.
+
+    The secret is stored encrypted immediately but enrollment is NOT active
+    until /auth/mfa/verify confirms a code (that is what flips mfa_enrolled and
+    mints recovery codes). Re-enrolling before confirmation simply rotates the
+    pending secret.
+    """
+    secret = generate_secret()
+    user.mfa_totp_secret = encrypt_secret(secret)
+    audit(
+        db,
+        action="user.mfa_enroll_started",
+        target_type="user",
+        target_id=user.id,
+        actor_user_id=user.id,
+    )
+    db.commit()
+    log.info("auth.mfa_enroll_started", user_id=str(user.id))
+    return MfaEnrollResponse(
+        secret=secret,
+        otpauth_uri=provisioning_uri(secret, user.email),
+    )
+
+
+@router.post(
+    "/mfa/verify",
+    response_model=MfaVerifyResponse,
+    summary="Confirm TOTP enrollment; returns one-time recovery codes",
+)
+def mfa_verify(
+    body: MfaVerifyRequest,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> MfaVerifyResponse:
+    """Confirm a code against the pending secret, flip mfa_enrolled, and issue a
+    fresh set of one-time recovery codes (returned in plaintext exactly once)."""
+    limiter.enforce_auth(request, user.email)
+
+    if not user.mfa_totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "mfa_not_started",
+                "message": "Start MFA enrollment before verifying a code.",
+            },
+        )
+
+    if not verify_totp(decrypt_secret(user.mfa_totp_secret), body.code):
+        log.info("auth.mfa_verify_rejected", user_id=str(user.id))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "reason": "mfa_invalid_code",
+                "message": "That code is incorrect or has expired. Try again.",
+            },
+        )
+
+    user.mfa_enrolled = True
+    # Replace any prior recovery codes (re-verify resets the set).
+    for old in db.execute(
+        select(UserRecoveryCode).where(UserRecoveryCode.user_id == user.id)
+    ).scalars():
+        db.delete(old)
+
+    plaintext_codes = generate_recovery_codes()
+    for code in plaintext_codes:
+        db.add(UserRecoveryCode(user_id=user.id, code_hash=hash_recovery_code(code)))
+
+    audit(
+        db,
+        action="user.mfa_enrolled",
+        target_type="user",
+        target_id=user.id,
+        actor_user_id=user.id,
+    )
+    db.commit()
+    log.info("auth.mfa_enrolled", user_id=str(user.id))
+    return MfaVerifyResponse(recovery_codes=plaintext_codes)
+
+
+@router.post(
+    "/mfa/verify-login",
+    response_model=TokenPairResponse,
+    summary="Complete an MFA login challenge (TOTP or recovery code)",
+)
+def mfa_verify_login(
+    body: MfaLoginRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
+) -> TokenPairResponse:
+    """Exchange a valid mfa_pending token + second factor for the full pair.
+
+    The second factor is either a current TOTP code or an unused recovery code
+    (recovery codes are single-use — a match is consumed by stamping used_at).
+    """
+    try:
+        payload = verify_token(body.mfa_pending_token, expected_type="mfa_pending")
+    except TokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge. Please sign in again.",
+        ) from exc
+
+    user = db.get(User, payload.sub)
+    if user is None or not user.is_active or not user.mfa_enrolled:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge. Please sign in again.",
+        )
+
+    # Throttle the second-factor guess rate per account (the pending token is
+    # short-lived, but rate-limiting still blunts online code guessing).
+    limiter.enforce_auth(request, user.email)
+
+    verified = user.mfa_totp_secret is not None and verify_totp(
+        decrypt_secret(user.mfa_totp_secret), body.code
+    )
+    used_recovery = False
+    if not verified:
+        # Fall back to a single-use recovery code.
+        for candidate in db.execute(
+            select(UserRecoveryCode).where(
+                UserRecoveryCode.user_id == user.id,
+                UserRecoveryCode.used_at.is_(None),
+            )
+        ).scalars():
+            if verify_recovery_code(body.code, candidate.code_hash):
+                candidate.used_at = utcnow()
+                verified = True
+                used_recovery = True
+                break
+
+    if not verified:
+        log.info("auth.mfa_login_rejected", user_id=str(user.id))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "reason": "mfa_invalid_code",
+                "message": "That code is incorrect or has expired. Try again.",
+            },
+        )
+
+    _register_successful_login(db, user)
+    audit(
+        db,
+        action="user.mfa_login_verified",
+        target_type="user",
+        target_id=user.id,
+        actor_user_id=user.id,
+        details={"via": "recovery_code" if used_recovery else "totp"},
+    )
+    pair = _issue_pair(user)
+    db.commit()
+    log.info("auth.mfa_login_verified", user_id=str(user.id), via_recovery=used_recovery)
+    return pair

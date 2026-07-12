@@ -50,6 +50,10 @@ class User(UUIDPKMixin, TimestampMixin, Base):
 
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     mfa_enrolled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # TOTP shared secret, Fernet-encrypted at rest (Sprint 6 T4, D-027). Set at
+    # enroll, confirmed at verify (flips mfa_enrolled). Nullable/additive (C0):
+    # pre-migration rows and users who never enroll simply carry no secret.
+    mfa_totp_secret: Mapped[str | None] = mapped_column(String(512))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

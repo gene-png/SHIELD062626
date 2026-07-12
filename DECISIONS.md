@@ -447,3 +447,62 @@ guards specifically against the "declared but image not rebuilt" trap.
 **Ref:** SPRINT_6.md T0; `apps/api/pyproject.toml`, `app/config.py`,
 `app/main.py`, `app/routes/admin.py`, `docker-compose.yml`,
 `tests/unit/test_config.py`; DECISIONS D-017, D-024.
+
+## D-027 — Real TOTP MFA: a single custom-JWT enroll/verify/login-challenge flow
+
+**2026-07-12 · auth**
+Ship real multi-factor auth on the existing custom HS256-JWT auth stack rather
+than deferring to a Keycloak federation. RFC 6238 TOTP (SHA1 / 6-digit /
+30-second), implemented against the stdlib (`app/security/totp.py`) and locked
+to the RFC's published test vectors — no third-party OTP dependency. Three
+endpoints on `routes/auth.py`: `POST /auth/mfa/enroll` (returns an otpauth
+provisioning URI + secret), `POST /auth/mfa/verify` (confirms a code, flips
+`users.mfa_enrolled`, issues 10 one-time recovery codes shown exactly once),
+and `POST /auth/mfa/verify-login` (completes the login challenge). When a user
+has MFA enrolled, `/auth/login` returns a short-lived (`jwt_mfa_pending_ttl`,
+default 5 min) `mfa_pending` token INSTEAD of the access+refresh pair; that
+token authorizes nothing but `verify-login`, which accepts a current TOTP OR a
+single-use recovery code and then mints the real pair. The verify endpoints are
+rate-limited via the existing per-account auth limiter.
+
+**At-rest secrets.** The TOTP secret is Fernet-encrypted (`cryptography`,
+already transitive) with a key derived from `JWT_SIGNING_SECRET` — no new
+secret to provision; rotating the signing secret invalidates stored MFA secrets
+(users re-enroll), which is a loud, correct failure rather than a silent
+decrypt. Recovery codes are Argon2id-hashed (a dedicated hasher, since they are
+shorter than the 12-char password policy) and never stored or logged in
+plaintext. Migration `0030` is additive/SQLite-safe (C0): `users.mfa_totp_secret`
+is nullable so old rows parse as "not enrolled", and `user_recovery_codes` is a
+new cascade-deleted table.
+
+**Flag semantics change.** The old `config.py` boot-refusal on
+`SHIELD_AUTH_REQUIRE_MFA=true` (which refused to start because no flow existed)
+is removed. The flag now GATES enforcement: an enrolled user is always
+challenged regardless of the flag; with the flag ON, a not-yet-enrolled user
+still receives a session (first enrollment necessarily needs one) but the login
+result carries `mfa_enrollment_required` so the UI routes them to enroll. The
+email-verification boot-refusal stays until T5 lands that flow.
+
+**Web.** The NextAuth Credentials provider gains an optional `totp` credential:
+the sign-in form submits email+password first, and on an `mfa_required` signal
+reveals a code field and re-submits; `authorize` completes the challenge
+server-side (re-running `/auth/login` for a fresh pending token, then
+`verify-login`) so the pending token never reaches the browser. A net-new
+account-page enrollment section (`MfaEnrollment.tsx`) drives enroll → confirm →
+recovery-code display through server-side proxies. Keycloak stays dormant; when
+v1.x federates auth it replaces this flow behind the same `aud=shield-api`
+claim.
+
+**Rationale:** MFA is a FedRAMP-Moderate baseline control; a config flag that
+refused to boot was worse than a real control. The single-JWT design keeps the
+whole flow in one deterministic, testable seam ("AI suggests, code computes" is
+untouched — this is pure crypto). TDD: enroll → verify → login-with-TOTP happy
+path, wrong/expired code rejected, single-use recovery-code login, and
+flag-off = no challenge for non-enrolled users (back-compat).
+**Ref:** SPRINT_6.md T4; `apps/api/alembic/versions/0030_mfa_totp.py`,
+`app/security/totp.py`, `app/models/user.py`, `app/models/user_recovery_code.py`,
+`app/security/jwt.py`, `app/routes/auth.py`, `app/config.py`,
+`app/schemas/auth.py`, `tests/unit/test_totp.py`, `tests/unit/test_mfa_routes.py`,
+`tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/options.ts`,
+`apps/web/src/components/auth/{SignInForm,MfaEnrollment}.tsx`,
+`apps/web/src/app/account/page.tsx`; DECISIONS D-020.

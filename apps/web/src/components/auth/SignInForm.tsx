@@ -11,6 +11,10 @@ export function SignInForm(): JSX.Element {
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [totp, setTotp] = React.useState("");
+  // Once the backend signals MFA is enrolled, reveal the code field and keep it
+  // shown for retries.
+  const [mfaRequired, setMfaRequired] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
@@ -22,10 +26,22 @@ export function SignInForm(): JSX.Element {
       const result = await signIn("credentials", {
         email,
         password,
+        totp: totp || undefined,
         redirect: false,
       });
+      if (result?.error === "mfa_required") {
+        // Correct password; now collect the authenticator code.
+        setMfaRequired(true);
+        setError(null);
+        setPending(false);
+        return;
+      }
       if (!result || result.error) {
-        setError("Invalid email or password.");
+        setError(
+          mfaRequired
+            ? "That code is incorrect or has expired. Try again."
+            : "Invalid email or password.",
+        );
         setPending(false);
         return;
       }
@@ -74,6 +90,32 @@ export function SignInForm(): JSX.Element {
           className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden"
         />
       </div>
+      {mfaRequired ? (
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="totp"
+            className="text-sm font-medium text-ink-primary"
+          >
+            Authenticator code
+          </label>
+          <input
+            id="totp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            value={totp}
+            onChange={(e) => setTotp(e.target.value)}
+            className="rounded-md border border-border bg-surface-card px-3 py-2 text-sm text-ink-primary focus:border-border-focus focus:outline-hidden"
+            placeholder="6-digit code or recovery code"
+          />
+          <p className="text-xs text-ink-tertiary">
+            Enter the code from your authenticator app, or one of your recovery
+            codes.
+          </p>
+        </div>
+      ) : null}
       {error ? (
         <div
           role="alert"
@@ -87,7 +129,7 @@ export function SignInForm(): JSX.Element {
         disabled={pending}
         className="rounded-md bg-brand-500 px-4 py-2.5 text-sm font-semibold text-ink-on-accent hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Signing in…" : mfaRequired ? "Verify code" : "Sign in"}
       </button>
     </form>
   );

@@ -35,6 +35,7 @@ from app.models.risk_register import RiskEntry, RiskRegister
 from app.models.service import Service, ServiceKind, ServiceStatus
 from app.models.service_request import ServiceRequest, ServiceType
 from app.models.user import User, UserRole
+from app.models.user_recovery_code import UserRecoveryCode
 from app.models.zt_assessment import (
     ZtAnswer,
     ZtAssessment,
@@ -75,6 +76,7 @@ __all__ = [
     "ServiceType",
     "User",
     "UserRole",
+    "UserRecoveryCode",
     "ZtAnswer",
     "ZtAssessment",
     "ZtAssessmentStatus",
