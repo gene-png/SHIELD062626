@@ -1,10 +1,9 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-10 (Sprint 5 close — client value loop). This file
-describes the project as of the branch it sits on and is updated ONLY as part of
-a PR. Durable facts and environment gotchas live in `CLAUDE.md`; personal
-in-flight status lives in `context/<name>.md`; per-sprint detail lives in
-`SPRINT_<n>.md`._
+_Last updated: 2026-07-12 (Sprint 6 close — real demo). This file describes the
+project as of the branch it sits on and is updated ONLY as part of a PR. Durable
+facts and environment gotchas live in `CLAUDE.md`; personal in-flight status
+lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
 
 ## Current state
 
@@ -22,41 +21,46 @@ in-flight status lives in `context/<name>.md`; per-sprint detail lives in
   web stack moved to Next 15 / React 19 / Tailwind 4 / ESLint 9 / Node 22, and
   multi-provider LLM egress (OpenAI + Gemini beside Anthropic, D-024) landed
   below the unchanged redacting seam.
-- **Sprint 5 "client value loop" COMPLETE** (this branch
-  `feat/client-value-loop-sprint-5`, `v3.2.0`): consultant output now delivers
-  visible value to the CLIENT role. Deliverable release-to-client flow (D-025),
-  the `/home` executive dashboard (§6.4) with the cross-service value-loop card
-  (§2.5, deterministic — no LLM), the `/documents` page (§6.7), a CSF POA&M
-  action-plan step (step 10), a pre-egress redaction preview gate, and the first
-  read surface over the append-only audit stores (`/admin/audit`). Plus three
-  engineering follow-ups: a web unit-test harness (vitest + testing-library),
-  adoption of all 14 react-hooks v6 rules (zero configured off), and a prettier
-  3.9.5 pin sync. Two additive/C0 migrations (0028 release fields, 0029
-  `csf_gap_actions`). New client-facing features justify the **minor** bump. Full
-  exit gate set green — 39-test e2e, `pytest -m unit`, web `tsc`, host prettier
-  `--check` (3.9.5), in-container ruff/black, and the new in-container web vitest
-  gate (T8).
+- **Sprint 5 "client value loop"** (PR #31, `v3.2.0`): consultant output now
+  delivers visible value to the CLIENT role — deliverable release flow (D-025),
+  `/home` executive dashboard + §2.5 value-loop card, `/documents`, a CSF POA&M
+  step, a pre-egress redaction preview, and the first read surface over the
+  append-only audit stores (`/admin/audit`).
+- **Sprint 6 "real demo" COMPLETE** (this branch `feat/real-demo-sprint-6`,
+  `v3.3.0`): the platform is now a real, self-standing demo. The live-AI path is
+  runnable and fails LOUDLY at boot when misconfigured (D-026); seeded
+  deliverables actually download (seed→storage parity); real TOTP MFA (D-027) and
+  real email verification + password reset (D-028) ship on the custom-JWT stack —
+  the D-020 boot-refusals are gone, the flags now gate enforcement; a full-matrix
+  `/ready` + `/admin/health` operator view lands; the demo seed tells a coherent,
+  downloadable Atlas story with a one-command reset; and `docker-compose.demo.yml`
+  runs web as a production build. Two additive/C0 migrations (0030 MFA TOTP, 0031
+  email tokens). New user-facing auth features + a runnable live path justify the
+  **minor** bump. Full exit gate set green — full Playwright e2e, `pytest -m
+  unit`, web `tsc`, in-container web vitest, in-container web eslint, host
+  prettier `--check` (3.9.5), and in-container ruff/black.
 
-### Sprint 5 task → commit
+### Sprint 6 task → commit
 
 | Task | What shipped | Commit |
 | --- | --- | --- |
-| T0 | Prettier 3.9.4→3.9.5 pin sync (supersedes dependabot #29); all four gate pins synced | `37330cc` |
-| T1 | Deliverable release flow backend (D-025): migration 0028 `released_at`/`released_by`, shared release helper + 4 per-service routes, client list route, client artifact download | `1863f9a` |
-| T2 | `/documents` client page (§6.7): released-deliverables table + §15.5 downloads; Documents nav; s17 | `dd2ff1b` |
-| T3 | `/home` client dashboard (§6.4): hero/guidance, per-service phase grid, waiting-on-you; role landing; s18 | `bb981a5` |
-| T4 | Cross-service value-loop card (§2.5): deterministic `GET /clients/{cid}/value-summary`, nulls render Pending; s19 | `3ccddca` |
-| T5 | CSF POA&M step: migration 0029 `csf_gap_actions`, autosave CRUD, gap-action editor, XLSX Action Plan sheet; s7 | `2a43a13` |
-| T6 | Redaction preview gate: `POST /ai/preview` (no egress, no `llm_calls` row), shared run-ai payload builders, preview UI; s7 | `0a92110` |
-| T7 | `/admin/audit` viewer: `audit-entries` + `llm-calls` read routes (cursor paginated, filtered), read-only two-tab UI; s20 | `a14c1b0` |
-| T8 | Web unit-test harness: vitest + testing-library + jsdom, two reqSeq guard tests, CI + runtime queue gate | `3bc2b54` |
-| T9 | Adopt all 14 react-hooks v6 rules (zero off); fix every violation by pattern | `f590d99` |
-| T10 | Wrap-up: SMOKE_TEST §16–§21, CHANGELOG `[3.2.0]`, BUILD_REPORT sync, D-025 verify, full gates, this snapshot | this commit |
+| T0 | Live-AI enablement: declared `anthropic` dep, replaced stale `claude-opus-4-7` default with `claude-sonnet-5`, live-mode boot preflight (fails loudly on missing key / unimportable SDK / placeholder model); D-026 | `8aebe51` |
+| T1 | Live-AI opt-in integration spec (`@pytest.mark.live`, self-skips keyless) + `smoke_live_ai.py`; SMOKE_TEST §14 codified | `a19fded` |
+| T2 | Seed → storage parity: seed writes bytes via `get_storage()` so seeded deliverables download 200 (410 before); s17 parity test | `0bbabac` |
+| T3 | Full dependency-health `/ready` matrix (db/redis/minio/keycloak-dormant/LLM) + `/admin/health` operator view (`HealthMatrix`, vitest) | `9b2c74b` |
+| T4 | Real TOTP MFA: migration 0030, RFC 6238 (`totp.py`), enroll/verify/login-challenge + recovery codes, flag gates enforcement; D-027 | `bf8e7c6` |
+| T5 | Real email verification + password reset: migration 0031, hashed single-use tokens over SMTP/MailHog, enumeration-safe, flag gates login; D-028 | `f67c79f` |
+| T6 | OpenAI reasoning models send `max_completion_tokens` per model family (Sprint 4 D-024 follow-up) | `19636b5` |
+| T7 | Live-AI parity sweep across all five purposes (opt-in, self-skips keyless); SMOKE_TEST §14.1 | `8761d91` |
+| T8 | Demo realism: seed synthesizes a coherent Atlas Risk Register (code-derived tiers, downloadable exports) + `scripts/demo-reset.*` one-command reset; s8 read-only test | `39b3cfc` |
+| T9 | Hosted-demo compose (`docker-compose.demo.yml`, web prod build); root `.dockerignore` + Dockerfile rewrite; fixed latent HealthMatrix CI lint failure; cloud/terraform NOT touched | `db33372` |
+| T10 | Security + audit pass: MFA second-factor failures feed account lockout, `/ready` detail redacted for anonymous callers; audits clean/documented, no secret committed | `18b7d85` |
+| T11 | Wrap-up: SMOKE_TEST §22–§28, CHANGELOG `[3.3.0]`, BUILD_REPORT sync, DECISIONS D-026/027/028 verify, full gates, this snapshot | this commit |
 
-New migrations: **0028** (deliverable release fields, T1) + **0029**
-(`csf_gap_actions`, T5), both additive/SQLite-safe (C0). New DECISIONS: **D-025**
-(deliverable release-to-client as a new admin-only action — explicitly not a
-revival of the removed D-005/D-006 reviewer gate; D-023 anticipated it).
+New migrations: **0030** (MFA TOTP secret + recovery codes, T4) + **0031**
+(email verification/reset tokens, T5), both additive/SQLite-safe (C0). New
+DECISIONS: **D-026** (live-AI enablement + boot preflight), **D-027** (real TOTP
+MFA), **D-028** (real email verification + password reset).
 
 ## Machine-local facts (this box)
 
@@ -73,116 +77,124 @@ revival of the removed D-005/D-006 reviewer gate; D-023 anticipated it).
   `e2e/node_modules/@playwright/test/cli.js`. Docker CLI needs
   `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` per shell.
   Host Node LTS is 22 (matches the container after Sprint 4 T4).
-- **Prettier gate:** run `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`
-  from the repo root before every commit — CI enforces the same version (bumped
-  3.9.4→3.9.5 in Sprint 5 T0).
-- **Python lint gate:** the api compose service read-only-mounts the root
-  `./pyproject.toml` at `/pyproject.toml` so `docker compose exec -T api sh -lc
-  "cd /app && ruff check --no-cache . && black --check ."` sees the ROOT config
-  and reproduces CI exactly. In the runtime queue `gates` array.
-- **Web unit-test gate (new, Sprint 5 T8):** `docker compose exec -T web sh -lc
-  "cd /app && pnpm -F web test"` (vitest, deterministic, mocked fetch) is now in
-  the runtime queue `gates` array and the CI web job. After editing
-  `apps/web/package.json`, reinstall INSIDE the web container.
-- **Framework-bump reinstall dance:** after editing any `apps/web` or
-  `packages/*` source, `docker compose up -d --force-recreate web` before any
-  e2e (next-dev hot-reload does not fire through the Windows bind mount).
-- **New python module under `app/`** needs `docker compose restart api`; NEVER
-  restart api while an in-container pytest is running (SIGKILL 137).
+- **Six queue gates (Sprint 6):** the runtime queue `gates` array now runs
+  `pytest -m unit`, web `tsc`, host prettier 3.9.5 `--check`, in-container
+  ruff/black (root-config parity), in-container web vitest (`pnpm -F web test`),
+  and in-container web eslint (`pnpm -F web lint` — added this sprint after T9's
+  HealthMatrix lint failure slipped a loop that omitted eslint).
+- **Framework/module reinstall dance:** after editing any `apps/web` source,
+  `docker compose up -d --force-recreate web` before any e2e (next-dev hot-reload
+  does not fire through the Windows bind mount). A NEW python module under `app/`
+  needs `docker compose restart api`; NEVER restart api while an in-container
+  pytest is running (SIGKILL 137). After editing `apps/web/package.json`,
+  reinstall INSIDE the web container.
+- **`anthropic` SDK is now a real dep (T0):** adding it required
+  `docker compose build api` (a plain restart won't install it). Live mode also
+  needs a **current** model (`claude-sonnet-5`, not the rejected `claude-opus-4-7`
+  placeholder) or the boot preflight refuses to start.
 
 ## Deferred / needs a human
 
-- **SMOKE_TEST §14 (live AI):** still David's pending item — needs a real
-  provider key in `.env` (no committed spec can prove it; fixture mode exercises
-  no live path). Provider-agnostic since Sprint 4 (D-024).
-- **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts
-  in `e2e/artifacts/`, now including the Sprint-5 CSF **Action Plan** XLSX sheet
-  (asserted HTTP 200 by s7; the sheet's cell content is a human eyeball item).
-- **reqSeq guard sweep remainder:** T9 fixed only the components the 14 rules
-  flagged; the broader mount-fetch-then-mutate sweep across the other components
-  stays a Sprint 6 candidate.
-- **ESLint 10** — deferred upstream: no published Next lint stack runs on it
-  today (`eslint-plugin-react` 7.37.5 uses the removed `context.getFilename()`;
-  Next's babel parser hits an `eslint-scope` gap). D-018 carries a dated deferral
-  annotation.
-- **Two documented moderate audit findings** left deliberately open (Sprint 4
-  T5): `postcss` 8.4.31 (pinned in `next@15.5.20`; XSS-stringify path N/A at
-  build) and `uuid` 8.3.2 (via `next-auth@4.24.14`; buffer bug is v3/v5/v6-only).
-  Neither overridden; both clear on the upstream / Auth.js v5 bumps.
-- **Needs David (infra):** `infra/terraform` (cloud/account/region/network) and
-  DR runbooks are `.gitkeep` stubs; real MFA + email-verification flows (D-020);
-  Auth.js v5 migration; `azure_openai`/`bedrock`/`local` LLM adapters stay loud
-  not-implemented until a deployment needs one.
-- **Client notifications/email on release** — release is visible on `/home` and
-  `/documents`; an outbound notification is a deliberate future decision (Sprint
-  5 out-of-scope).
+- **SMOKE_TEST §14 / §14.1 (live AI, key-gated):** the opt-in `@pytest.mark.live`
+  specs and `smoke_live_ai.py` are committed but self-skip without a real provider
+  key — no committed spec runs a live call in a keyless pipeline. Run one real
+  sweep with a key to confirm the redacted `llm_calls` row and per-adapter parse
+  for all five purposes. Provider-agnostic since Sprint 4 (D-024). No adapter parse
+  fix was possible without a key this sprint.
+- **SMOKE_TEST §25 (MailHog e2e, opt-in):** `s21-email-verify.spec.ts` self-skips
+  unless the api is up with `SHIELD_EMAIL_DELIVERY_ENABLED=true`; run it once
+  against MailHog to prove the token flow end-to-end through the wire.
+- **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts in
+  `e2e/artifacts/`, incl. the CSF Action Plan XLSX sheet (asserted HTTP 200 by s7).
+- **MFA / email web UI eyeball:** the sign-in MFA step, account enrollment section,
+  and verify/forgot/reset pages have no e2e driving the UI (backend flows are
+  `pytest -m unit` proven); eyeball them in a browser.
+- **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` (T9) and
+  `scripts/demo-reset.*` (T8) were verified end-to-end by hand this sprint; no
+  automated spec drives them.
+- **reqSeq guard sweep remainder:** the broader mount-fetch-then-mutate sweep
+  across the components the react-hooks rules did not force stays a Sprint 7
+  candidate.
+- **ESLint 10** — deferred upstream: no published Next lint stack runs on it today
+  (`eslint-plugin-react` 7.37.5 uses the removed `context.getFilename()`; Next's
+  babel parser hits an `eslint-scope` gap). D-018 carries a dated deferral.
+- **Two documented moderate audit findings** left deliberately open (Sprint 4 T5):
+  `postcss` 8.4.31 (pinned in `next@15.5.20`; XSS-stringify path N/A at build) and
+  `uuid` 8.3.2 (via `next-auth@4.24.14`; buffer bug is v3/v5/v6-only). No JS dep
+  manifests changed this sprint, so the posture carries unchanged.
+- **Needs David (cloud infra):** `infra/terraform` (cloud/account/region/network)
+  and DR runbooks are stubs; FedRAMP-authorized LLM connector; Auth.js v5 /
+  Keycloak SSO cutover (the Credentials→OIDC seam exists but stays dormant);
+  `azure_openai`/`bedrock`/`local` LLM adapters stay loud not-implemented until a
+  deployment needs one. T9 delivered only a local hosted-demo compose.
 
 ## Test coverage status
 
-- Backend: full `pytest -m unit` green in-container. Sprint 5 added contract
-  tests for the release route (409 not_finalized, idempotency, audit row), the
-  client deliverable list + artifact allow/deny matrix incl. the cross-tenant
-  download deny (T1), the value-summary aggregation with full/partial/no data +
-  the zero-`llm_calls`/no-`app.ai`-import invariant + the post-release-draft
-  §12 pin (T4), `csf_gap_actions` CRUD + default-vs-override priority +
-  empty-string-clears + XLSX Action Plan sheet (T5), `/ai/preview`
-  equals-redaction + no-row/no-egress (T6), and the audit read routes'
-  filters/cursor pagination (incl. `client_id` + date range on llm-calls) +
-  client-role 403 (T7). The final-audit pass (post-T10) hardened these: it
-  fixed a §12 leak where the value summary recomputed from the LATEST assessment
-  version instead of the released/finalized one (a post-release DRAFT
-  re-assessment would have leaked its in-progress numbers to the client card),
-  and gave the tech-debt release audit action its `tech_debt.` prefix so it
-  groups/filters like the other three services in the audit viewer.
-- Web unit tests (NEW, T8): `pnpm -F web test` (vitest + testing-library + jsdom)
-  runs 4 deterministic tests covering the two `reqSeq` stale-fetch guards
-  (`MessageThread`, `CsfPlaybookPanel`) — stale-response discard + error surfaces
-  to `role=alert`; each verified to bite.
-- Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4. ESLint green with
-  **all 14 react-hooks v6 rules enabled** (zero configured off, T9).
-- e2e: 39/39 green across 20 spec files (host, resolves `:3001`). Sprint 5 added
-  s17-documents, s18-home, s19-value-loop, s20-audit, and extended s7-csf-playbook
-  (POA&M autosave + redaction preview). Known cold-compile flake under load
-  documented in `CLAUDE.md` — an isolated re-run clears it.
+- Backend: full `pytest -m unit` green in-container. Sprint 6 added: the live-mode
+  boot preflight (`test_config.py` — missing key / unimportable SDK / placeholder
+  model raise, valid boots, fixture unaffected, default-not-stale); the full
+  `/ready` dependency matrix incl. offender-naming on a simulated-down dep,
+  keycloak-dormant, fixture-LLM informational-only, and the anonymous-vs-authenticated
+  detail redaction (`test_readiness.py`); RFC 6238 TOTP + at-rest encrypt roundtrip
+  (`test_totp.py`) and the MFA enroll/verify/login-challenge + recovery-code +
+  lockout-integration flow (`test_mfa_routes.py`); email verification + reset with
+  hashed single-use tokens, enumeration-safety, and the login gate
+  (`test_email_verification.py`); and the OpenAI token-key-per-model-family adapter
+  (`test_llm_providers.py`). Live-AI parity has committed opt-in specs
+  (`tests/live/test_live_ai.py`, `@pytest.mark.live`) excluded from `-m unit` and CI.
+- Web unit tests: `pnpm -F web test` (vitest + testing-library + jsdom) — Sprint 6
+  added `HealthMatrix.test.tsx` (renders every dependency row + all-green badge;
+  degraded badge names the offender) beside the two Sprint-5 `reqSeq` guard tests.
+- Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4. ESLint green (all 14
+  react-hooks v6 rules enabled; the in-container `pnpm -F web lint` gate joined the
+  queue this sprint).
+- e2e: full suite green across 21 spec files (host, resolves `:3001`). Sprint 6
+  added `s21-email-verify.spec.ts` (MailHog end-to-end, OPT-IN — 2 tests self-skip
+  without `SHIELD_EMAIL_DELIVERY_ENABLED=true`), a seed→storage parity test to
+  `s17-documents.spec.ts` (seeded client downloads a seeded released deliverable →
+  200), and a seeded-Risk-Register read-only test to `s8-risk-register.spec.ts`
+  (code-derived tiers + downloadable exports). Known cold-compile flake under load
+  documented in `CLAUDE.md`.
 - Format: repo-wide prettier `--check` clean at 3.9.5. Python ruff/black clean
   (root-config parity).
-- Audit: root `pnpm audit` 0 critical / 0 high (2 documented moderates); `e2e/`
-  `npm audit` 0 total.
+- Audit: bandit exit 0. No JS dep manifests changed this sprint, so root `pnpm
+  audit` / `e2e/` `npm audit` posture carries from Sprint 5 (0 high, 2 documented
+  moderates). The only python dep added is the official `anthropic` SDK (T0). No
+  secret committed this sprint (manual `main...HEAD` diff scan clean).
 
-## Lessons learned (Sprint 5)
+## Lessons learned (Sprint 6)
 
-- **The spec-12 release rule is the invariant, and it must be enforced server-side
-  at every read.** A client sees a deliverable only after an explicit release —
-  so the client list route, the artifact download path, AND the value-loop card's
-  per-service numbers all gate on `released_at`. The card renders "Pending" for
-  an unreleased service rather than a fake 0; leaking a draft number would be the
-  same class of bug as leaking a draft document. **The final audit caught the
-  subtle half of this:** gating the card's *visibility* on `released_at` is not
-  enough — the *number itself* must be recomputed from the finalized
-  (approved/released) assessment version, not merely the latest one, or a
-  post-release DRAFT re-assessment leaks its working numbers. The
-  `_latest_finalized` helper now pins the recompute to `status in
-  (APPROVED, RELEASED)`.
-- **"AI suggests, code computes" extends to aggregation.** The §2.5 value card is
-  the most valuable page in the platform, and the temptation is to have the LLM
-  "summarize the engagement." T4 kept it a deterministic sum over already-computed
-  engine outputs — a unit test asserts zero `llm_calls` rows and no `app.ai`
-  import in the module, so the guarantee can't silently rot.
-- **Preview must share the egress builder, not re-derive it.** T6's whole value is
-  that the preview shows exactly what will be sent — so run-ai and preview call
-  ONE payload builder per service, and a test locks their equivalence. A preview
-  that computed its own payload could drift from reality and give false comfort.
-- **A read surface over an append-only store stays read-only by construction.**
-  The `/admin/audit` viewer has no mutation route and no mutation affordance —
-  the append-only guarantee (PG trigger + before_flush) is upheld by simply never
-  offering a write, not by trusting the UI.
-- **Enable lint rules by fixing the code's shape, never by suppressing.** T9
-  adopted 14 react-hooks v6 rules by moving setState out of render/effect bodies
-  (async IIFEs, adjust-state-during-render, interval-driven clocks) — zero rules
-  configured off, zero inline disables. The full e2e suite is the regression net
-  for the behavioral edits to shared components.
+- **A feature flag that refuses to boot is worse than a real control.** The D-020
+  MFA / email-verify flags used to refuse startup because no flow existed. Sprint 6
+  built the flows (D-027/D-028) and flipped the flags to GATE enforcement — an
+  enrolled user is always challenged; the flag decides what happens to the
+  not-yet-enrolled. "Fail loudly" means fail on the real misconfiguration, not on
+  a control you simply haven't built yet.
+- **"Declared" is not "installed."** T0's live-AI dep (`anthropic`) surfaced only
+  as an `ImportError` on the first live Run-AI because the adapter lazy-imports and
+  the image was never rebuilt. The boot preflight now explicitly checks SDK
+  importability, not just that the key is set — guarding the "declared but image
+  not rebuilt" trap that a config check alone would miss.
+- **The seed must write where the API reads.** T2's 410 was a pure storage-backend
+  mismatch: the seed wrote to a local-FS stub while the S3-backed API read MinIO.
+  Routing the seed through the SAME `get_storage()` factory the API uses is the
+  fix, and the e2e now downloads a seeded deliverable to prove the two agree.
+- **Reset counters ONLY on a fully successful login.** T10's subtle MFA bug: the
+  login path cleared the password-failure counter the moment the password was
+  correct — before the SECOND factor gate. A password-holding attacker could then
+  re-login between TOTP guesses to evade second-factor lockout. The rule is now
+  invariant: counters reset only on `_register_successful_login`, and both
+  second-factor endpoints feed the same lockout counter.
+- **A public probe must not leak operator detail to anonymous callers.** T10's
+  `/ready` reduced each dependency's `detail` (exception types, LLM config state)
+  to a generic per-status string for anonymous callers while still naming offenders
+  + statuses (LBs/k8s need those); authenticated callers get the full detail. A
+  health endpoint is an information-disclosure surface, not just a boolean.
+- **Run every gate the pipeline runs.** T9 caught a latent CI lint failure
+  (`HealthMatrix.tsx`, react-hooks set-state-in-effect) that slipped because the
+  loop's gate set omitted eslint. The in-container `pnpm -F web lint` gate is now in
+  the queue array — the loop's gates now equal CI's.
 - **Poll long gates in the foreground to the end of the iteration.** The loop's
   recurring failure mode is parking on a background monitor and returning
-  mid-iteration; a 10-minute foreground poll can also hit the Bash tool timeout
-  and cascade SIGTERM to detached gate tasks (T9 hit this). Run pytest/e2e
-  detached and poll in sub-timeout bursts, synchronously, within the iteration.
+  mid-iteration. Run pytest/e2e detached and poll synchronously in sub-timeout
+  bursts within the iteration.
