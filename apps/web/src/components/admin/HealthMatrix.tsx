@@ -17,6 +17,19 @@ interface ReadyResponse {
   checks: Record<string, DependencyStatus>;
 }
 
+// Pure fetch, no setState — so calling it inside the effect never trips
+// react-hooks/set-state-in-effect. Callers apply the result in their own
+// (deferred) promise callbacks, matching the AiStatusBanner idiom.
+async function probeReady(): Promise<ReadyResponse> {
+  const r = await fetch("/api/proxy/health/ready", { cache: "no-store" });
+  if (!r.ok) throw new Error(`readiness probe failed (HTTP ${r.status})`);
+  return (await r.json()) as ReadyResponse;
+}
+
+function readyError(e: unknown): string {
+  return e instanceof Error ? e.message : "Readiness probe failed.";
+}
+
 /**
  * Operator view of the `/ready` dependency matrix (Sprint 6 T3): one row per
  * downstream dependency (db, redis, minio, keycloak, LLM) with a status dot, so
@@ -27,22 +40,22 @@ export function HealthMatrix(): JSX.Element {
   const [data, setData] = React.useState<ReadyResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(() => {
-    setError(null);
-    fetch("/api/proxy/health/ready", { cache: "no-store" })
-      .then((r) => {
-        if (!r.ok) throw new Error(`readiness probe failed (HTTP ${r.status})`);
-        return r.json();
-      })
-      .then((d: ReadyResponse) => setData(d))
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : "Readiness probe failed."),
-      );
-  }, []);
-
   React.useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    probeReady()
+      .then((d) => {
+        if (!cancelled) {
+          setData(d);
+          setError(null);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(readyError(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (error) {
     return (
@@ -131,7 +144,14 @@ export function HealthMatrix(): JSX.Element {
 
       <button
         type="button"
-        onClick={load}
+        onClick={() => {
+          probeReady()
+            .then((d) => {
+              setData(d);
+              setError(null);
+            })
+            .catch((e: unknown) => setError(readyError(e)));
+        }}
         className="rounded-md border border-border bg-surface-card px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-sunken"
       >
         Refresh

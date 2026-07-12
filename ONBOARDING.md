@@ -50,6 +50,13 @@ probe to go all-green, reseeds the coherent Atlas demo (4 services + a
 synthesized Risk Register, all released + downloadable), and prints the URLs +
 logins. `down -v` **deletes all demo data** — that is the point.
 
+**Hosted demo (production web build)?** Day-to-day dev uses the base compose
+(`next dev`, hot-reload). For a shared demo host, add the override to run web as
+a Next.js standalone production build:
+`docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build`.
+Fixture-mode by default; live AI only with a key + `SHIELD_LLM_MODE=live`.
+Cloud/terraform is out of scope. See README → _Hosted-demo compose_.
+
 ## 3. e2e harness (host-run, not docker)
 
 ```bash
