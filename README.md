@@ -82,6 +82,27 @@ docker compose run --service-ports --rm web bash scripts/dev-web.sh
 | MailHog UI     | http://localhost:8025      |
 | Postgres       | postgres://localhost:5432  |
 
+### One-command demo reset
+
+To wipe everything and reseed a clean, coherent Atlas demo (4 assessment
+services + a synthesized Risk Register, all released and downloadable):
+
+```bash
+# macOS / Linux / Git Bash
+bash scripts/demo-reset.sh
+```
+
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/demo-reset.ps1
+```
+
+The script runs `docker compose down -v` → `up -d --build`, waits for the
+full-matrix `/ready` probe to go all-green (db, redis, minio, keycloak, llm),
+seeds the demo, then prints the URLs + logins. **`down -v` deletes all demo
+data** — that is the point of a reset. Sign in as `client@atlas.example` /
+`DemoPass!2026` and the released reports on `/home` and `/documents` download.
+
 ## Environment variables
 
 Every variable in [`.env.example`](.env.example) is required. Summary:

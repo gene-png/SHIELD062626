@@ -43,6 +43,13 @@ Logins: `admin@kentro.example` / `DemoPass!2026` (Kentro consultant),
 automatically (`e2e/helpers/baseUrl.ts`); CI and the committed defaults stay
 on 3000.
 
+**Need a clean slate?** `bash scripts/demo-reset.sh` (or
+`powershell -ExecutionPolicy Bypass -File scripts/demo-reset.ps1`) runs
+`docker compose down -v` → `up -d --build`, waits for the full-matrix `/ready`
+probe to go all-green, reseeds the coherent Atlas demo (4 services + a
+synthesized Risk Register, all released + downloadable), and prints the URLs +
+logins. `down -v` **deletes all demo data** — that is the point.
+
 ## 3. e2e harness (host-run, not docker)
 
 ```bash

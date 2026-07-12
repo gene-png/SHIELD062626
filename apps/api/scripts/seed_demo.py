@@ -57,6 +57,7 @@ from app.csf.exporters import render_pdf as render_csf_pdf  # noqa: E402
 from app.csf.exporters import render_xlsx as render_csf_xlsx  # noqa: E402
 from app.csf.gap import analyze as analyze_csf_gap  # noqa: E402
 from app.csf.scoring import compute as compute_csf  # noqa: E402
+from app.docx_export import DOCX_MIME  # noqa: E402
 from app.models import (  # noqa: E402  -- triggers metadata registration
     Artifact,
     ArtifactOrigin,
@@ -72,6 +73,8 @@ from app.models import (  # noqa: E402  -- triggers metadata registration
     CsfAssessment,
     CsfAssessmentStatus,
     Deliverable,
+    RiskEntry,
+    RiskRegister,
     Service,
     ServiceKind,
     ServiceStatus,
@@ -84,6 +87,14 @@ from app.models import (  # noqa: E402  -- triggers metadata registration
 )
 from app.models._common import utcnow  # noqa: E402
 from app.models.capability import CapabilityDisposition  # noqa: E402
+from app.risk import exporters as risk_exporters  # noqa: E402
+from app.risk.engine import (  # noqa: E402
+    Impact,
+    Likelihood,
+    RecommendedAction,
+    RiskAxis,
+    tier_for,
+)
 from app.security.email_domains import domain_of  # noqa: E402
 from app.security.password import hash_password  # noqa: E402
 from app.storage import StorageBackend, get_storage  # noqa: E402
@@ -99,6 +110,7 @@ from app.tech_debt.exporters import (  # noqa: E402
 from app.tech_debt.filename import (  # noqa: E402
     SERVICE_SLUG_ATTACK,
     SERVICE_SLUG_NIST_CSF,
+    SERVICE_SLUG_RISK_REGISTER,
     SERVICE_SLUG_TECH_DEBT,
     SERVICE_SLUG_ZT_CISA,
     SERVICE_SLUG_ZT_DOD,
@@ -326,13 +338,75 @@ def _release(
 # ---------------------------------------------------------------------------
 
 
+# (name, vendor, category, function, annual_cost_usd, license_count, disposition,
+#  disposition_rationale) — a believable Atlas Defense stack with real vendor
+# overlap so the Tech Debt story reads as a genuine consolidation review.
 _TD_ITEMS = [
-    ("Wiz", "Wiz, Inc.", "CNAPP", "Cloud posture", 350_000, 200, "keep"),
-    ("Lacework", "Lacework", "CNAPP", "Cloud posture", 120_000, 60, "cut"),
-    ("Prisma Cloud", "Palo Alto Networks", "CNAPP", "Cloud posture", 240_000, 150, "consolidate"),
-    ("Splunk Enterprise", "Splunk", "SIEM", "Log analytics", 480_000, None, "keep"),
-    ("Sumo Logic", "Sumo Logic", "SIEM", "Log analytics", 140_000, None, "cut"),
-    ("CrowdStrike Falcon", "CrowdStrike", "EDR", "Endpoint detection", 320_000, 4500, "keep"),
+    (
+        "Wiz",
+        "Wiz, Inc.",
+        "CNAPP",
+        "Cloud posture",
+        350_000,
+        200,
+        "keep",
+        "Primary CNAPP of record; broadest coverage across the AWS + Azure estate "
+        "and already wired into the ticketing workflow.",
+    ),
+    (
+        "Lacework",
+        "Lacework",
+        "CNAPP",
+        "Cloud posture",
+        120_000,
+        60,
+        "cut",
+        "Redundant with Wiz; runtime signal is duplicative and the contract lapses "
+        "in Q3 — retire at renewal for a clean $120k/yr saving.",
+    ),
+    (
+        "Prisma Cloud",
+        "Palo Alto Networks",
+        "CNAPP",
+        "Cloud posture",
+        240_000,
+        150,
+        "consolidate",
+        "Overlaps Wiz on posture; retain only the IaC-scanning module and fold the "
+        "rest into the Wiz license at next true-up.",
+    ),
+    (
+        "Splunk Enterprise",
+        "Splunk",
+        "SIEM",
+        "Log analytics",
+        480_000,
+        None,
+        "keep",
+        "System of record for detections and the ATT&CK correlation rules; migration "
+        "risk outweighs licence cost this cycle.",
+    ),
+    (
+        "Sumo Logic",
+        "Sumo Logic",
+        "SIEM",
+        "Log analytics",
+        140_000,
+        None,
+        "cut",
+        "Shadow SIEM stood up by one app team; forward its sources to Splunk and " "decommission.",
+    ),
+    (
+        "CrowdStrike Falcon",
+        "CrowdStrike",
+        "EDR",
+        "Endpoint detection",
+        320_000,
+        4500,
+        "keep",
+        "Strategic EDR; drives the highest-fidelity endpoint detections and threat "
+        "hunting playbooks.",
+    ),
     (
         "Defender for Endpoint",
         "Microsoft",
@@ -341,12 +415,62 @@ _TD_ITEMS = [
         90_000,
         4500,
         "consolidate",
+        "Bundled with existing M365 E5 licensing; keep for Windows telemetry only and "
+        "stop paying for the standalone add-on that overlaps Falcon.",
     ),
-    ("Okta Workforce Identity", "Okta", "IAM", "Identity", 210_000, 4500, "keep"),
-    ("Duo", "Cisco", "IAM", "MFA", 65_000, 4500, "consolidate"),
-    ("Tenable.io", "Tenable", "Vuln Management", "Vulnerability scanning", 175_000, None, "keep"),
-    ("Qualys VMDR", "Qualys", "Vuln Management", "Vulnerability scanning", 160_000, None, "cut"),
-    ("HashiCorp Vault", "HashiCorp", "Secrets", "Secrets management", 95_000, None, "keep"),
+    (
+        "Okta Workforce Identity",
+        "Okta",
+        "IAM",
+        "Identity",
+        210_000,
+        4500,
+        "keep",
+        "Central IdP for SSO and the Zero Trust identity pillar; anchor for the MFA " "roll-out.",
+    ),
+    (
+        "Duo",
+        "Cisco",
+        "IAM",
+        "MFA",
+        65_000,
+        4500,
+        "consolidate",
+        "MFA duplicates Okta Verify; migrate remaining Duo enrolments to Okta and "
+        "retire to remove a second push-fatigue attack surface.",
+    ),
+    (
+        "Tenable.io",
+        "Tenable",
+        "Vuln Management",
+        "Vulnerability scanning",
+        175_000,
+        None,
+        "keep",
+        "Authoritative vulnerability scanner feeding the remediation SLA dashboard.",
+    ),
+    (
+        "Qualys VMDR",
+        "Qualys",
+        "Vuln Management",
+        "Vulnerability scanning",
+        160_000,
+        None,
+        "cut",
+        "Second scanner producing conflicting CVSS data; consolidate on Tenable and "
+        "cancel at renewal.",
+    ),
+    (
+        "HashiCorp Vault",
+        "HashiCorp",
+        "Secrets",
+        "Secrets management",
+        95_000,
+        None,
+        "keep",
+        "Sole enterprise secrets broker; no viable overlap — retain and expand "
+        "dynamic-secrets adoption.",
+    ),
 ]
 
 
@@ -373,7 +497,7 @@ def _seed_tech_debt(db: Session, storage: StorageBackend, admin: User, org: Clie
     db.flush()
 
     items: list[CapabilityItem] = []
-    for name, vendor, cat, fn, cost, lic, disp in _TD_ITEMS:
+    for name, vendor, cat, fn, cost, lic, disp, rationale in _TD_ITEMS:
         items.append(
             CapabilityItem(
                 capability_list_id=cap_list.id,
@@ -385,11 +509,7 @@ def _seed_tech_debt(db: Session, storage: StorageBackend, admin: User, org: Clie
                 license_count=lic,
                 confidence_pct=92,
                 disposition=CapabilityDisposition(disp),
-                disposition_rationale=(
-                    "Best-in-class; keep."
-                    if disp == "keep"
-                    else f"Overlap with {cat} stack; {disp}."
-                ),
+                disposition_rationale=rationale,
             )
         )
     db.add_all(items)
@@ -744,6 +864,279 @@ def _seed_attack(db: Session, storage: StorageBackend, admin: User, org: Client)
 
 
 # ---------------------------------------------------------------------------
+# Risk Register (Work Order E)
+#
+# A deterministic, believable synthesis of the four services above. The live
+# product generates entries through the redacting LLM egress and then derives
+# every tier in code; the seed skips the egress (it must run offline/fixture)
+# and writes a hand-authored register whose tiers are STILL derived by the same
+# `tier_for` engine — never hard-coded — so the demo mirrors the real
+# "AI suggests, code computes" contract. Technique + control links reference
+# real codes present in the seeded ATT&CK / CSF assessments so traceability is
+# genuine.
+# ---------------------------------------------------------------------------
+
+
+# (title, description, axis, source, source_id, likelihood, impact,
+#  linked_techniques, linked_controls, compensating_controls, residual_risk,
+#  recommended_action, rationale)
+_RISK_ENTRIES = [
+    (
+        "Active exploitation of an unpatched internet-facing appliance",
+        "The perimeter VPN/edge appliance is running firmware with a known, "
+        "actively-exploited RCE. A successful exploit yields an unauthenticated "
+        "foothold into the DMZ.",
+        RiskAxis.PREVENTION,
+        "coverage_finding",
+        "T1190",
+        Likelihood.VERY_HIGH,
+        Impact.CATASTROPHIC,
+        ["T1190", "T1210"],
+        ["ID.AM-08"],
+        "WAF virtual-patching rule deployed; appliance reachable only from "
+        "allow-listed ranges pending firmware upgrade.",
+        "High until the vendor firmware upgrade lands in the next maintenance " "window.",
+        RecommendedAction.REMEDIATE,
+        "Public exploit code and in-the-wild activity make compromise near-certain "
+        "absent immediate patching.",
+    ),
+    (
+        "Ransomware impact on production file services",
+        "ATT&CK coverage shows partial detection for data-encryption behaviour on "
+        "the file-server tier; a ransomware event could halt operations.",
+        RiskAxis.RESPONSE,
+        "coverage_finding",
+        "T1486",
+        Likelihood.MEDIUM,
+        Impact.CATASTROPHIC,
+        ["T1486"],
+        ["RS.MA-01", "DE.CM-01"],
+        "Immutable off-site backups tested quarterly; EDR ransomware canaries "
+        "enabled on the file-server fleet.",
+        "Recovery-time objective still exceeds the business tolerance for the " "core ERP volume.",
+        RecommendedAction.MITIGATE,
+        "Impact is catastrophic; tested backups reduce likelihood but not the "
+        "operational disruption window.",
+    ),
+    (
+        "Phishing-driven credential compromise",
+        "Spearphishing remains the most common initial-access vector; harvested "
+        "credentials feed valid-account abuse across cloud consoles.",
+        RiskAxis.PREVENTION,
+        "coverage_finding",
+        "T1566",
+        Likelihood.HIGH,
+        Impact.MAJOR,
+        ["T1566", "T1078"],
+        ["PR.AA-02"],
+        "Phishing-resistant MFA on the IdP; monthly simulated-phishing programme "
+        "with mandatory remediation training.",
+        "Residual exposure on legacy service accounts not yet behind SSO.",
+        RecommendedAction.MITIGATE,
+        "High volume of attempts against a large workforce keeps likelihood high "
+        "despite strong controls.",
+    ),
+    (
+        "Valid-account lateral movement due to partial MFA coverage",
+        "Duplicate MFA tooling (Okta + Duo) left a subset of enrolments outside "
+        "phishing-resistant factors, enabling valid-account reuse for lateral "
+        "movement.",
+        RiskAxis.PREVENTION,
+        "questionnaire_response",
+        "PR.AA-01",
+        Likelihood.MEDIUM,
+        Impact.MAJOR,
+        ["T1078", "T1021"],
+        ["PR.AA-01"],
+        "Conditional-access policies flag impossible-travel; privileged accounts "
+        "already on hardware keys.",
+        "Standard-user population on push-based MFA remains susceptible to "
+        "fatigue attacks until Duo retirement completes.",
+        RecommendedAction.REMEDIATE,
+        "Consolidating on Okta Verify closes the gap; tracked in the Tech Debt "
+        "consolidation plan.",
+    ),
+    (
+        "Detection-engineering gaps and alert fatigue",
+        "Overlapping SIEM tooling produced duplicate, low-fidelity alerts; some "
+        "execution techniques lack tuned detections.",
+        RiskAxis.DETECTION,
+        "questionnaire_response",
+        "DE.AE-02",
+        Likelihood.HIGH,
+        Impact.MODERATE,
+        ["T1059"],
+        ["DE.AE-02", "DE.CM-01"],
+        "Sumo Logic sources being folded into Splunk; detection backlog "
+        "prioritised against the ATT&CK gap list.",
+        "Mean-time-to-detect for scripting-based execution still above target.",
+        RecommendedAction.MITIGATE,
+        "Consolidating on Splunk plus detection tuning lowers noise and closes "
+        "the highest-value coverage gaps.",
+    ),
+    (
+        "Incomplete asset inventory for cloud workloads",
+        "Ephemeral cloud workloads are not consistently captured in the CMDB, "
+        "weakening exposure management.",
+        RiskAxis.PREVENTION,
+        "questionnaire_response",
+        "ID.AM-01",
+        Likelihood.MEDIUM,
+        Impact.MINOR,
+        [],
+        ["ID.AM-01"],
+        "Wiz agentless discovery reconciles daily against the CMDB; drift alerts "
+        "route to the platform team.",
+        "Short-lived workloads may still evade a daily reconciliation window.",
+        RecommendedAction.ACCEPT,
+        "Compensating discovery keeps residual impact minor; formal acceptance "
+        "with quarterly review.",
+    ),
+    (
+        "Immature incident-response runbooks",
+        "IR runbooks for cloud and ransomware scenarios are draft-only and have "
+        "not been exercised end-to-end.",
+        RiskAxis.RESPONSE,
+        "questionnaire_response",
+        "RS.MA-02",
+        Likelihood.MEDIUM,
+        Impact.MAJOR,
+        [],
+        ["RS.MA-02", "RS.MA-03"],
+        "Retainer with an external DFIR provider; on-call rotation established.",
+        "Unrehearsed runbooks risk slow, inconsistent response until the first "
+        "tabletop completes.",
+        RecommendedAction.MITIGATE,
+        "Scheduled tabletop exercises and runbook sign-off will move this to Low.",
+    ),
+]
+
+
+def _seed_risk_register(
+    db: Session, storage: StorageBackend, admin: User, org: Client
+) -> RiskRegister:
+    register = RiskRegister(
+        client_id=org.id,
+        version=1,
+        generated_by=admin.id,
+    )
+    db.add(register)
+    db.flush()
+
+    entries: list[RiskEntry] = []
+    for (
+        title,
+        description,
+        axis,
+        source,
+        source_id,
+        likelihood,
+        impact,
+        techniques,
+        controls,
+        compensating,
+        residual,
+        action,
+        rationale,
+    ) in _RISK_ENTRIES:
+        # Tier is ALWAYS code-derived (never authored) — same engine the route uses.
+        tier = tier_for(likelihood, impact).value
+        entries.append(
+            RiskEntry(
+                register_id=register.id,
+                client_id=org.id,
+                title=title,
+                description=description,
+                axis=axis.value,
+                source=source,
+                source_id=source_id,
+                linked_techniques=techniques,
+                linked_controls=controls,
+                likelihood=likelihood.value,
+                impact=impact.value,
+                tier=tier,
+                compensating_controls=compensating,
+                residual_risk=residual,
+                recommended_action=action.value,
+                rationale=rationale,
+                origin="ai_generated",
+                trust="admin_assisted",
+            )
+        )
+    db.add_all(entries)
+    db.flush()
+
+    # Export the register to XLSX/PDF/Word so the admin demo shows downloadable
+    # artifacts, mirroring the /register/export route (which sets finalized_at).
+    ctx = risk_exporters.build_context(
+        client_legal_name=org.legal_name,
+        version=register.version,
+        entries=entries,
+    )
+    today = date.today()
+
+    def _rr_name(extension: str) -> str:
+        return deliverable_filename(
+            company=org.legal_name,
+            service_slug=SERVICE_SLUG_RISK_REGISTER,
+            extension=extension,
+            day=today,
+            version=register.version,
+        )
+
+    xlsx_art = _write_artifact(
+        db,
+        storage,
+        user=admin,
+        filename=_rr_name("xlsx"),
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        data=risk_exporters.render_xlsx(ctx),
+        stage="risk_register.export",
+    )
+    pdf_art = _write_artifact(
+        db,
+        storage,
+        user=admin,
+        filename=_rr_name("pdf"),
+        mime_type="application/pdf",
+        data=risk_exporters.render_pdf(ctx),
+        stage="risk_register.export",
+    )
+    docx_art = _write_artifact(
+        db,
+        storage,
+        user=admin,
+        filename=_rr_name("docx"),
+        mime_type=DOCX_MIME,
+        data=risk_exporters.render_docx(ctx),
+        stage="risk_register.export",
+    )
+    register.xlsx_artifact_id = xlsx_art.id
+    register.pdf_artifact_id = pdf_art.id
+    register.docx_artifact_id = docx_art.id
+    register.finalized_at = utcnow()
+    db.flush()
+
+    audit(
+        db,
+        action="risk_register.generated",
+        target_type="risk_register",
+        target_id=register.id,
+        actor_user_id=admin.id,
+        details={"version": register.version, "entries": len(entries), "seed": True},
+    )
+    audit(
+        db,
+        action="risk_register.exported",
+        target_type="risk_register",
+        target_id=register.id,
+        actor_user_id=admin.id,
+        details={"version": register.version, "seed": True},
+    )
+    return register
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -810,10 +1203,14 @@ def main() -> None:
         attack = _seed_attack(db, storage, admin, org)
         print(f"  -> {attack.id}")
 
+        print("Seeding synthesized Risk Register...")
+        register = _seed_risk_register(db, storage, admin, org)
+        print(f"  -> {register.id} (v{register.version}, {len(_RISK_ENTRIES)} entries)")
+
         db.commit()
 
     print()
-    print("Demo seed complete.")
+    print("Demo seed complete: 4 services + a synthesized Risk Register, all released.")
     print("Sign in:")
     print(f"  admin: {ADMIN_EMAIL} / {PASSWORD}")
     print(f"  client: {CLIENT_EMAIL} / {PASSWORD}")
