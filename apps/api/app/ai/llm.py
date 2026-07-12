@@ -21,6 +21,7 @@ The client's `invoke(...)` method:
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -149,6 +150,17 @@ class AnthropicProvider:
 _HTTP_TIMEOUT_SECONDS = 60.0
 _MAX_OUTPUT_TOKENS = 4096
 
+# OpenAI reasoning / `responses` model families (the o-series and gpt-5) REJECT
+# the legacy ``max_tokens`` Chat Completions key with an HTTP 400 and require
+# ``max_completion_tokens`` instead. Older chat models (gpt-4o, gpt-4, gpt-3.5)
+# still accept ``max_tokens``. Match on the model id prefix (D-024 / Sprint 6 T6).
+_OPENAI_REASONING_RE = re.compile(r"^(o[1-9]|gpt-5)", re.IGNORECASE)
+
+
+def _openai_token_limit_key(model: str) -> str:
+    """Return the correct output-token-limit request key for an OpenAI model."""
+    return "max_completion_tokens" if _OPENAI_REASONING_RE.match(model) else "max_tokens"
+
 
 def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Drop internal control keys (``__purpose__`` and any other ``__``-prefixed
@@ -181,7 +193,7 @@ class OpenAIProvider:
     def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
         body = {
             "model": self.model,
-            "max_tokens": _MAX_OUTPUT_TOKENS,
+            _openai_token_limit_key(self.model): _MAX_OUTPUT_TOKENS,
             "messages": [
                 {"role": "user", "content": f"{prompt}\n\n{json.dumps(_egress_payload(payload))}"},
             ],
