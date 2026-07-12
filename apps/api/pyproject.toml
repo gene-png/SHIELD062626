@@ -72,6 +72,7 @@ testpaths = ["tests"]
 markers = [
     "unit: fast in-process tests",
     "integration: tests that hit a real database",
+    "live: opt-in tests that make a REAL provider call — EXCLUDED from the default '-m unit' gate and from CI (which runs 'pytest -m unit tests/unit'); skipped unless SHIELD_LLM_MODE=live and a provider key are present (Sprint 6 T1 / D-026)",
 ]
 asyncio_mode = "auto"
 addopts = "-ra -q"

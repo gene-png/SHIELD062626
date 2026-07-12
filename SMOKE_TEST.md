@@ -139,12 +139,22 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `anthropic` / `openai` / `gemini` via `SHIELD_LLM_PROVIDER` (D-024). The egress
 > contract is identical for all three — redaction and the `llm_calls` audit row
 > run above the provider seam — so this check proves the *selected* provider,
-> whichever it is. Left **unchecked on purpose**: it needs a real API key on
-> David's machine; no committed spec can prove it, and the fixture-mode suite
-> (D-017) does not exercise any live provider path.
+> whichever it is.
+>
+> **Now codified (Sprint 6 T1 / D-026), still key-gated.** The 2026-07-12 manual
+> smoke first proved the Anthropic path (`claude-sonnet-5`: real suggestions,
+> redaction stripped `{client_org: 2, name: 2, email: 2}`, a correct `llm_calls`
+> row, no PII). That smoke is now a **committed opt-in spec**
+> (`apps/api/tests/live/test_live_ai.py`, marked `@pytest.mark.live`) plus a
+> one-command script (`apps/api/scripts/smoke_live_ai.py`). Both **self-skip
+> without a key**, so the boxes below stay **unchecked on purpose** — CI runs
+> `pytest -m unit tests/unit` and never collects the live spec, and no committed
+> spec runs a real call in a keyless pipeline. Check a box only after running the
+> opt-in path with a real key on your machine (procedure below).
 
-- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching `SHIELD_LLM_MODEL` (e.g. `claude-opus-4-7` / `gpt-4o-mini` / `gemini-1.5-pro`) in `.env`; restart `api`.
-- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
+- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model **refuses to start** (T0 preflight).
+- [ ] Run the one-command smoke: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api python -m scripts.smoke_live_ai` → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.)
+- [ ] Run **one** Run-AI through the UI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 - [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
 
 ## 15. Security headers
