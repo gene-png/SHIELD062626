@@ -116,6 +116,34 @@ def test_verify_rejects_wrong_code(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
+def test_enroll_rejected_when_already_enrolled(app_client: TestClient) -> None:
+    """A second /auth/mfa/enroll on an already-enrolled account must be refused
+    (Sprint 6 audit): re-enrolling would overwrite the live TOTP secret while
+    ``mfa_enrolled`` stayed True, silently locking the user out of their working
+    authenticator until they re-confirmed the new QR. The web UI already hides
+    the button when enrolled; this guards the raw endpoint against a direct call.
+    """
+    body = _register(app_client)
+    access = body["tokens"]["access_token"]
+    secret, _codes = _enroll_and_verify(app_client, access)
+
+    r = app_client.post("/auth/mfa/enroll", headers={"Authorization": f"Bearer {access}"})
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["reason"] == "mfa_already_enrolled"
+
+    # The working secret is untouched: a login challenge still completes with it.
+    login = app_client.post(
+        "/auth/login", json={"email": "first@example.com", "password": _PASSWORD}
+    )
+    pending = login.json()["mfa_pending_token"]
+    done = app_client.post(
+        "/auth/mfa/verify-login",
+        json={"mfa_pending_token": pending, "code": totp.totp_now(secret)},
+    )
+    assert done.status_code == 200, done.text
+
+
+@pytest.mark.unit
 def test_verify_before_enroll_is_rejected(app_client: TestClient) -> None:
     body = _register(app_client)
     access = body["tokens"]["access_token"]

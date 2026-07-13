@@ -55,7 +55,19 @@ lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
 | T8 | Demo realism: seed synthesizes a coherent Atlas Risk Register (code-derived tiers, downloadable exports) + `scripts/demo-reset.*` one-command reset; s8 read-only test | `39b3cfc` |
 | T9 | Hosted-demo compose (`docker-compose.demo.yml`, web prod build); root `.dockerignore` + Dockerfile rewrite; fixed latent HealthMatrix CI lint failure; cloud/terraform NOT touched | `db33372` |
 | T10 | Security + audit pass: MFA second-factor failures feed account lockout, `/ready` detail redacted for anonymous callers; audits clean/documented, no secret committed | `18b7d85` |
-| T11 | Wrap-up: SMOKE_TEST §22–§28, CHANGELOG `[3.3.0]`, BUILD_REPORT sync, DECISIONS D-026/027/028 verify, full gates, this snapshot | this commit |
+| T11 | Wrap-up: SMOKE_TEST §22–§28, CHANGELOG `[3.3.0]`, BUILD_REPORT sync, DECISIONS D-026/027/028 verify, full gates, this snapshot | `215097c` |
+
+A post-T11 final audit (four parallel sub-audits: types, logic/runtime, spec
+compliance, coverage) found no critical/high defects and produced one hardening
+fix + one docs fix (the `chore(sprint-6): final audit and CONTEXT refresh`
+commit): `/auth/mfa/enroll` now refuses (409 `mfa_already_enrolled`) when MFA is
+already active — a bare re-enroll would overwrite the live TOTP secret while
+`mfa_enrolled` stayed true, silently breaking the user's working authenticator
+(rotating an active factor needs an explicit disable-with-current-factor flow,
+a Sprint 7 candidate) — and `docs/architecture.md`'s Auth section was refreshed
+(it still described the pre-Sprint-6 D-020 boot-refusals; it now documents the
+MFA + email flows and the shared second-factor lockout). `pytest -m unit`
+re-verified green after the fix.
 
 New migrations: **0030** (MFA TOTP secret + recovery codes, T4) + **0031**
 (email verification/reset tokens, T5), both additive/SQLite-safe (C0). New

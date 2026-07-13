@@ -606,8 +606,22 @@ def mfa_enroll(
     The secret is stored encrypted immediately but enrollment is NOT active
     until /auth/mfa/verify confirms a code (that is what flips mfa_enrolled and
     mints recovery codes). Re-enrolling before confirmation simply rotates the
-    pending secret.
+    pending secret. An ALREADY-enrolled user is refused (409): overwriting a
+    confirmed secret would silently break their working authenticator
+    (``mfa_enrolled`` stays True while the stored secret changes) until they
+    re-confirmed a new QR. Rotating an active factor needs an explicit
+    disable-with-current-factor flow (Sprint 7), not a bare re-enroll. The web UI
+    already hides the button when enrolled; this guards the raw endpoint against
+    a direct/scripted call.
     """
+    if user.mfa_enrolled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "mfa_already_enrolled",
+                "message": "Two-factor authentication is already enabled on this account.",
+            },
+        )
     secret = generate_secret()
     user.mfa_totp_secret = encrypt_secret(secret)
     audit(
