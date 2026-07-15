@@ -83,6 +83,14 @@ export function AttackWorkspace({
   const [selectedCode, setSelectedCode] = React.useState<string | null>(null);
   const [showSubs, setShowSubs] = React.useState(false);
 
+  // Monotonic request sequence: only the newest assessment-producing operation
+  // may write `assessment`. Without this, a slow mount-time load resolving
+  // AFTER the user starts an assessment, patches coverage, or runs the AI would
+  // setAssessment(stale) and clobber the newer state (the T8 stale-fetch race).
+  // Every mutation bumps the sequence before it writes, so any in-flight load
+  // is discarded on arrival.
+  const assessmentSeq = React.useRef(0);
+
   const coverageByCode = React.useMemo(() => {
     const out: Record<string, AttackCoverageRow> = {};
     if (assessment) {
@@ -123,6 +131,7 @@ export function AttackWorkspace({
   }, [serviceId]);
 
   const initialLoad = React.useCallback(async () => {
+    const seq = ++assessmentSeq.current;
     try {
       const cat = await fetchCatalog();
       setCatalog(cat);
@@ -132,6 +141,12 @@ export function AttackWorkspace({
     }
     try {
       const a = await fetchLatestAssessment(serviceId);
+      if (seq !== assessmentSeq.current) {
+        console.debug(
+          `[AttackWorkspace] discarded stale assessment load (seq ${seq}, latest ${assessmentSeq.current})`,
+        );
+        return;
+      }
       setAssessment(a);
       if (a) {
         await refreshHeatmap();
@@ -155,6 +170,7 @@ export function AttackWorkspace({
 
   async function onCreateAssessment(): Promise<void> {
     setBusy("create");
+    assessmentSeq.current += 1;
     try {
       const next = await createAssessment(serviceId);
       setAssessment(next);
@@ -170,7 +186,9 @@ export function AttackWorkspace({
     coverageId: string,
     patch: AttackCoveragePatch,
   ): Promise<void> {
-    // Optimistic.
+    // Optimistic. The bump invalidates any in-flight load so its late arrival
+    // cannot clobber this edit.
+    assessmentSeq.current += 1;
     setAssessment((curr) => {
       if (!curr) return curr;
       return {
@@ -192,14 +210,17 @@ export function AttackWorkspace({
       await refreshHeatmap();
     } catch (err) {
       setLoadError(describeError(err));
+      // Roll back by re-fetching, guarded so a newer patch still wins.
+      const seq = ++assessmentSeq.current;
       const a = await fetchLatestAssessment(serviceId);
-      setAssessment(a);
+      if (seq === assessmentSeq.current) setAssessment(a);
     }
   }
 
   async function onApprove(): Promise<void> {
     if (!assessment) return;
     setBusy("approve");
+    assessmentSeq.current += 1;
     try {
       const next = await approveAssessment(assessment.id);
       setAssessment(next);
@@ -213,12 +234,14 @@ export function AttackWorkspace({
   async function onRunAi(): Promise<void> {
     setBusy("run");
     setRunResult(null);
+    const seq = ++assessmentSeq.current;
     try {
       const result = await runAttackAi(serviceId);
       setRunResult(result);
-      // Re-pull the assessment so the matrix reflects the AI's suggestions.
+      // Re-pull the assessment so the matrix reflects the AI's suggestions,
+      // guarded so a concurrent patch that started meanwhile still wins.
       const a = await fetchLatestAssessment(serviceId);
-      setAssessment(a);
+      if (seq === assessmentSeq.current) setAssessment(a);
       await refreshHeatmap();
     } catch (err) {
       setLoadError(describeError(err));

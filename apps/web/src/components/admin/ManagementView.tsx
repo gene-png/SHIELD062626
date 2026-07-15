@@ -21,9 +21,22 @@ export function ManagementView(): JSX.Element {
   const [newName, setNewName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
+  // Monotonic request sequence: reload() fires on mount AND after onCreate. The
+  // create form renders immediately, so a create can fire while the mount
+  // reload is still in flight; without this guard the slow mount listClients()
+  // could resolve last and clobber the post-create list, hiding the new client
+  // (the T8 stale-fetch race). Only the newest reload may write state.
+  const reloadSeq = React.useRef(0);
+
   const reload = React.useCallback(async () => {
+    const seq = ++reloadSeq.current;
     try {
-      setClients(await listClients());
+      const next = await listClients();
+      if (seq === reloadSeq.current) setClients(next);
+      else
+        console.debug(
+          `[ManagementView] discarded stale clients reload (seq ${seq}, latest ${reloadSeq.current})`,
+        );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load clients.");
     }
@@ -116,9 +129,20 @@ function ClientRow({ client }: { client: ClientSummary }): JSX.Element {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
+  // Same stale-fetch guard as the parent: the add-domain form renders before
+  // the mount reload resolves, so an add can race the mount listDomains(). Only
+  // the newest reload may write state.
+  const reloadSeq = React.useRef(0);
+
   const reload = React.useCallback(async () => {
+    const seq = ++reloadSeq.current;
     try {
-      setDomains(await listDomains(client.id));
+      const next = await listDomains(client.id);
+      if (seq === reloadSeq.current) setDomains(next);
+      else
+        console.debug(
+          `[ManagementView] discarded stale domains reload (seq ${seq}, latest ${reloadSeq.current})`,
+        );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load domains.");
     }
