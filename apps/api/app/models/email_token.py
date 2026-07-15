@@ -23,7 +23,7 @@ from app.models._common import TimestampMixin, UUIDPKMixin
 
 class EmailTokenPurpose(enum.StrEnum):
     EMAIL_VERIFY = "email_verify"
-    PASSWORD_RESET = "password_reset"  # noqa: S105 - purpose label, not a credential
+    PASSWORD_RESET = "password_reset"  # noqa: S105 - not a credential  # nosec B105
 
 
 class EmailToken(UUIDPKMixin, TimestampMixin, Base):
