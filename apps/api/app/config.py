@@ -13,7 +13,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "staging", "production"]
 RedactionMode = Literal["strict", "standard", "off"]
-LLMProvider = Literal["anthropic", "openai", "azure_openai", "bedrock", "gemini", "local"]
+LLMProvider = Literal["anthropic", "openai", "azure_openai", "bedrock", "gemini", "vertex", "local"]
+
+# OAuth scope required for Vertex AI generateContent calls (D-029).
+_GCP_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 # Model ids that were once shipped as defaults but are not valid at any live
 # provider. Booting live against one of these guarantees a 404 on the first
@@ -30,6 +33,38 @@ def _anthropic_sdk_importable() -> bool:
     from importlib.util import find_spec
 
     return find_spec("anthropic") is not None
+
+
+def _google_auth_importable() -> bool:
+    """True if the ``google-auth`` library can be imported (D-029).
+
+    Mirrors ``_anthropic_sdk_importable`` — isolated as a module-level helper so
+    the Vertex live-mode boot preflight can be unit-tested by monkeypatching it.
+    ``google.auth`` is installed in the api image but absent from some tool
+    environments."""
+    from importlib.util import find_spec
+
+    return find_spec("google.auth") is not None
+
+
+def _adc_resolvable() -> bool:
+    """True if Application Default Credentials resolve for the Vertex provider.
+
+    Isolated as a module-level helper so the boot preflight is unit-testable by
+    monkeypatching it. Resolving ADC only discovers the credential source (env
+    var, gcloud config, metadata server) — it does NOT fetch a token, so this is
+    a cheap, network-free probe. Returns a bool and never raises: the loud
+    failure is raised by ``assert_safe_for_runtime`` when this is false."""
+    try:
+        import google.auth
+        from google.auth.exceptions import GoogleAuthError
+    except ImportError:
+        return False
+    try:
+        credentials, _project = google.auth.default(scopes=[_GCP_CLOUD_PLATFORM_SCOPE])
+    except GoogleAuthError:
+        return False
+    return credentials is not None
 
 
 class Settings(BaseSettings):
@@ -71,6 +106,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     gemini_api_key: str = ""
+    # Vertex AI via Application Default Credentials (D-029) — NO static API key.
+    # The `gemini` provider (API key) and `vertex` provider (ADC) are distinct.
+    gcp_project_id: str = ""
+    gcp_region: str = "us-central1"
 
     # Feature flags (Master Spec §2 - deferred for v1)
     shield_auth_require_mfa: bool = False
@@ -152,11 +191,30 @@ class Settings(BaseSettings):
         elif provider == "gemini":
             if not self.gemini_api_key:
                 return False, "Live mode is on but GEMINI_API_KEY is not set."
+        elif provider == "vertex":
+            # Vertex uses ADC, not an API key: needs a project, the google-auth
+            # library, and resolvable credentials (D-029).
+            if not self.gcp_project_id:
+                return False, "Live mode is on but GCP_PROJECT_ID is not set (Vertex provider)."
+            if not _google_auth_importable():
+                return (
+                    False,
+                    "Live mode is on but the 'google-auth' library is not importable — add it "
+                    "to apps/api dependencies and rebuild the api image.",
+                )
+            if not _adc_resolvable():
+                return (
+                    False,
+                    "Live mode is on but Application Default Credentials are not resolvable — "
+                    "run 'gcloud auth application-default login' and bind-mount the gcloud "
+                    "config into the api container.",
+                )
         else:
             return (
                 False,
                 f"Live mode is on but provider {provider!r} has no live adapter yet "
-                "(use anthropic, openai, or gemini, or switch SHIELD_LLM_MODE to fixture).",
+                "(use anthropic, openai, gemini, or vertex, or switch SHIELD_LLM_MODE "
+                "to fixture).",
             )
         if self.shield_llm_model in _KNOWN_PLACEHOLDER_MODELS:
             return (

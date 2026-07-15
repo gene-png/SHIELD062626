@@ -107,6 +107,69 @@ def test_live_mode_unimplemented_provider_raises_at_boot() -> None:
         s.assert_safe_for_runtime()
 
 
+# --- Vertex (ADC) live-mode preflight (D-029) ----------------------------------
+
+
+@pytest.mark.unit
+def test_live_mode_vertex_missing_project_raises_at_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "_google_auth_importable", lambda: True)
+    monkeypatch.setattr(config, "_adc_resolvable", lambda: True)
+    s = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        shield_llm_model="gemini-2.5-flash",
+        gcp_project_id="",
+    )
+    with pytest.raises(RuntimeError, match="GCP_PROJECT_ID"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_live_mode_vertex_missing_google_auth_raises_at_boot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config, "_google_auth_importable", lambda: False)
+    s = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        shield_llm_model="gemini-2.5-flash",
+        gcp_project_id="kentro-cloudmod-dev",
+    )
+    with pytest.raises(RuntimeError, match="google-auth"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_live_mode_vertex_unresolvable_adc_raises_at_boot(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "_google_auth_importable", lambda: True)
+    monkeypatch.setattr(config, "_adc_resolvable", lambda: False)
+    s = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        shield_llm_model="gemini-2.5-flash",
+        gcp_project_id="kentro-cloudmod-dev",
+    )
+    with pytest.raises(RuntimeError, match="Application Default Credentials"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_live_mode_valid_vertex_boots(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "_google_auth_importable", lambda: True)
+    monkeypatch.setattr(config, "_adc_resolvable", lambda: True)
+    s = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        shield_llm_model="gemini-2.5-flash",
+        gcp_project_id="kentro-cloudmod-dev",
+    )
+    s.assert_safe_for_runtime()
+    ready, detail = s.live_llm_readiness()
+    assert ready is True
+    assert "vertex" in detail
+    assert "gemini-2.5-flash" in detail
+
+
 @pytest.mark.unit
 def test_fixture_mode_unaffected_by_llm_preflight() -> None:
     # Fixture mode boots even with an empty key and the stale placeholder model.

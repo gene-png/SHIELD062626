@@ -565,3 +565,52 @@ gate blocks-then-allows across the flag.
 `apps/web/src/components/auth/{VerifyEmailClient,ForgotPasswordForm,ResetPasswordForm}.tsx`,
 `apps/web/src/app/api/proxy/auth/{verify-email,resend-verification,forgot-password,reset-password}/route.ts`,
 `e2e/smoke/s21-email-verify.spec.ts`; DECISIONS D-020, D-027.
+
+---
+
+## D-029 — Vertex AI via Application Default Credentials as the GCP live path
+
+**2026-07-15 · ai/architecture**
+Add a live `VertexProvider` beside `GeminiProvider` in `app/ai/llm.py`, selected
+by `SHIELD_LLM_PROVIDER=vertex`. It calls the regional Vertex endpoint
+`https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent`
+and authenticates with **Application Default Credentials — NO static API key**.
+New settings `GCP_PROJECT_ID` (empty default) and `GCP_REGION`
+(`us-central1`); `google-auth>=2,<3` is a real api dependency (rebuild the
+image). ADC is obtained via
+`google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])`,
+refreshed lazily, and sent as an `Authorization: Bearer` header. The bearer
+token NEVER appears in logs, `llm_calls.error_message`, or exception text — it
+rides the header, not the URL, so an `HTTPStatusError` (which embeds only the
+request URL) cannot leak it (a unit test locks this; mirrors the Gemini
+key-in-header lesson). `gemini` (API key, `generativelanguage`) and `vertex`
+(ADC, `aiplatform`) speak the identical `generateContent` schema, so the
+body-build/parse are factored into shared helpers and the two remain **distinct
+providers** for two distinct GCP postures.
+
+**Boot preflight (D-026 parity).** `live_llm_readiness()` for `vertex` requires
+`GCP_PROJECT_ID` set, `google-auth` importable, AND ADC resolvable
+(`google.auth.default()` succeeds) — a loud `RuntimeError` at boot otherwise, not
+a 500 on the first Run-AI. `/admin/ai-status` and the `/ready` LLM check inherit
+it. Fixture mode is unaffected.
+
+**Compose / credentials.** The api service bind-mounts the host gcloud config
+dir **read-only** (`GCLOUD_CONFIG_DIR`, default `$HOME/.config/gcloud`; this
+Windows box sets `%APPDATA%\gcloud` in the gitignored `.env`) and
+`GOOGLE_APPLICATION_CREDENTIALS` points at the ADC file inside it. Credentials
+are never copied into the repo or the image — the read-only mount is the only
+path in.
+
+**Rationale:** Dave's GCP posture (inherited from kentro-cloud-modernization) is
+Vertex via ADC with no `AIza…` keys committed anywhere. Feasibility was proven
+2026-07-13 — a direct ADC-authenticated `generateContent` call to
+`us-central1-aiplatform` / `kentro-cloudmod-dev` / `gemini-2.5-flash` returned
+HTTP 200. The existing `gemini` adapter only speaks the API-key
+`generativelanguage` path, so it cannot use this machine's credentials; Vertex is
+the FedRAMP-relevant path (the model runs inside the GCP authorization
+boundary). Everything above the seam — redaction, the `llm_calls` audit row,
+"AI suggests, code computes" — is untouched.
+**Ref:** Master Spec §4.4, §12; SPRINT_7.md T0; `app/ai/llm.py`, `app/config.py`,
+`apps/api/pyproject.toml`, `docker-compose.yml`,
+`tests/unit/test_llm_providers.py`, `tests/unit/test_config.py`; DECISIONS
+D-024, D-026.

@@ -17,6 +17,14 @@ x-api-env: &api-env
   SHIELD_LLM_MODEL: ${SHIELD_LLM_MODEL:-claude-sonnet-5}
   SHIELD_LLM_MODE: ${SHIELD_LLM_MODE:-fixture}
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  # Vertex AI via Application Default Credentials (D-029) — NO static API key.
+  # GOOGLE_APPLICATION_CREDENTIALS points at the ADC file inside the read-only
+  # gcloud config bind-mount (see the api service volumes). GCP_PROJECT_ID is
+  # empty by default so fixture mode never needs it; set it (plus
+  # SHIELD_LLM_PROVIDER=vertex) in .env to flip to live Vertex.
+  GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+  GCP_REGION: ${GCP_REGION:-us-central1}
+  GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/gcloud/application_default_credentials.json}
   SHIELD_AUTH_REQUIRE_MFA: ${SHIELD_AUTH_REQUIRE_MFA:-false}
   SHIELD_AUTH_REQUIRE_EMAIL_VERIFY: ${SHIELD_AUTH_REQUIRE_EMAIL_VERIFY:-false}
   SHIELD_EMAIL_DELIVERY_ENABLED: ${SHIELD_EMAIL_DELIVERY_ENABLED:-false}
@@ -172,6 +180,17 @@ services:
       # zt-data seed corpus, read-only, for the questionnaire contract test
       # (SHIELD_ZT_DATA_DIR points here). Not part of the app runtime.
       - ./packages/zt-data:/packages/zt-data:ro
+      # Host gcloud config, READ-ONLY, so the Vertex provider can use this box's
+      # Application Default Credentials without any API key or committed secret
+      # (D-029). Default is the canonical Linux ADC dir ($HOME/.config/gcloud) —
+      # compose expands $HOME, so it is an absolute path that Docker auto-creates
+      # (empty, harmless) on a runner that has no gcloud, keeping fixture-mode CI
+      # green without polluting the repo tree. On THIS Windows box set
+      # GCLOUD_CONFIG_DIR in the gitignored .env to %APPDATA%\gcloud (Git-Bash
+      # form: /c/Users/<you>/AppData/Roaming/gcloud). GOOGLE_APPLICATION_CREDENTIALS
+      # (api-env) points at the ADC file inside this mount. Credentials are NEVER
+      # copied into the repo or the image — the mount is the only path in.
+      - ${GCLOUD_CONFIG_DIR:-$HOME/.config/gcloud}:/gcloud:ro
     # Apply pending migrations before serving so a newly-added revision can't
     # leave the persistent db volume behind the (hot-reloaded) model code.
     # Dev convenience only - in prod, migrations run as a discrete deploy step,

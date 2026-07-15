@@ -169,6 +169,37 @@ def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if not str(k).startswith("__")}
 
 
+# The Gemini API-key path (generativelanguage) and the Vertex ADC path
+# (aiplatform) speak the IDENTICAL generateContent request/response schema, so
+# the body-build and response-parse are factored here and shared by both
+# adapters (D-024 / D-029). Only the endpoint host and the auth mechanism differ.
+
+
+def _generate_content_body(prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Shape a redacted prompt + payload into a generateContent request body."""
+    return {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
+            }
+        ],
+        "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
+    }
+
+
+def _parse_generate_content(data: dict[str, Any]) -> LLMResponse:
+    """Parse a generateContent response body into text + token counts."""
+    parts = data["candidates"][0]["content"]["parts"]
+    text = "".join(p.get("text", "") for p in parts)
+    usage = data.get("usageMetadata") or {}
+    return LLMResponse(
+        text,
+        usage.get("promptTokenCount"),
+        usage.get("candidatesTokenCount"),
+    )
+
+
 class OpenAIProvider:
     """Live OpenAI provider via the Chat Completions REST API.
 
@@ -244,15 +275,6 @@ class GeminiProvider:
 
     def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
         url = f"{self._BASE_URL}/{self.model}:generateContent"
-        body = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
-                }
-            ],
-            "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
-        }
         with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
             resp = client.post(
                 url,
@@ -260,18 +282,77 @@ class GeminiProvider:
                     "Content-Type": "application/json",
                     "x-goog-api-key": self._api_key,
                 },
-                json=body,
+                json=_generate_content_body(prompt, payload),
             )
         resp.raise_for_status()
-        data = resp.json()
-        parts = data["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts)
-        usage = data.get("usageMetadata") or {}
-        return LLMResponse(
-            text,
-            usage.get("promptTokenCount"),
-            usage.get("candidatesTokenCount"),
+        return _parse_generate_content(resp.json())
+
+
+class VertexProvider:
+    """Live Google Vertex AI provider via the regional generateContent REST API,
+    authenticated with Application Default Credentials — NO static API key
+    (D-029). ADC is inherited from the host gcloud config (bind-mounted into the
+    api container) or a service account; this is Dave's GCP posture from
+    kentro-cloud-modernization.
+
+    Same seam contract and generateContent schema as ``GeminiProvider`` — the
+    body-build/parse helpers are shared. The only differences: the regional
+    ``{region}-aiplatform.googleapis.com`` endpoint and an ``Authorization:
+    Bearer <ADC token>`` header instead of the ``x-goog-api-key`` header.
+
+    The bearer token rides the Authorization header, never the URL/query, so it
+    cannot leak into an ``HTTPStatusError`` message (which embeds only the
+    request URL) and thence into ``llm_calls.error_message`` or the logs — the
+    same discipline as the Gemini key-in-header lesson above.
+    """
+
+    name = "vertex"
+
+    def __init__(self, *, model: str, project: str, region: str) -> None:
+        if not project:
+            raise RuntimeError(
+                "GCP_PROJECT_ID is not set. Either set it in .env or switch "
+                "SHIELD_LLM_MODE to 'fixture'."
+            )
+        self.model = model
+        self._project = project
+        self._region = region
+        self._credentials: Any | None = None
+
+    def _bearer_token(self) -> str:
+        """Obtain (and lazily refresh) an ADC access token. Isolated so unit
+        tests can inject a canned token without touching real credentials."""
+        import google.auth
+        import google.auth.transport.requests
+
+        from app.config import _GCP_CLOUD_PLATFORM_SCOPE
+
+        if self._credentials is None:
+            credentials, _project = google.auth.default(scopes=[_GCP_CLOUD_PLATFORM_SCOPE])
+            self._credentials = credentials
+        credentials = self._credentials
+        if not credentials.valid:
+            credentials.refresh(google.auth.transport.requests.Request())
+        return credentials.token
+
+    def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
+        url = (
+            f"https://{self._region}-aiplatform.googleapis.com/v1/projects/"
+            f"{self._project}/locations/{self._region}/publishers/google/models/"
+            f"{self.model}:generateContent"
         )
+        token = self._bearer_token()
+        with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            resp = client.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                json=_generate_content_body(prompt, payload),
+            )
+        resp.raise_for_status()
+        return _parse_generate_content(resp.json())
 
 
 def _build_provider(settings: Settings) -> LLMProvider:
@@ -300,11 +381,17 @@ def _build_provider(settings: Settings) -> LLMProvider:
             model=settings.shield_llm_model,
             api_key=settings.gemini_api_key,
         )
+    if settings.shield_llm_provider == "vertex":
+        return VertexProvider(
+            model=settings.shield_llm_model,
+            project=settings.gcp_project_id,
+            region=settings.gcp_region,
+        )
     # azure_openai / bedrock / local are valid config values but have no
     # adapter yet — fail loudly rather than silently degrade (FAIL LOUDLY).
     raise RuntimeError(
         f"LLM provider {settings.shield_llm_provider!r} is not implemented yet. "
-        "Set SHIELD_LLM_PROVIDER to anthropic, openai, or gemini, or switch "
+        "Set SHIELD_LLM_PROVIDER to anthropic, openai, gemini, or vertex, or switch "
         "SHIELD_LLM_MODE to 'fixture'."
     )
 
