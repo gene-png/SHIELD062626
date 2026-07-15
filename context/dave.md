@@ -14,9 +14,9 @@ _Last updated: 2026-07-13 (Sprint 6 merged, Sprint 7 planned)_
   One post-shutdown fix: a bandit B105 false positive (ruff noqa doesn't cover
   bandit — needed `# nosec B105`) that CI caught and local gates missed;
   bandit is CI-only, not in the six-gate loop set.
-- **Sprint 7 "GCP live path + close the client loop" PLANNED — planning PR
-  open** (`chore/sprint-7-plan`: SPRINT_7.md + staged queue + this file).
-  NOT launched yet.
+- **Sprint 7 "GCP live path + close the client loop" PLANNED — PR #34 open**
+  (https://github.com/gene-png/SHIELD062626/pull/34: SPRINT_7.md + staged
+  queue + this file). NOT launched yet.
 
 ## Decisions made 2026-07-13 (recorded for agents)
 
