@@ -30,6 +30,9 @@ x-api-env: &api-env
   SMTP_HOST: ${SMTP_HOST:-mailhog}
   SMTP_PORT: ${SMTP_PORT:-1025}
   SMTP_FROM: ${SMTP_FROM:-no-reply@shield.local}
+  # Base URL baked into emailed verification/reset links. Boxes that move web
+  # off :3000 (WEB_PORT in .env) must set this too or emailed links 404.
+  WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
   # The api container only mounts ./apps/api at /app, so the zt-data seed files
   # (repo packages/zt-data) are not reachable by walk-up. Mount them read-only
   # (see the api service volumes) and point the unit test at them explicitly.
