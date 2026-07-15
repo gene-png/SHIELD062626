@@ -85,3 +85,27 @@ def send_password_reset_email(*, to: str, token: str) -> None:
         "ignore this message — your password will not change."
     )
     send_email(to=to, subject="Reset your SHIELD password", body=body)
+
+
+def send_release_notification(*, to: str, service_label: str, title: str, version: int) -> None:
+    """Notify one client user that a finalized deliverable was released to them
+    (Sprint 7 T2, D-030).
+
+    Best-effort: gated by the same delivery flag as every other send — with
+    delivery off this is a logged no-op inside ``send_email``. Carries the
+    service, the deliverable title/version, and a link to the client's documents
+    surface so the recipient can review and download it.
+    """
+    base = get_settings().web_base_url.rstrip("/")
+    documents_url = f"{base}/documents"
+    subject = f"Your {service_label} deliverable is ready"
+    body = (
+        f"A new {service_label} deliverable has been released to your team on "
+        "SHIELD.\n\n"
+        f"  {title} (v{version})\n\n"
+        "Open your documents to review and download it:\n\n"
+        f"{documents_url}\n\n"
+        "You are receiving this because you have a SHIELD client account for "
+        "this engagement."
+    )
+    send_email(to=to, subject=subject, body=body)

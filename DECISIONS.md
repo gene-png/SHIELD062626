@@ -614,3 +614,35 @@ boundary). Everything above the seam — redaction, the `llm_calls` audit row,
 `apps/api/pyproject.toml`, `docker-compose.yml`,
 `tests/unit/test_llm_providers.py`, `tests/unit/test_config.py`; DECISIONS
 D-024, D-026.
+
+## D-030 — Client release notification email: best-effort notify, release is source of truth
+
+**Decision (Sprint 7 T2).** When a consultant releases a finalized deliverable
+(the shared `release_deliverable` helper behind all four service routes), and
+`SHIELD_EMAIL_DELIVERY_ENABLED` is on, SHIELD emails **every active client-role
+user of that deliverable's tenant** a notification carrying the service, the
+deliverable title/version, and a link to `{WEB_BASE_URL}/documents`. Recipient
+selection is `role == client AND client_id == <tenant> AND is_active` — cross-
+tenant users and consultants (admins) are never notified.
+
+**Best-effort semantics.** The notification is sent **after** the release is
+committed, and the release is the **source of truth**. With delivery off the
+release proceeds exactly as v3.3.0 — a loud skip log ("notify skipped, delivery
+disabled"), no send attempted. With delivery on, each recipient send is wrapped:
+a per-recipient SMTP failure is logged **loudly** (with the deliverable id,
+recipient, and error) and the release **still stands** — a notification failure
+must never roll back a release the consultant already performed. A summary log
+records recipients / sent / failed counts either way.
+
+**Rationale.** Sprint 5 (D-025) shipped the release action but deferred the
+client notification pending a real sender; Sprint 6 T5 shipped
+`app/email/sender.py`. Wiring the notification into the single shared release
+helper means all four services plus the risk register notify identically. The
+"loud but non-blocking" failure mode is the correct reading of "fail loudly":
+the failure IS surfaced (logged with full context), but the durable state the
+user asked for (the release) is not undone by a downstream best-effort side
+effect — that would be the worse lie.
+
+**Ref:** Master Spec §12; SPRINT_7.md T2; `app/deliverable_release.py`,
+`app/email/sender.py`, `tests/unit/test_release_notification.py`; DECISIONS
+D-025, D-028.
