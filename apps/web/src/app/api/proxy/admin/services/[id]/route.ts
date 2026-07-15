@@ -6,18 +6,17 @@
  * calls. Cross-tenant by design (admin-only); does not forward X-Client-Id.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function GET(
   _request: Request,
   props: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const bearer = session?.accessToken;
   if (!bearer) {
     return NextResponse.json(

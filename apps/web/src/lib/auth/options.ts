@@ -1,15 +1,22 @@
 /**
- * NextAuth configuration: Credentials provider hitting the FastAPI
- * /auth/login endpoint and storing the returned access + refresh tokens
- * in the encrypted JWT session.
+ * Auth.js (next-auth v5) configuration: a Credentials provider hitting the
+ * FastAPI /auth/login endpoint and storing the returned access + refresh
+ * tokens in the encrypted JWT session.
  *
- * v1.x will swap the Credentials provider for a Keycloak OIDC provider
- * with the same `aud=shield-api` claim - no schema migration required.
+ * v5 migration (Sprint 7 T5): this module now owns the `NextAuth()` call and
+ * exports the universal `{ handlers, auth, signIn, signOut }`. Server code
+ * calls `auth()` in place of the v4 `getServerSession(authOptions)`; the
+ * `[...nextauth]` route re-exports `handlers`. Client components still import
+ * `signIn`/`signOut`/`useSession` from `next-auth/react` (unchanged in v5).
+ *
+ * v1.x will swap the Credentials provider for a Keycloak OIDC provider with the
+ * same `aud=shield-api` claim - no schema migration required.
  */
 
-import type { NextAuthOptions } from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
+import type { NextAuthConfig, User } from "next-auth";
 import type { JWT } from "next-auth/jwt";
-import CredentialsProvider from "next-auth/providers/credentials";
+import Credentials from "next-auth/providers/credentials";
 
 import { ApiError, apiFetch } from "@/lib/api";
 import { REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
@@ -27,11 +34,17 @@ interface LoginResponse {
 }
 
 /**
- * Thrown out of `authorize` to tell the sign-in form that the password was
- * correct but a TOTP code is still required. NextAuth surfaces the message as
- * `result.error`, which the form matches to reveal the code field.
+ * Thrown out of `authorize` when the password is correct but a TOTP second
+ * factor is still required. In v5, a `CredentialsSignin` subclass's `code` is
+ * placed in the sign-in redirect URL's `code` query param, which the client's
+ * `signIn(..., { redirect: false })` returns as `result.code`. The sign-in
+ * form matches this to reveal the authenticator-code field. (In v4 this rode
+ * the free-form `result.error` string; v5 normalizes every credentials failure
+ * to `error: "CredentialsSignin"`, so the distinguishing signal is `code`.)
  */
-const MFA_REQUIRED_ERROR = "mfa_required";
+class MfaRequiredError extends CredentialsSignin {
+  code = "mfa_required";
+}
 
 /** Mirrors the backend TokenPairResponse returned by POST /auth/refresh, which
  * always yields a full (non-null) pair — unlike /auth/login, which can return
@@ -106,11 +119,16 @@ interface MeResponse {
   display_name: string | null;
 }
 
-export const authOptions: NextAuthOptions = {
+export const authConfig: NextAuthConfig = {
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 },
   pages: { signIn: "/sign-in" },
+  // The dev/CI stack sets NEXTAUTH_SECRET (compose) rather than v5's AUTH_SECRET,
+  // and runs behind the next-dev proxy without AUTH_URL — read the secret
+  // explicitly and trust the host so the config is env-name-agnostic.
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  trustHost: true,
   providers: [
-    CredentialsProvider({
+    Credentials({
       name: "Email + password",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -120,13 +138,19 @@ export const authOptions: NextAuthOptions = {
         totp: { label: "Authenticator code", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        const email =
+          typeof credentials?.email === "string" ? credentials.email : "";
+        const password =
+          typeof credentials?.password === "string" ? credentials.password : "";
+        const totp =
+          typeof credentials?.totp === "string" ? credentials.totp : "";
+        if (!email || !password) {
           return null;
         }
         try {
           const login = await apiFetch<LoginResponse>("/auth/login", {
             method: "POST",
-            body: { email: credentials.email, password: credentials.password },
+            body: { email, password },
           });
 
           let tokens: LoginResponse = login;
@@ -134,14 +158,14 @@ export const authOptions: NextAuthOptions = {
             // Password was correct but a second factor is needed. Without a code
             // yet, tell the form to prompt for one. With a code, exchange the
             // pending token for the real pair.
-            if (!credentials.totp) {
-              throw new Error(MFA_REQUIRED_ERROR);
+            if (!totp) {
+              throw new MfaRequiredError();
             }
             tokens = await apiFetch<LoginResponse>("/auth/mfa/verify-login", {
               method: "POST",
               body: {
                 mfa_pending_token: login.mfa_pending_token,
-                code: credentials.totp,
+                code: totp,
               },
             });
           }
@@ -152,7 +176,7 @@ export const authOptions: NextAuthOptions = {
           const me = await apiFetch<MeResponse>("/auth/me", {
             bearer: tokens.access_token,
           });
-          const user: import("next-auth").User = {
+          const user: User = {
             id: me.id,
             email: me.email,
             name: me.display_name ?? me.email,
@@ -163,8 +187,9 @@ export const authOptions: NextAuthOptions = {
           };
           return user;
         } catch (err) {
-          if (err instanceof Error && err.message === MFA_REQUIRED_ERROR) {
-            // Re-throw so NextAuth surfaces it as result.error to the form.
+          if (err instanceof CredentialsSignin) {
+            // MFA-required (or any credentials signal) — re-throw so v5 surfaces
+            // its `code` to the sign-in form.
             throw err;
           }
           if (
@@ -210,3 +235,5 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

@@ -1,15 +1,14 @@
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function POST(
   _request: Request,
   props: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const bearer = session?.accessToken;
   if (!bearer) {
     return NextResponse.json(

@@ -4,14 +4,13 @@
  * disabled. Never returns the API key. Not tenant-scoped.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function GET(): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const bearer = session?.accessToken;
   if (!bearer) {
     return NextResponse.json(

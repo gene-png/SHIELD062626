@@ -5,14 +5,13 @@
  * Read-only over an append-only store.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const bearer = session?.accessToken;
   if (!bearer) {
     return NextResponse.json(

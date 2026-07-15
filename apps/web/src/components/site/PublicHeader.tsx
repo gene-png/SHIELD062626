@@ -1,14 +1,13 @@
-import { getServerSession } from "next-auth";
 import Link from "next/link";
 
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 import { ClientSwitcher } from "@/components/site/ClientSwitcher";
 import { SignOutButton } from "@/components/site/SignOutButton";
 
 import type { JSX } from "react";
 
 export async function PublicHeader(): Promise<JSX.Element> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const role = session?.role;
 
   return (

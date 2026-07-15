@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -12,7 +11,7 @@ import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 import { SkipToContent } from "@/components/site/SkipToContent";
 import { ACTIVE_CLIENT_COOKIE, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 import type { JSX } from "react";
 
@@ -25,7 +24,7 @@ interface MeResponse {
 }
 
 export default async function DocumentsPage(): Promise<JSX.Element> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session?.accessToken) {
     redirect("/sign-in?callbackUrl=/documents");
   }
