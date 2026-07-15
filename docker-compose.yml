@@ -26,8 +26,17 @@ x-api-env: &api-env
   GCP_REGION: ${GCP_REGION:-us-central1}
   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/gcloud/application_default_credentials.json}
   SHIELD_AUTH_REQUIRE_MFA: ${SHIELD_AUTH_REQUIRE_MFA:-false}
+  # REQUIRE_EMAIL_VERIFY stays false ON PURPOSE: flipping it to true makes every
+  # unverified login (all seeded + spec-created e2e users) a typed 403, breaking
+  # the whole e2e sign-in surface. Enforcement is a deploy-time choice, not a dev
+  # default (D-028 / CLAUDE.md). Do NOT couple it to delivery below.
   SHIELD_AUTH_REQUIRE_EMAIL_VERIFY: ${SHIELD_AUTH_REQUIRE_EMAIL_VERIFY:-false}
-  SHIELD_EMAIL_DELIVERY_ENABLED: ${SHIELD_EMAIL_DELIVERY_ENABLED:-false}
+  # ON by default in dev/CI (Sprint 7 T3): the email loop is REAL in every
+  # dev/e2e run so registration/verify/reset actually deliver to MailHog and the
+  # s21 spec runs (not skips). SMTP_HOST defaults to the mailhog service below,
+  # so boot never refuses (config.py guards empty-host). Verification is NOT
+  # enforced (see REQUIRE_EMAIL_VERIFY above), so unverified sign-in still works.
+  SHIELD_EMAIL_DELIVERY_ENABLED: ${SHIELD_EMAIL_DELIVERY_ENABLED:-true}
   SHIELD_REDACTION_MODE: ${SHIELD_REDACTION_MODE:-strict}
   JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
   JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-1800}
