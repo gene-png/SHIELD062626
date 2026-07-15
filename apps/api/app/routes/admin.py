@@ -510,20 +510,16 @@ def ai_status(_admin: Annotated[User, _admin_required]) -> AdminAiStatus:
                 "SHIELD_LLM_MODE=live and ANTHROPIC_API_KEY to enable."
             ),
         )
-    if provider == "anthropic" and not s.anthropic_api_key:
-        return AdminAiStatus(
-            mode=mode,
-            provider=provider,
-            model=model,
-            ready=False,
-            detail="Live mode is on but ANTHROPIC_API_KEY is not set.",
-        )
+    # Reuse the single source of truth the boot preflight enforces (D-026):
+    # key present, SDK importable (anthropic), and a real (non-placeholder)
+    # model. The API key itself is never returned.
+    ready, detail = s.live_llm_readiness()
     return AdminAiStatus(
         mode=mode,
         provider=provider,
         model=model,
-        ready=True,
-        detail=f"Live AI configured ({provider}/{model}).",
+        ready=ready,
+        detail=detail,
     )
 
 

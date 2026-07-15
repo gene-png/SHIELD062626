@@ -7,6 +7,122 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.3.0] — Sprint 6 · real demo — 2026-07-12
+
+Branch `feat/real-demo-sprint-6`. Twelve tasks (T0–T11) turning the platform
+into a real, self-standing demo: the live-AI path is now runnable and fails
+loudly at boot when misconfigured, seeded deliverables actually download, real
+TOTP MFA and real email verification + password reset ship on the custom-JWT
+stack (the D-020 boot-refusals are gone — the flags now gate enforcement), a
+full-matrix `/ready` + `/admin/health` operator view lands, the demo seed tells
+a coherent downloadable Atlas story with a one-command reset, and a hosted-demo
+compose runs web as a production build. New user-facing auth features + a runnable
+live path justify the **minor** bump. All exit gates green: the full Playwright
+suite, `pytest -m unit`, web `tsc --noEmit`, in-container web vitest, host
+prettier `--check` (3.9.5), in-container ruff/black (root-config parity), and the
+in-container web eslint gate.
+
+- **Live-AI enablement + boot preflight (T0, `8aebe51`):** declared
+  `anthropic>=0.40,<1` as a real `apps/api` runtime dep (the `AnthropicProvider`
+  lazy-imports it, so an undeclared SDK surfaced only as an `ImportError` on the
+  first live Run-AI — the image must be rebuilt, not just restarted); replaced the
+  stale default model `claude-opus-4-7` (invalid → 404) with `claude-sonnet-5` in
+  `config.py` + `docker-compose.yml`; added a live-mode boot preflight
+  (`Settings.live_llm_readiness()` → `assert_safe_for_runtime()` raises a loud
+  `RuntimeError` at lifespan when the key is missing / SDK unimportable / model a
+  placeholder), also surfaced via `GET /admin/ai-status`. Fixture mode unaffected.
+  See DECISIONS **D-026**.
+- **Live-AI integration test + SMOKE §14 (T1, `a19fded`):** codified the
+  2026-07-12 manual smoke as a committed opt-in spec
+  (`apps/api/tests/live/test_live_ai.py`, `@pytest.mark.live`) + a one-command
+  `scripts/smoke_live_ai.py`. The `live` marker is registered and EXCLUDED from
+  `-m unit` and CI; both self-skip without `SHIELD_LLM_MODE=live` + a key, so the
+  loop/CI stay green keyless. SMOKE_TEST §14 annotated as validated by the opt-in
+  spec + documented procedure (not falsely checked as CI-green).
+- **Seed → storage parity (T2, `0bbabac`):** the demo seed obtained its backend
+  from `get_storage()` (not a direct `LocalFilesystemStorage`) so it writes where
+  the API reads (MinIO under compose); `tech_debt/extract.py`'s local-path
+  shortcut routed through the storage protocol uniformly. e2e: after `down -v` +
+  reseed, the seeded Atlas client downloads a SEEDED released deliverable → 200
+  with the §15.5 filename (410 before the fix). `s17-documents.spec.ts` gained the
+  parity test.
+- **Full dependency-health readiness + operator view (T3, `9b2c74b`):** `/ready`
+  moved from a DB-only `SELECT 1` to a per-dependency matrix (db, redis, minio,
+  keycloak-dormant, LLM readiness reusing the T0 preflight); any down required
+  dependency flips `ready=false` and names the offender while `/health` liveness
+  stays cheap. New `/admin/health` operator page (`HealthMatrix`) renders the
+  matrix with an all-green / degraded overall badge (vitest-covered).
+- **Real TOTP MFA (T4, `bf8e7c6`):** migration `0030` (additive/C0) adds
+  `users.mfa_totp_secret` (Fernet-encrypted, nullable) + a `user_recovery_codes`
+  table. RFC 6238 TOTP against the stdlib (`app/security/totp.py`, locked to the
+  RFC vectors — no OTP dep); `POST /auth/mfa/enroll` (otpauth URI + secret),
+  `/auth/mfa/verify` (confirm + 10 one-time recovery codes shown once), and
+  `/auth/mfa/verify-login` (completes the short-lived `mfa_pending` challenge).
+  The D-020 boot-refusal on `SHIELD_AUTH_REQUIRE_MFA` is removed — the flag now
+  GATES enforcement. Web: sign-in MFA step + a net-new account enrollment section.
+  See DECISIONS **D-027**.
+- **Real email verification + password reset (T5, `f67c79f`):** migration `0031`
+  (additive/C0) adds an `email_tokens` table (SHA-256 hash only, purpose, expiry,
+  used-at). Registration mints a verification token + sends the email;
+  `/auth/verify-email`, `/auth/resend-verification`, `/auth/forgot-password`,
+  `/auth/reset-password` — single-use, time-bounded, enumeration-safe. The SMTP
+  sender is gated by `SHIELD_EMAIL_DELIVERY_ENABLED` (off = logged no-op so the
+  flow works in dev/tests; on without `SMTP_HOST` refuses to boot). The D-020
+  boot-refusal on `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` is removed — the flag now
+  gates login. Web: net-new verify-email / forgot-password / reset-password pages.
+  e2e via MailHog (opt-in, self-skips). See DECISIONS **D-028**.
+- **OpenAI reasoning-model token param (T6, `19636b5`):** the OpenAI adapter now
+  sends the correct output-token-limit key per model family
+  (`max_completion_tokens` for reasoning/responses models, legacy `max_tokens`
+  otherwise) instead of always `max_tokens`. Deferred item from Sprint 4 D-024;
+  `test_llm_providers.py` updated (httpx monkeypatched, no live key).
+- **Live-AI parity sweep — all five purposes (T7, `8761d91`):** extended the T1
+  opt-in spec from csf-only to a parametrized sweep over `csf_score`, `zt_score`,
+  `mitre_map`, `risk_synthesize`, `tech_debt_extract` — each plants identical
+  canonical PII (twice each) and asserts a complete live `llm_calls` row,
+  `redacted_counts == {email:2, name:2, client_org:2}`, no PII, AND that the
+  response parses into the route-layer container (the per-adapter parse check).
+  Still `@pytest.mark.live`, self-skips keyless. SMOKE_TEST §14.1 documents it.
+- **Demo data realism + one-command reset (T8, `39b3cfc`):** the seed now
+  synthesizes a coherent Atlas Risk Register (7 hand-authored entries whose tiers
+  are ALWAYS code-derived via `risk.engine.tier_for`, real ATT&CK + CSF codes) and
+  exports XLSX/PDF/Word through `get_storage()`; tech-debt items gained believable
+  per-tool disposition rationales. New `scripts/demo-reset.(ps1|sh)`: `down -v` →
+  `up -d --build` → poll `/ready` full-matrix → seed → print URLs+creds (documented
+  in README + ONBOARDING). `s8-risk-register.spec.ts` gained a read-only test
+  proving the seeded register's code-derived tiers + downloadable exports.
+- **Hosted-demo compose (T9, `db33372`):** `docker-compose.demo.yml` is a thin
+  override redefining only the web service as a production Next standalone build
+  (`shield-web:demo`, `volumes: !reset []`, `node apps/web/server.js`,
+  `NODE_ENV=production`), fixture-by-default. Scope expansion: added a root
+  `.dockerignore` + rewrote `apps/web/Dockerfile` (it had never built cleanly), and
+  fixed a latent CI lint failure in `HealthMatrix.tsx` (react-hooks
+  set-state-in-effect) that the loop gate set had let slip. Cloud/terraform NOT
+  touched.
+- **Security + audit pass (T10, `18b7d85`):** two findings fixed TDD-first. (1)
+  MFA second-factor guesses at both `verify-login` and enroll-confirm now feed the
+  SAME account-lockout counter as password failures (and refuse with 423 when
+  locked); the counter resets ONLY on a fully successful login (removed the
+  premature `_clear_password_failures` on the mfa-challenge / email-not-verified
+  branches that let a password-holder evade second-factor lockout). (2) `/ready`
+  now reduces per-dependency `detail` to a generic string for anonymous callers
+  (LBs/k8s still get statuses + offender names) while authenticated callers get
+  full operator detail. Audit scans: bandit exit 0; JS-audit posture carried
+  unchanged from Sprint 5 (0 high / 2 documented moderates — no JS manifests
+  changed); manual secret-diff scan clean; no secret committed.
+- **Wrap-up (T11, this entry):** SMOKE_TEST §22–§28 for live-AI enablement,
+  full-matrix health + `/admin/health`, MFA, email verify/reset, seed→storage
+  parity + demo realism, hosted-demo compose, and the security hardening — each box
+  checked only where a green committed spec proves it, annotated by spec filename;
+  key-gated live specs and the MailHog e2e marked opt-in/CI-skipped, not falsely
+  checked; CHANGELOG `[3.3.0]`; DECISIONS **D-026/D-027/D-028** verified landed;
+  the full exit gate set re-run green; CONTEXT.md end-of-sprint snapshot.
+
+Migrations this sprint: **0030** (MFA TOTP secret + recovery codes, T4) and
+**0031** (email verification/reset tokens, T5), both additive and SQLite-safe
+(C0). New DECISIONS: **D-026** (live-AI enablement + boot preflight), **D-027**
+(real TOTP MFA), **D-028** (real email verification + password reset).
+
 ## [3.2.0] — Sprint 5 · client value loop — 2026-07-10
 
 Branch `feat/client-value-loop-sprint-5`. Eleven tasks (T0–T10) turning

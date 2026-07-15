@@ -21,8 +21,9 @@ export default async function SignInPage(props: {
         <header className="space-y-2">
           <h1 className="text-2xl font-semibold text-ink-primary">Sign in</h1>
           <p className="text-sm text-ink-secondary">
-            Use the email and password you registered with. MFA enrollment is on
-            the v1.x roadmap.
+            Use the email and password you registered with. If you&apos;ve
+            enabled two-factor authentication, we&apos;ll ask for your
+            authenticator code next.
           </p>
         </header>
         {sessionExpired ? (
@@ -50,6 +51,15 @@ export default async function SignInPage(props: {
             className="font-medium text-brand-500 hover:text-brand-600"
           >
             Create an account
+          </Link>
+        </p>
+        <p className="text-sm text-ink-secondary">
+          Forgot your password?{" "}
+          <Link
+            href="/forgot-password"
+            className="font-medium text-brand-500 hover:text-brand-600"
+          >
+            Reset it
           </Link>
         </p>
       </main>

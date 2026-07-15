@@ -36,6 +36,83 @@ class TokenPairResponse(BaseModel):
     refresh_expires_at: datetime
 
 
+class LoginResult(BaseModel):
+    """Outcome of POST /auth/login (Sprint 6 T4, D-027).
+
+    Two shapes on one model:
+      - No MFA (back-compat): the full access+refresh pair is populated and
+        ``mfa_required`` is False — identical field names to the old
+        TokenPairResponse, so existing clients keep working unchanged.
+      - MFA enrolled: the pair fields stay null, ``mfa_required`` is True, and
+        ``mfa_pending_token`` carries the short-lived token that
+        ``/auth/mfa/verify-login`` exchanges for the real pair.
+    """
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"  # noqa: S105 - OAuth 2.0 token_type field, not a credential
+    access_expires_at: datetime | None = None
+    refresh_expires_at: datetime | None = None
+    mfa_required: bool = False
+    mfa_pending_token: str | None = None  # noqa: S105 - short-lived JWT, not a static credential
+    # Set when SHIELD_AUTH_REQUIRE_MFA is on and the user has NOT yet enrolled.
+    # The pair is still issued (first enrollment needs an authenticated
+    # session), but the UI must route the user to enroll before proceeding.
+    mfa_enrollment_required: bool = False
+
+
+class MfaEnrollResponse(BaseModel):
+    """The provisioning material an authenticator app needs, shown once."""
+
+    secret: str
+    otpauth_uri: str
+
+
+class MfaVerifyRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+
+
+class MfaVerifyResponse(BaseModel):
+    """Recovery codes are returned exactly once, at successful enrollment."""
+
+    mfa_enrolled: bool = True
+    recovery_codes: list[str]
+
+
+class MfaLoginRequest(BaseModel):
+    mfa_pending_token: str
+    # A TOTP (6 digits) OR a recovery code (XXXX-XXXX); disambiguated server-side.
+    code: str = Field(min_length=1, max_length=64)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+
+
+class VerifyEmailResponse(BaseModel):
+    email_verified: bool = True
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=512)
+    password: str = Field(min_length=12, max_length=256)
+
+
+class EmailActionResponse(BaseModel):
+    """Uniform response for the enumeration-safe endpoints (resend, forgot,
+    reset). The same message is returned whether or not the account existed."""
+
+    message: str
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr

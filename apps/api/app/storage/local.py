@@ -42,6 +42,13 @@ class LocalFilesystemStorage(StorageBackend):
     def exists(self, key: str) -> bool:
         return self._path_for(key).exists()
 
+    def health_check(self) -> None:
+        # Reachable == the root directory exists and is writable. mkdir on
+        # construction already ensures it; re-checking here keeps the probe
+        # honest if the volume vanished at runtime.
+        if not self.root.is_dir():
+            raise FileNotFoundError(f"storage root {self.root} is not a directory")
+
     def signed_url(self, key: str, *, ttl_seconds: int = 600) -> str:
         path = self._path_for(key)
         return f"file://{path.absolute()}?expires={int(time.time()) + ttl_seconds}"

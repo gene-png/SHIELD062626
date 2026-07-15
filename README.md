@@ -82,6 +82,55 @@ docker compose run --service-ports --rm web bash scripts/dev-web.sh
 | MailHog UI     | http://localhost:8025      |
 | Postgres       | postgres://localhost:5432  |
 
+### One-command demo reset
+
+To wipe everything and reseed a clean, coherent Atlas demo (4 assessment
+services + a synthesized Risk Register, all released and downloadable):
+
+```bash
+# macOS / Linux / Git Bash
+bash scripts/demo-reset.sh
+```
+
+```powershell
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/demo-reset.ps1
+```
+
+The script runs `docker compose down -v` → `up -d --build`, waits for the
+full-matrix `/ready` probe to go all-green (db, redis, minio, keycloak, llm),
+seeds the demo, then prints the URLs + logins. **`down -v` deletes all demo
+data** — that is the point of a reset. Sign in as `client@atlas.example` /
+`DemoPass!2026` and the released reports on `/home` and `/documents` download.
+
+### Hosted-demo compose (production web build)
+
+The base `docker-compose.yml` runs the web app under `next dev` for fast local
+iteration. For a **shared demo host** you want the production Next.js standalone
+build instead. `docker-compose.demo.yml` is a thin override that swaps only the
+`web` service (build from `apps/web/Dockerfile`, no source bind-mount, real
+`next start` server); every other service is inherited unchanged, so there is no
+infra duplication.
+
+```bash
+# One-command bring-up (from the repo root):
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build
+docker compose exec -T api python scripts/seed_demo.py   # coherent Atlas demo
+```
+
+- **Fixture by default:** the api's `SHIELD_LLM_MODE` stays `fixture`, so the
+  demo is fully offline. Live AI engages only when you put `ANTHROPIC_API_KEY`
+  in a root `.env` **and** set `SHIELD_LLM_MODE=live`; the boot preflight then
+  validates the key/model or fails loudly at start (D-026).
+- **Real demo host:** set `NEXTAUTH_SECRET` (`openssl rand -hex 32`) and
+  `NEXTAUTH_URL` (the host's public URL) in `.env` before bring-up.
+- Cloud provisioning (terraform / account / region / DR) is **out of scope** —
+  this is a local production-parity compose, not a cloud deploy.
+
+Cost of the override: the prod image is baked at build time, so an `apps/web`
+edit needs a `--build` rebuild to appear (unlike the dev bind-mount). Use the
+base `docker-compose.yml` for day-to-day development.
+
 ## Environment variables
 
 Every variable in [`.env.example`](.env.example) is required. Summary:

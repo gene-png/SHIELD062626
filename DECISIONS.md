@@ -419,3 +419,149 @@ invisible to clients by construction.
 `app/deliverable_release.py`, `app/routes/clients.py`, `app/routes/artifacts.py`,
 `alembic/versions/0028_deliverable_release.py`,
 `tests/unit/test_deliverable_release.py`; DECISIONS D-023, D-016.
+
+## D-026 — Live-AI enablement: `anthropic` is a real runtime dep + a live-mode boot preflight
+
+**2026-07-12 · ai/config**
+Make the live-AI path actually runnable rather than a config that 500s on first
+use. Three changes: (1) declare `anthropic>=0.40,<1` in `apps/api`
+dependencies — the `AnthropicProvider` lazy-imports `from anthropic import
+Anthropic` (`app/ai/llm.py`), so an undeclared SDK surfaced only as an
+`ImportError` on the first live Run-AI; it is now a real runtime dependency and
+the image must be rebuilt (a plain restart won't install it). (2) Replace the
+stale default model `claude-opus-4-7` (invalid → 404) with `claude-sonnet-5`
+in both `app/config.py` and `docker-compose.yml`. (3) Add a live-mode boot
+preflight: `Settings.live_llm_readiness()` is the single source of truth for
+"will a live call succeed" — anthropic needs its key AND an importable SDK,
+openai/gemini (httpx adapters) need only their key, every other provider value
+has no adapter, and the model must not be a known placeholder. It never raises;
+`assert_safe_for_runtime()` wraps a false result in a loud `RuntimeError` at
+boot (lifespan `app/main.py`), and `GET /admin/ai-status` surfaces the same
+detail to operators. Fixture mode is entirely unaffected.
+**Rationale:** FAIL LOUDLY at boot beats a 404/500 mid-engagement. The
+2026-07-12 manual smoke PROVED the path works end-to-end against a live
+`claude-sonnet-5` call (2.6s, redaction stripped `{client_org:2,name:2,email:2}`,
+correct `llm_calls` row, no PII egress) — the only blockers were the missing
+dep, the stale model, and the absent preflight. The SDK-importable check
+guards specifically against the "declared but image not rebuilt" trap.
+**Ref:** SPRINT_6.md T0; `apps/api/pyproject.toml`, `app/config.py`,
+`app/main.py`, `app/routes/admin.py`, `docker-compose.yml`,
+`tests/unit/test_config.py`; DECISIONS D-017, D-024.
+
+## D-027 — Real TOTP MFA: a single custom-JWT enroll/verify/login-challenge flow
+
+**2026-07-12 · auth**
+Ship real multi-factor auth on the existing custom HS256-JWT auth stack rather
+than deferring to a Keycloak federation. RFC 6238 TOTP (SHA1 / 6-digit /
+30-second), implemented against the stdlib (`app/security/totp.py`) and locked
+to the RFC's published test vectors — no third-party OTP dependency. Three
+endpoints on `routes/auth.py`: `POST /auth/mfa/enroll` (returns an otpauth
+provisioning URI + secret), `POST /auth/mfa/verify` (confirms a code, flips
+`users.mfa_enrolled`, issues 10 one-time recovery codes shown exactly once),
+and `POST /auth/mfa/verify-login` (completes the login challenge). When a user
+has MFA enrolled, `/auth/login` returns a short-lived (`jwt_mfa_pending_ttl`,
+default 5 min) `mfa_pending` token INSTEAD of the access+refresh pair; that
+token authorizes nothing but `verify-login`, which accepts a current TOTP OR a
+single-use recovery code and then mints the real pair. The verify endpoints are
+rate-limited via the existing per-account auth limiter.
+
+**At-rest secrets.** The TOTP secret is Fernet-encrypted (`cryptography`,
+already transitive) with a key derived from `JWT_SIGNING_SECRET` — no new
+secret to provision; rotating the signing secret invalidates stored MFA secrets
+(users re-enroll), which is a loud, correct failure rather than a silent
+decrypt. Recovery codes are Argon2id-hashed (a dedicated hasher, since they are
+shorter than the 12-char password policy) and never stored or logged in
+plaintext. Migration `0030` is additive/SQLite-safe (C0): `users.mfa_totp_secret`
+is nullable so old rows parse as "not enrolled", and `user_recovery_codes` is a
+new cascade-deleted table.
+
+**Flag semantics change.** The old `config.py` boot-refusal on
+`SHIELD_AUTH_REQUIRE_MFA=true` (which refused to start because no flow existed)
+is removed. The flag now GATES enforcement: an enrolled user is always
+challenged regardless of the flag; with the flag ON, a not-yet-enrolled user
+still receives a session (first enrollment necessarily needs one) but the login
+result carries `mfa_enrollment_required` so the UI routes them to enroll. The
+email-verification boot-refusal stays until T5 lands that flow.
+
+**Web.** The NextAuth Credentials provider gains an optional `totp` credential:
+the sign-in form submits email+password first, and on an `mfa_required` signal
+reveals a code field and re-submits; `authorize` completes the challenge
+server-side (re-running `/auth/login` for a fresh pending token, then
+`verify-login`) so the pending token never reaches the browser. A net-new
+account-page enrollment section (`MfaEnrollment.tsx`) drives enroll → confirm →
+recovery-code display through server-side proxies. Keycloak stays dormant; when
+v1.x federates auth it replaces this flow behind the same `aud=shield-api`
+claim.
+
+**Rationale:** MFA is a FedRAMP-Moderate baseline control; a config flag that
+refused to boot was worse than a real control. The single-JWT design keeps the
+whole flow in one deterministic, testable seam ("AI suggests, code computes" is
+untouched — this is pure crypto). TDD: enroll → verify → login-with-TOTP happy
+path, wrong/expired code rejected, single-use recovery-code login, and
+flag-off = no challenge for non-enrolled users (back-compat).
+**Ref:** SPRINT_6.md T4; `apps/api/alembic/versions/0030_mfa_totp.py`,
+`app/security/totp.py`, `app/models/user.py`, `app/models/user_recovery_code.py`,
+`app/security/jwt.py`, `app/routes/auth.py`, `app/config.py`,
+`app/schemas/auth.py`, `tests/unit/test_totp.py`, `tests/unit/test_mfa_routes.py`,
+`tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/options.ts`,
+`apps/web/src/components/auth/{SignInForm,MfaEnrollment}.tsx`,
+`apps/web/src/app/account/page.tsx`; DECISIONS D-020.
+
+## D-028 — Real email verification + password reset over SMTP/MailHog
+
+**2026-07-12 · auth**
+Ship real email-address verification and self-service password reset on the
+existing custom-JWT auth stack (MailHog in dev; any SMTP host in prod). Four new
+endpoints on `routes/auth.py`: `POST /auth/verify-email` (consumes a token and
+stamps `users.email_verified_at`), `POST /auth/resend-verification`,
+`POST /auth/forgot-password`, and `POST /auth/reset-password`. Registration now
+mints a verification token and sends the email as part of the same transaction.
+All four are rate-limited via the existing per-account auth limiter.
+
+**Token model.** A new additive/SQLite-safe migration `0031` adds an
+`email_tokens` table holding only the SHA-256 hash of each opaque token (the raw
+token — ~256 bits from `secrets.token_urlsafe` — lives only in the emailed
+link), a `purpose` (`email_verify` | `password_reset`), an `expires_at`, and a
+`used_at`. Tokens are single-use (stamped `used_at` on success only, so a failed
+action leaves them replayable within their window) and time-bounded
+(verification 24h, reset 1h). SHA-256 is deliberate, not a KDF: these are
+already high-entropy, so lookup must be one indexed query and a slow hash buys
+nothing. A completed reset voids every other outstanding reset token for the
+user, clears any lockout, and nulls `active_refresh_jti` so live sessions must
+re-auth.
+
+**No enumeration.** `resend-verification` and `forgot-password` always return an
+identical uniform message whether or not the account exists; only a real account
+produces a token/email. `verify-email` / `reset-password` fail on the token
+itself (typed `invalid_token`), never on account existence.
+
+**Delivery gating + flag semantics.** The SMTP sender is gated by
+`SHIELD_EMAIL_DELIVERY_ENABLED` (default off): with delivery off the send is a
+logged no-op (subject/recipient only — never the token-bearing body), so the
+token flow still works in dev/tests without MailHog; with delivery on but no
+`SMTP_HOST`, `assert_safe_for_runtime` refuses to boot rather than silently drop
+mail. The old `config.py` boot-refusal on `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=true`
+is removed (mirroring D-027): the flag now GATES login enforcement — an
+unverified user is rejected at `/auth/login` with a typed `email_not_verified`
+403 when the flag is on, and login proceeds normally when off.
+
+**Web.** Net-new `/verify-email`, `/forgot-password`, and `/reset-password`
+pages (+ server proxies) drive the flows; the verify page reads the token from
+`?token=` and auto-submits, offering an enumeration-safe resend on failure. A
+"Reset it" link is added to sign-in.
+
+**Rationale:** email verification + password reset are baseline account-security
+controls; a flag that refused to boot was worse than a real flow. The design
+keeps the whole thing in the same deterministic, testable seam as the rest of
+auth ("AI suggests, code computes" untouched). TDD: register→verify happy path,
+bad/expired/used token rejected, enumeration-safe resend + forgot, reset changes
+the password and is single-use, weak-password policy enforced, and the login
+gate blocks-then-allows across the flag.
+**Ref:** SPRINT_6.md T5; `apps/api/alembic/versions/0031_email_tokens.py`,
+`app/models/email_token.py`, `app/email/{sender,tokens}.py`,
+`app/routes/auth.py`, `app/config.py`, `app/schemas/auth.py`,
+`tests/unit/test_email_verification.py`, `tests/unit/test_auth_reauth.py`,
+`apps/web/src/app/{verify-email,forgot-password,reset-password}/page.tsx`,
+`apps/web/src/components/auth/{VerifyEmailClient,ForgotPasswordForm,ResetPasswordForm}.tsx`,
+`apps/web/src/app/api/proxy/auth/{verify-email,resend-verification,forgot-password,reset-password}/route.ts`,
+`e2e/smoke/s21-email-verify.spec.ts`; DECISIONS D-020, D-027.

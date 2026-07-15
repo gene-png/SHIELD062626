@@ -203,9 +203,29 @@ route → engine.run_job(purpose, payload, client_id)
   rejected (`reason=refresh_reused`). Forced re-auth ceiling: `auth_time`
   claim, 24h default (`reason=reauth_required`). See D-020.
 - Account lockout (10 failures / 15 min) and per-IP + per-account rate limits
-  on login/register, checked before Argon2 work (T3).
-- MFA / email-verification flows do not exist; setting their flags true
-  refuses boot (fail loudly, D-020).
+  on login/register, checked before Argon2 work (T3). Second-factor failures
+  (MFA verify / verify-login) feed the SAME lockout counter as password
+  failures; counters reset only on a fully successful login (Sprint 6 T10).
+- **TOTP MFA (Sprint 6, D-027).** RFC 6238 implemented in `app/security/totp.py`
+  (stdlib HMAC, no OTP dependency). The per-user secret is Fernet-encrypted at
+  rest (key derived from `JWT_SIGNING_SECRET`); recovery codes are Argon2id-hashed
+  (`user_recovery_codes`, migration 0030). `/auth/mfa/enroll` returns an
+  otpauth:// provisioning URI; `/auth/mfa/verify` confirms a code, flips
+  `mfa_enrolled`, and issues one-time recovery codes. When an enrolled user
+  logs in, `/auth/login` returns a short-lived `mfa_pending` token INSTEAD of the
+  pair; `/auth/mfa/verify-login` exchanges it plus a current TOTP or single-use
+  recovery code for the real pair.
+- **Email verification + password reset (Sprint 6, D-028).** `app/email/`
+  (SMTP sender gated by `shield_email_delivery_enabled`, + SHA-256-hashed
+  single-use tokens in `email_tokens`, migration 0031). Register mints a
+  verification token; `/auth/verify-email`, `/auth/resend-verification`,
+  `/auth/forgot-password`, `/auth/reset-password` complete the flows. Tokens are
+  single-use (stamped only on success) with expiry; resend/forgot/reset return a
+  uniform message so no account enumeration. Dev delivery is MailHog.
+- The D-020 boot-refusals are GONE. `SHIELD_AUTH_REQUIRE_MFA` and
+  `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` now GATE ENFORCEMENT (an enrolled user is
+  always challenged; the flag decides what happens to a not-yet-enrolled /
+  unverified user), rather than refusing to boot for a flow that didn't exist.
 
 ## Failure model
 

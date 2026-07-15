@@ -161,12 +161,42 @@ def test_openai_request_shape_and_response_parsing(monkeypatch) -> None:
     assert captured["headers"]["Authorization"] == "Bearer sk-test"
     body = captured["json"]
     assert body["model"] == "gpt-4o-mini"
+    # gpt-4o is a legacy chat model — it still takes the classic max_tokens key.
     assert body["max_tokens"] >= 1
+    assert "max_completion_tokens" not in body
     blob = json.dumps(body["messages"])
     assert "Draft the summary." in blob
     assert "framework" in blob and "csf" in blob
     # Internal control keys are stripped before egress — never sent to the model.
     assert "__purpose__" not in blob
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "model",
+    ["o1", "o1-mini", "o1-preview", "o3", "o3-mini", "o4-mini", "gpt-5", "gpt-5-mini"],
+)
+def test_openai_reasoning_models_use_max_completion_tokens(monkeypatch, model) -> None:
+    # Reasoning / `responses` families (o-series, gpt-5) REJECT the legacy
+    # max_tokens key with a 400; they require max_completion_tokens (D-024/T6).
+    captured = _install_fake_httpx(
+        monkeypatch,
+        _FakeResponse(
+            200,
+            {
+                "choices": [{"message": {"content": "reasoned draft"}}],
+                "usage": {"prompt_tokens": 11, "completion_tokens": 3},
+            },
+        ),
+    )
+    provider = OpenAIProvider(model=model, api_key="sk-test")
+    resp = provider.complete("Draft the summary.", {"framework": "csf"})
+
+    assert resp.content == "reasoned draft"
+    body = captured["json"]
+    assert body["model"] == model
+    assert body["max_completion_tokens"] >= 1
+    assert "max_tokens" not in body
 
 
 @pytest.mark.unit

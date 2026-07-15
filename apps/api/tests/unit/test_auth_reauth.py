@@ -151,18 +151,33 @@ def test_reused_old_refresh_token_rejected(app_client: TestClient) -> None:
 
 
 @pytest.mark.unit
-def test_startup_raises_when_require_mfa_true() -> None:
+def test_startup_no_longer_refuses_when_require_mfa_true() -> None:
+    # Sprint 6 T4 / D-027: the TOTP enroll/verify/login-challenge flow now
+    # exists, so SHIELD_AUTH_REQUIRE_MFA GATES enforcement in routes/auth.py
+    # rather than refusing to boot. Booting with the flag on must NOT raise.
     from app.config import Settings
 
     settings = Settings(shield_auth_require_mfa=True)
-    with pytest.raises(RuntimeError, match="SHIELD_AUTH_REQUIRE_MFA"):
-        settings.assert_safe_for_runtime()
+    settings.assert_safe_for_runtime()  # does not raise
 
 
 @pytest.mark.unit
-def test_startup_raises_when_require_email_verify_true() -> None:
+def test_startup_no_longer_refuses_when_require_email_verify_true() -> None:
+    # Sprint 6 T5 / D-028: the email-verification flow now exists, so
+    # SHIELD_AUTH_REQUIRE_EMAIL_VERIFY GATES login enforcement in routes/auth.py
+    # rather than refusing to boot. Booting with the flag on must NOT raise.
     from app.config import Settings
 
     settings = Settings(shield_auth_require_email_verify=True)
-    with pytest.raises(RuntimeError, match="SHIELD_AUTH_REQUIRE_EMAIL_VERIFY"):
+    settings.assert_safe_for_runtime()  # does not raise
+
+
+@pytest.mark.unit
+def test_startup_raises_when_email_delivery_enabled_without_host() -> None:
+    # D-028: enabling delivery without an SMTP host would silently drop every
+    # verification / reset email — refuse to boot rather than swallow it.
+    from app.config import Settings
+
+    settings = Settings(shield_email_delivery_enabled=True, smtp_host="")
+    with pytest.raises(RuntimeError, match="SMTP_HOST"):
         settings.assert_safe_for_runtime()

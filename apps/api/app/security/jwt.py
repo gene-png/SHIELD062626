@@ -30,7 +30,11 @@ from app.config import get_settings
 
 ISSUER = "shield-api"
 ALGORITHM = "HS256"
-TokenType = Literal["access", "refresh"]
+# "mfa_pending" is a short-lived token issued after the password factor when a
+# user has MFA enrolled; it authorizes ONLY POST /auth/mfa/verify-login, which
+# exchanges it for the full access+refresh pair (Sprint 6 T4, D-027).
+TokenType = Literal["access", "refresh", "mfa_pending"]
+_VALID_TOKEN_TYPES = ("access", "refresh", "mfa_pending")
 
 
 class TokenError(ValueError):
@@ -53,9 +57,13 @@ class TokenPayload:
 
 def _ttl_for(typ: TokenType) -> timedelta:
     s = get_settings()
-    return timedelta(
-        seconds=s.jwt_access_ttl_seconds if typ == "access" else s.jwt_refresh_ttl_seconds
-    )
+    if typ == "access":
+        seconds = s.jwt_access_ttl_seconds
+    elif typ == "mfa_pending":
+        seconds = s.jwt_mfa_pending_ttl_seconds
+    else:
+        seconds = s.jwt_refresh_ttl_seconds
+    return timedelta(seconds=seconds)
 
 
 def _now() -> datetime:
@@ -126,7 +134,7 @@ def verify_token(token: str, *, expected_type: TokenType | None = None) -> Token
     typ = claims.get("typ")
     if expected_type is not None and typ != expected_type:
         raise TokenError(f"Token type mismatch: expected {expected_type}, got {typ}")
-    if typ not in ("access", "refresh"):
+    if typ not in _VALID_TOKEN_TYPES:
         raise TokenError(f"Unknown token type: {typ!r}")
 
     try:

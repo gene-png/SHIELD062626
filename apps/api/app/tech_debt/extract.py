@@ -86,19 +86,12 @@ class ExtractionResult:
 
 
 def _load_artifact_bytes(storage: StorageBackend, artifact: Artifact) -> bytes:
-    """LocalFilesystemStorage exposes file paths; production S3 needs a
-    `get_object` call. For v1, only the local backend is hit synchronously
-    here - the S3 path is reached at deliverable-render time."""
-    if hasattr(storage, "_path_for"):
-        return storage._path_for(artifact.file_storage_key).read_bytes()  # type: ignore[attr-defined]
-    # Fall back to the signed URL + a plain GET when the backend doesn't
-    # expose a local path. (Tests always hit LocalFilesystemStorage so this
-    # branch is exercised only when wired to S3 in Phase 6.)
-    import urllib.request
+    """Read the raw artifact bytes through the storage protocol.
 
-    url = storage.signed_url(artifact.file_storage_key, ttl_seconds=120)
-    with urllib.request.urlopen(url) as resp:  # noqa: S310 - URL produced by our own StorageBackend
-        return resp.read()
+    Uses the backend-agnostic `get()` so extraction works identically against
+    the local FS (tests, keyless dev) and MinIO/S3 (compose, prod). Raises
+    FileNotFoundError if the object is missing (fail loudly)."""
+    return storage.get(artifact.file_storage_key)
 
 
 def _parse_response(content: str) -> list[ExtractedCapability]:

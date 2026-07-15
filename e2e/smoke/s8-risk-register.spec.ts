@@ -66,6 +66,88 @@ async function setActiveClient(page: Page, clientId: string): Promise<void> {
   expect(res.ok()).toBeTruthy();
 }
 
+test("seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)", async ({
+  page,
+}) => {
+  test.slow();
+  // Sprint 6 T8: the demo seed now synthesizes a Risk Register for Atlas (4
+  // services + a register, all released + downloadable) so the demo journey is
+  // coherent out of the box. This is READ-ONLY (no generate/regenerate) so it
+  // never perturbs the shared register version the other tests delta-assert.
+  await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const atlasClientIdValue = await atlasClientId(page);
+  await setActiveClient(page, atlasClientIdValue);
+
+  await page.goto("/admin/risk-register");
+  await expect(
+    page.getByRole("heading", { name: "Risk Register", exact: true }),
+  ).toBeVisible({ timeout: 60000 });
+
+  // A register already exists (the seed's contribution — before T8 a fresh seed
+  // had none until a test generated one).
+  const latest = await page.request.get(
+    `/api/proxy/risk/clients/${atlasClientIdValue}/register/latest`,
+  );
+  expect(latest.ok(), "seeded register exists on latest").toBeTruthy();
+  const register = (await latest.json()) as RiskRegisterResponse;
+  expect(register.entries.length).toBeGreaterThan(0);
+
+  // Tier is ALWAYS code-derived from likelihood x impact (the seed runs the same
+  // engine, never hard-coded tiers).
+  for (const e of register.entries) {
+    if (e.likelihood && e.impact) {
+      expect(e.tier, `${e.likelihood} x ${e.impact}`).toBe(
+        tierFor(e.likelihood, e.impact),
+      );
+    }
+  }
+
+  // The register's exports (XLSX/PDF/Word) are present and download (200 with a
+  // §15.5 filename) — the "downloadable reports" half of the demo story.
+  const exports: Array<{
+    id: string | null;
+    filename: string | null;
+    contentType: string;
+    ext: string;
+  }> = [
+    {
+      id: register.xlsx_artifact_id,
+      filename: register.xlsx_filename,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ext: "xlsx",
+    },
+    {
+      id: register.pdf_artifact_id,
+      filename: register.pdf_filename,
+      contentType: "application/pdf",
+      ext: "pdf",
+    },
+    {
+      id: register.docx_artifact_id,
+      filename: register.docx_filename,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ext: "docx",
+    },
+  ];
+  for (const dl of exports) {
+    expect(dl.id, `${dl.ext} artifact id`).toBeTruthy();
+    expect(dl.filename ?? "", `${dl.ext} §15.5 name`).toMatch(
+      new RegExp(`^[A-Za-z0-9_]+_Risk_Register\\d{6}(_v\\d+)?\\.${dl.ext}$`),
+    );
+    const res = await page.request.get(
+      `/api/proxy/artifacts/${dl.id}/download`,
+    );
+    expect(res.status(), `${dl.ext} download status`).toBe(200);
+    expect(res.headers()["content-type"], `${dl.ext} content-type`).toContain(
+      dl.contentType,
+    );
+    const body = await res.body();
+    expect(body.length, `${dl.ext} byte size`).toBeGreaterThan(0);
+  }
+});
+
 test("register is locked with only ATT&CK and unlocks once a ZT assessment exists", async ({
   page,
 }) => {

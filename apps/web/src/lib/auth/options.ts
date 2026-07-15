@@ -15,14 +15,33 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
 
 interface LoginResponse {
+  access_token: string | null;
+  refresh_token: string | null;
+  access_expires_at: string | null;
+  refresh_expires_at: string | null;
+  // MFA challenge branch (Sprint 6 T4, D-027). When the user has TOTP MFA
+  // enrolled, /auth/login returns mfa_required=true + a short-lived pending
+  // token instead of the pair; the pair arrives from /auth/mfa/verify-login.
+  mfa_required?: boolean;
+  mfa_pending_token?: string | null;
+}
+
+/**
+ * Thrown out of `authorize` to tell the sign-in form that the password was
+ * correct but a TOTP code is still required. NextAuth surfaces the message as
+ * `result.error`, which the form matches to reveal the code field.
+ */
+const MFA_REQUIRED_ERROR = "mfa_required";
+
+/** Mirrors the backend TokenPairResponse returned by POST /auth/refresh, which
+ * always yields a full (non-null) pair — unlike /auth/login, which can return
+ * an MFA challenge instead. */
+interface RefreshResponse {
   access_token: string;
   refresh_token: string;
   access_expires_at: string;
   refresh_expires_at: string;
 }
-
-/** Mirrors the backend TokenPairResponse returned by POST /auth/refresh. */
-type RefreshResponse = LoginResponse;
 
 /** Refresh this many ms early so an in-flight proxy call never races expiry. */
 const REFRESH_SKEW_MS = 30_000;
@@ -96,16 +115,40 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        // Optional second factor. Absent on the first submit; the form re-submits
+        // with it after we signal MFA_REQUIRED.
+        totp: { label: "Authenticator code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
         try {
-          const tokens = await apiFetch<LoginResponse>("/auth/login", {
+          const login = await apiFetch<LoginResponse>("/auth/login", {
             method: "POST",
             body: { email: credentials.email, password: credentials.password },
           });
+
+          let tokens: LoginResponse = login;
+          if (login.mfa_required) {
+            // Password was correct but a second factor is needed. Without a code
+            // yet, tell the form to prompt for one. With a code, exchange the
+            // pending token for the real pair.
+            if (!credentials.totp) {
+              throw new Error(MFA_REQUIRED_ERROR);
+            }
+            tokens = await apiFetch<LoginResponse>("/auth/mfa/verify-login", {
+              method: "POST",
+              body: {
+                mfa_pending_token: login.mfa_pending_token,
+                code: credentials.totp,
+              },
+            });
+          }
+
+          if (!tokens.access_token || !tokens.refresh_token) {
+            return null;
+          }
           const me = await apiFetch<MeResponse>("/auth/me", {
             bearer: tokens.access_token,
           });
@@ -116,14 +159,19 @@ export const authOptions: NextAuthOptions = {
             role: me.role,
             accessToken: tokens.access_token,
             refreshToken: tokens.refresh_token,
-            accessExpiresAt: tokens.access_expires_at,
+            accessExpiresAt: tokens.access_expires_at ?? undefined,
           };
           return user;
         } catch (err) {
+          if (err instanceof Error && err.message === MFA_REQUIRED_ERROR) {
+            // Re-throw so NextAuth surfaces it as result.error to the form.
+            throw err;
+          }
           if (
             err instanceof ApiError &&
             (err.status === 401 || err.status === 423)
           ) {
+            // Wrong password / locked / wrong-or-expired MFA code → generic.
             return null;
           }
           throw err;

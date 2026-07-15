@@ -19,6 +19,12 @@ dependencies = [
     "httpx>=0.27",
     "structlog>=24.4",
     "boto3>=1.35",
+    # Anthropic Claude SDK — the live-AI egress path (app/ai/llm.py
+    # AnthropicProvider lazy-imports `from anthropic import Anthropic`). A real
+    # runtime dependency as of Sprint 6 (D-026); the 2026-07-12 smoke proved the
+    # redaction/llm_calls contract against a live claude-sonnet-5 call. The
+    # openai/gemini adapters are thin httpx clients and need no SDK.
+    "anthropic>=0.40,<1",
     # Deliverable rendering (app/*/exporters.py): PDF via reportlab, XLSX via
     # openpyxl. Imported lazily inside the finalize endpoints, so a missing
     # declaration only surfaces as a 500 when a deliverable is rendered.
@@ -66,6 +72,7 @@ testpaths = ["tests"]
 markers = [
     "unit: fast in-process tests",
     "integration: tests that hit a real database",
+    "live: opt-in tests that make a REAL provider call — EXCLUDED from the default '-m unit' gate and from CI (which runs 'pytest -m unit tests/unit'); skipped unless SHIELD_LLM_MODE=live and a provider key are present (Sprint 6 T1 / D-026)",
 ]
 asyncio_mode = "auto"
 addopts = "-ra -q"

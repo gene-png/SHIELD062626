@@ -139,13 +139,46 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `anthropic` / `openai` / `gemini` via `SHIELD_LLM_PROVIDER` (D-024). The egress
 > contract is identical for all three — redaction and the `llm_calls` audit row
 > run above the provider seam — so this check proves the *selected* provider,
-> whichever it is. Left **unchecked on purpose**: it needs a real API key on
-> David's machine; no committed spec can prove it, and the fixture-mode suite
-> (D-017) does not exercise any live provider path.
+> whichever it is.
+>
+> **Now codified (Sprint 6 T1 / D-026), still key-gated.** The 2026-07-12 manual
+> smoke first proved the Anthropic path (`claude-sonnet-5`: real suggestions,
+> redaction stripped `{client_org: 2, name: 2, email: 2}`, a correct `llm_calls`
+> row, no PII). That smoke is now a **committed opt-in spec**
+> (`apps/api/tests/live/test_live_ai.py`, marked `@pytest.mark.live`) plus a
+> one-command script (`apps/api/scripts/smoke_live_ai.py`). Both **self-skip
+> without a key**, so the boxes below stay **unchecked on purpose** — CI runs
+> `pytest -m unit tests/unit` and never collects the live spec, and no committed
+> spec runs a real call in a keyless pipeline. Check a box only after running the
+> opt-in path with a real key on your machine (procedure below).
 
-- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching `SHIELD_LLM_MODEL` (e.g. `claude-opus-4-7` / `gpt-4o-mini` / `gemini-1.5-pro`) in `.env`; restart `api`.
-- [ ] Run **one** Run-AI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
+- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model **refuses to start** (T0 preflight).
+- [ ] Run the one-command smoke: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api python -m scripts.smoke_live_ai` → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.)
+- [ ] Run **one** Run-AI through the UI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 - [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
+
+### 14.1 Live-AI parity sweep — all five purposes (Sprint 6 T7, opt-in)
+
+> **Extended from CSF-only to every AI purpose, still key-gated.** T1 codified
+> the `csf_score` path; T7 extends the SAME opt-in spec
+> (`apps/api/tests/live/test_live_ai.py`) to a parametrized sweep over all five
+> purposes — `csf_score`, `zt_score`, `mitre_map`, `risk_synthesize`,
+> `tech_debt_extract`. Every case plants the identical canonical PII (org/name/
+> email, twice each) so `redacted_counts` must equal `{email: 2, name: 2,
+> client_org: 2}` for every purpose, asserts a complete live `llm_calls` row and
+> no PII in the response, **and** asserts the response parses into the container
+> the route layer reads (`scores` / `capabilities` / `techniques` / `entries` /
+> `ExtractedCapability` rows) — the per-adapter parse check. Like §14 it is
+> `@pytest.mark.live` only, lives outside `tests/unit`, and **self-skips without
+> a key**, so CI (`pytest -m unit tests/unit`) never collects it and the boxes
+> below stay **unchecked on purpose** until run with a real key.
+
+- [ ] Run the full sweep with a key: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api pytest -m live tests/live -q` → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape).
+- [ ] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
+- [ ] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
+- [ ] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
+- [ ] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
+- [ ] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
 
 ## 15. Security headers
 
@@ -197,6 +230,86 @@ below are e2e-proven.
 - [x] **Correlation-id click-through** links the two tabs (clicking an AI call's correlation jumps to Activity filtered by that id). (s20-audit.spec.ts)
 - [x] The viewer is **read-only** — no mutation affordances on the append-only store. (s20-audit.spec.ts — only filter/apply/clear controls; construction-level per T7)
 - [ ] Every filter (target_type, actor, date range / client_id, provider, status) and cursor pagination; client-role 403. (`pytest -m unit` filter/pagination contract tests)
+
+## 22. Live-AI enablement — runnable path + boot preflight (Sprint 6, T0 / D-026)
+
+The live path stopped 500ing on first use: `anthropic` is a declared runtime dep,
+the stale `claude-opus-4-7` default is gone, and a misconfigured live deploy now
+**fails LOUDLY at boot** instead of mid-engagement. The live call itself stays
+key-gated (§14/§14.1); the boot-preflight logic is `pytest -m unit` proven.
+
+- [x] Live + missing provider key / unimportable SDK / placeholder model **refuses to boot** (loud `RuntimeError`); fixture mode is unaffected. (test_config.py — `test_live_mode_missing_anthropic_key_raises_at_boot`, `test_live_mode_missing_sdk_raises_at_boot`, `test_live_mode_placeholder_model_raises_at_boot`, `test_live_mode_openai_missing_key_raises_at_boot`, `test_live_mode_unimplemented_provider_raises_at_boot`, `test_fixture_mode_unaffected_by_llm_preflight`)
+- [x] A valid live config boots cleanly; the default model is **not** the stale `claude-opus-4-7` placeholder. (test_config.py — `test_live_mode_valid_anthropic_boots`, `test_default_model_is_not_the_stale_placeholder`)
+- [ ] A real end-to-end live Run-AI with a provider key. (key-gated — see §14; no committed spec runs a live call in a keyless pipeline)
+
+## 23. Full dependency-health readiness + operator view (Sprint 6, T3)
+
+`/ready` moved from a DB-only `SELECT 1` to a per-dependency matrix (db, redis,
+minio, keycloak-dormant, LLM readiness); `/health` liveness stays cheap. The
+`/admin/health` operator page renders the matrix.
+
+- [x] `/ready` reports a per-dependency matrix; `/health` liveness touches no dependency. (test_readiness.py — `test_ready_reports_full_dependency_matrix`, `test_health_liveness_does_not_touch_dependencies`)
+- [x] Any down **required** dependency flips `ready=false` and **names the offender**; keycloak is marked dormant/not-required and the fixture-mode LLM check is informational-only. (test_readiness.py — `test_ready_flips_false_and_names_offender_when_redis_down`, `test_ready_flips_false_when_minio_down`, `test_ready_marks_keycloak_dormant_and_not_required`, `test_ready_llm_fixture_mode_ok_and_informational`, `test_ready_stays_true_when_only_informational_check_off`)
+- [x] `/ready` redacts per-dependency `detail` for **anonymous** callers (LB/k8s still get statuses + offender names) and returns full operator detail to **authenticated** callers. (test_readiness.py — `test_ready_redacts_detail_for_anonymous_callers`, `test_ready_full_detail_for_authenticated_caller`; T10 hardening)
+- [x] The `/admin/health` operator view renders every dependency row, an all-green overall badge, and a **degraded** badge naming the offender when a required dep is down. (HealthMatrix.test.tsx — vitest, in the `pnpm -F web test` gate)
+- [ ] Eyeball `/admin/health` in a browser against the running stack (all-green when healthy). (human runtime check — no e2e spec drives the operator page)
+
+## 24. Real TOTP MFA (Sprint 6, T4 / D-027)
+
+Real RFC 6238 TOTP on the custom-JWT stack: enroll → confirm (recovery codes
+shown once) → login challenge. The D-020 boot-refusal on
+`SHIELD_AUTH_REQUIRE_MFA` is gone; the flag now GATES enforcement. Backend flow
+is `pytest -m unit` proven; the web enrollment/sign-in UI has no e2e yet.
+
+- [x] Enroll → verify → login-with-TOTP happy path returns the real access/refresh pair. (test_mfa_routes.py — `test_full_enroll_then_login_with_totp`)
+- [x] Wrong/expired TOTP rejected; verify-before-enroll and enroll-without-auth rejected; a pending token authorizes nothing but `verify-login` (an access token is refused as pending). (test_mfa_routes.py — `test_verify_rejects_wrong_code`, `test_verify_login_rejects_wrong_code`, `test_verify_before_enroll_is_rejected`, `test_enroll_requires_authentication`, `test_verify_login_rejects_access_token_as_pending`; test_totp.py — `test_verify_totp_accepts_current_and_rejects_wrong`, `test_verify_totp_tolerates_one_step_skew_but_not_two`)
+- [x] Recovery-code login works and is **single-use**. (test_mfa_routes.py — `test_recovery_code_login_is_single_use`)
+- [x] A non-enrolled user gets a normal session with no challenge (back-compat). (test_mfa_routes.py — `test_login_without_mfa_returns_pair_no_challenge`)
+- [x] Wrong second-factor guesses feed the **account-lockout** counter at both verify-login and enroll-confirm (T10 hardening). (test_mfa_routes.py — `test_verify_login_failures_feed_account_lockout`, `test_enroll_verify_failures_feed_account_lockout`)
+- [x] TOTP matches the RFC 6238 test vectors; the at-rest secret encrypt/decrypt round-trips and a bad ciphertext raises loudly. (test_totp.py — `test_totp_matches_rfc6238_vector`, `test_secret_encrypt_roundtrip`, `test_decrypt_bad_ciphertext_raises_loudly`, `test_recovery_codes_generate_and_hash_verify`, `test_provisioning_uri_shape`)
+- [ ] Eyeball the web sign-in MFA step + the account-page enrollment section (QR/secret, recovery-code display) in a browser. (human runtime check — no e2e spec drives the MFA UI)
+
+## 25. Email verification + password reset (Sprint 6, T5 / D-028)
+
+Real email verification + self-service reset over SMTP/MailHog. Tokens are
+hashed at rest, single-use, time-bounded; resend/forgot are enumeration-safe.
+Delivery is off by default, so the MailHog end-to-end e2e is **opt-in**; the
+token/flow logic is `pytest -m unit` proven with delivery stubbed.
+
+- [x] Registration issues a verification token + sends the email; `/auth/verify-email` stamps `email_verified_at`; a bad/expired/already-used token is rejected. (test_email_verification.py — `test_register_issues_verification_token`, `test_verify_email_sets_verified`, `test_verify_email_rejects_bad_token`, `test_verify_email_rejects_expired_token`, `test_verify_email_token_is_single_use`)
+- [x] `resend-verification` and `forgot-password` return a **uniform** enumeration-safe response whether or not the account exists. (test_email_verification.py — `test_resend_verification_is_uniform_and_reissues`, `test_forgot_password_is_enumeration_safe`)
+- [x] `/auth/reset-password` changes the password, is **single-use**, and enforces the weak-password policy. (test_email_verification.py — `test_reset_password_changes_password`, `test_reset_password_token_single_use`, `test_reset_password_rejects_bad_token`, `test_reset_password_enforces_policy`)
+- [x] With `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=on`, an unverified user is blocked at login (typed `email_not_verified`) then allowed once verified. (test_email_verification.py — `test_login_blocked_when_require_email_verify_and_unverified`)
+- [ ] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. **OPT-IN / CI-skipped:** self-skips unless the api is brought up with `SHIELD_EMAIL_DELIVERY_ENABLED=true`. (s21-email-verify.spec.ts — 2 tests, both `test.skip` without delivery enabled)
+- [ ] Eyeball the web verify-email / forgot-password / reset-password pages in a browser. (human runtime check — no non-opt-in e2e drives the pages)
+
+## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8)
+
+The seed now writes artifact bytes through `get_storage()` (the SAME backend the
+API reads — MinIO under compose) and releases its deliverables, so a clean seed
+produces a coherent, downloadable Atlas story (before T2 seeded downloads 410'd).
+
+- [x] The real seeded Atlas client (`client@atlas.example`) opens `/documents` and **downloads a seeded released deliverable → 200** with the §15.5 filename and non-zero bytes (410 before the T2 seed→storage fix). (s17-documents.spec.ts — "seeded Atlas client downloads a SEEDED released deliverable (T2 storage parity)")
+- [x] The seeded Atlas **Risk Register** renders on `/admin/risk-register` with **code-derived tiers** (every entry's tier equals `tierFor(likelihood, impact)` — never hard-coded) and its XLSX/PDF/Word exports download 200 with §15.5 filenames. (s8-risk-register.spec.ts — "seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)")
+- [ ] `scripts/demo-reset.(ps1|sh)`: `down -v` → `up -d --build` → wait `/ready` full-matrix → seed → print URLs+creds; after reset the demo journey renders on `/home` + `/documents` with downloadable reports. (manual runtime check — verified in T8; no automated spec drives the reset script)
+
+## 27. Hosted-demo compose (Sprint 6, T9)
+
+`docker-compose.demo.yml` is a thin override running web as a **production**
+Next standalone build (not `next dev`), fixture-by-default with live only when a
+key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave).
+
+- [ ] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (manual runtime check — verified end-to-end in T9; no automated spec drives the prod-image bring-up)
+
+## 28. Security hardening on the new auth surfaces (Sprint 6, T10)
+
+The T10 pass hardened the T4/T5 surfaces and ran the audit set. The two fixed
+findings are re-asserted by the specs above (§23 anonymous `/ready` redaction,
+§24 MFA lockout integration).
+
+- [x] MFA second-factor guesses feed the account-lockout counter; the counter resets ONLY on a fully successful login. (test_mfa_routes.py — see §24)
+- [x] `/ready` reduces per-dependency `detail` to a generic string for anonymous callers. (test_readiness.py — see §23)
+- [ ] Audit scans (bandit, `pnpm audit` root, `npm audit` e2e, pip-audit, gitleaks) clean or documented; no secret/key committed this sprint. (CI + manual — bandit exit 0, JS audit posture carried unchanged from Sprint 5 [0 high / 2 documented moderates], manual secret-diff scan clean; not a runtime checkbox)
 
 ---
 
