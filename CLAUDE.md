@@ -65,7 +65,16 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
   CI runs). Sprint 3 shipped 6 ruff errors CI caught because in-container runs
   used tool defaults; this closes that gap (`--no-cache`: `/.ruff_cache` is not
   writable in the container).
+- Web unit tests (vitest, loop gate since Sprint 5):
+  `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"`
+- Web lint (loop gate since mid-Sprint-6 — a latent react-hooks error slipped
+  the five-gate set and only surfaced in CI's `next build`):
+  `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"`
 - Dependency audits: `pnpm audit` at root, `npm audit` inside `e2e/`.
+- **Bandit is CI-only** (`bandit -q -c pyproject.toml -r apps/api/app`), not a
+  loop gate — and ruff's `# noqa: S1xx` does NOT suppress it. A string bandit
+  flags needs its own `# nosec BXXX` marker too (Sprint 6 shipped a red CI on
+  exactly this: a `"password_reset"` purpose label flagged as B105).
 - Seed: `docker compose exec -T api python scripts/seed_demo.py` (idempotent).
 
 ## Environment gotchas (learned the hard way)
@@ -91,8 +100,19 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
   consultant), `client@atlas.example` / `DemoPass!2026` (Atlas tenant).
   Spec-created users need unique timestamped emails.
 - LLM defaults to `fixture` mode: deterministic offline suggestions for all
-  five AI purposes (D-017). Live mode needs `ANTHROPIC_API_KEY` +
-  `SHIELD_LLM_MODE=live`.
+  five AI purposes (D-017). Live mode (D-024/D-026): `SHIELD_LLM_MODE=live` +
+  `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>` + that provider's key + a
+  valid `SHIELD_LLM_MODEL` — a misconfigured live boot fails LOUDLY at startup
+  (`live_llm_readiness()`), not on first Run-AI. Sprint 7 adds `vertex`
+  (ADC-based, no API key — D-029). Live tests are opt-in (`pytest -m live`,
+  self-skip keyless).
+- Real auth flows exist since Sprint 6 but enforcement is flag-gated, default
+  OFF: `SHIELD_AUTH_REQUIRE_MFA` (TOTP challenge, D-027) and
+  `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` (typed 403 on unverified login, D-028).
+  `SHIELD_EMAIL_DELIVERY_ENABLED` turns on real SMTP sending (MailHog in dev,
+  UI :8025); enabling it without an SMTP host refuses to boot. Flipping
+  REQUIRE_EMAIL_VERIFY breaks every e2e sign-in (seeded/spec users are
+  unverified) — enforcement is a deploy-time choice, not a dev default.
 
 ## How we collaborate (two developers + agents)
 

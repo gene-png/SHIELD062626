@@ -72,15 +72,27 @@ isolated re-run clears it. Full bring-up-from-scratch sequence: `e2e/README.md`.
 
 ## 4. The gate set (what must be green before any commit)
 
+Six gates (the same array the sprint-loop queue carries) plus e2e:
+
 ```bash
-# backend unit tests (in-container):
+# 1. backend unit tests (in-container):
 docker compose exec -T api pytest -m unit -q
-# web typecheck (in-container):
+# 2. web typecheck (in-container):
 docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
-# formatting (host; use the version pinned in pnpm-lock.yaml):
+# 3. formatting (host; use the version pinned in pnpm-lock.yaml):
 npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
+# 4. python lint/format (in-container, CI-parity — pins ruff==0.15.20 black==26.5.1):
+docker compose exec -T api sh -lc "cd /app && ruff check --no-cache . && black --check ."
+# 5. web unit tests (vitest, in-container):
+docker compose exec -T web sh -lc "cd /app && pnpm -F web test"
+# 6. web lint (in-container):
+docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"
 # full e2e (host): cd e2e && npx playwright test
 ```
+
+CI additionally runs **bandit** (`bandit -q -c pyproject.toml -r apps/api/app`)
+and **gitleaks** — bandit findings need `# nosec BXXX` (ruff's `noqa` does not
+suppress bandit).
 
 ## 5. Launching a sprint loop
 
@@ -90,19 +102,34 @@ agents per `.claude/commands/loop-sprint.md`). Each sprint ships a plan doc
 (`SPRINT_<n>.md`) and a committed staged queue
 (`.claude/sprint-queue.sprint-<n>.json`).
 
-1. Follow the sprint doc's launch checklist (e.g. `SPRINT_3.md`).
+**The staged, ready-to-launch sprint is `SPRINT_7.md`** (queue
+`.claude/sprint-queue.sprint-7.json`, branch `feat/gcp-vertex-sprint-7`,
+target v3.4.0): Vertex-AI-via-ADC provider, release notification email,
+dev MailHog delivery, reqSeq sweep, Auth.js v5.
+
+1. Follow the sprint doc's launch checklist (`SPRINT_7.md` → _Prerequisites_).
 2. Copy the staged queue to `.claude/sprint-queue.json` (gitignored — your
    machine-local runtime copy).
 3. **Edit your runtime copy**: set `working_dir` to your absolute repo path
    and `expected_gh_user` to your GitHub login. The loop halts on either
-   being wrong.
+   being wrong. Confirm the `gates` array's command strings match YOUR
+   OS/Docker/Node layout — the six gates themselves are the invariant.
 4. Create the sprint branch named in the queue, from `main`.
 5. In Claude Code, run `/loop-sprint-cron`. It fires every ~10 min, one task
    per fire, checkpoints (full suite + audit) every 4 done. Watch
-   `.claude/scheduler-debug.log`.
+   `.claude/scheduler-debug.log`. Known babysitting duty: dispatched agents
+   sometimes park on a background monitor mid-gate — nudge them to
+   foreground-poll (the orchestrator usually does this for you).
 6. The cron is session-scoped: if you close Claude Code, re-run
    `/loop-sprint-cron` to resume (queue state survives on disk; a `halt` in
    the queue explains any stop).
+
+**Sprint 7 specific:** the live-AI tasks (T1) authenticate to Google Vertex
+via **gcloud Application Default Credentials** — verify
+`gcloud auth application-default print-access-token` works on your box before
+launching (project `kentro-cloudmod-dev`, region `us-central1`). No API key
+exists or is needed. Without ADC the live tasks self-skip and the loop stays
+green — you just won't get the live validation payoff.
 
 ## 6. Collaboration rules (short version — full table in CLAUDE.md)
 
