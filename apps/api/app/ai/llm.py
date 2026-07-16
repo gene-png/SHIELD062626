@@ -148,7 +148,13 @@ class AnthropicProvider:
 
 
 _HTTP_TIMEOUT_SECONDS = 60.0
-_MAX_OUTPUT_TOKENS = 4096
+# gemini-2.5 "thinking" models spend part of this budget on hidden reasoning
+# tokens before emitting the visible answer, so a 4096 cap truncated the longer
+# csf_score / risk_synthesize drafts mid-JSON in the 2026-07-15 Vertex live
+# sweep. 8192 gives the structured drafts real headroom above the thinking
+# overhead; the finishReason guard in _parse_generate_content still FAILS LOUDLY
+# if a generation ever exceeds even this (never silently returns half a doc).
+_MAX_OUTPUT_TOKENS = 8192
 
 # OpenAI reasoning / `responses` model families (the o-series and gpt-5) REJECT
 # the legacy ``max_tokens`` Chat Completions key with an HTTP 400 and require
@@ -167,6 +173,69 @@ def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
     routing metadata) before serializing to a real provider. Those keys are for
     ``FixtureProvider`` dispatch only — never content the model should see."""
     return {k: v for k, v in payload.items() if not str(k).startswith("__")}
+
+
+# The Gemini API-key path (generativelanguage) and the Vertex ADC path
+# (aiplatform) speak the IDENTICAL generateContent request/response schema, so
+# the body-build and response-parse are factored here and shared by both
+# adapters (D-024 / D-029). Only the endpoint host and the auth mechanism differ.
+
+
+# gemini-2.5 model family enables "thinking" by default and, left unbounded,
+# consumes a run-to-run-variable slice of the output budget before the visible
+# answer — it truncated zt_score even at the raised 8192 cap in the 2026-07-15
+# Vertex sweep. Bounding thinkingBudget guarantees the structured draft always
+# has room. gemini-1.5 does NOT accept thinkingConfig (HTTP 400), so the field
+# is added ONLY for 2.5+ models; the API-key gemini-1.5 path stays untouched.
+_GEMINI_THINKING_RE = re.compile(r"gemini-2\.[5-9]", re.IGNORECASE)
+_THINKING_BUDGET_TOKENS = 2048
+
+
+def _generate_content_body(
+    prompt: str, payload: dict[str, Any], *, model: str | None = None
+) -> dict[str, Any]:
+    """Shape a redacted prompt + payload into a generateContent request body."""
+    generation_config: dict[str, Any] = {"maxOutputTokens": _MAX_OUTPUT_TOKENS}
+    if model is not None and _GEMINI_THINKING_RE.search(model):
+        generation_config["thinkingConfig"] = {"thinkingBudget": _THINKING_BUDGET_TOKENS}
+    return {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
+            }
+        ],
+        "generationConfig": generation_config,
+    }
+
+
+def _parse_generate_content(data: dict[str, Any]) -> LLMResponse:
+    """Parse a generateContent response body into text + token counts.
+
+    Guards the FAIL-LOUDLY contract: a truncated or otherwise non-STOP
+    generation (``finishReason`` = ``MAX_TOKENS``, ``SAFETY``, ``RECITATION`` …)
+    is raised here rather than returned as a half-formed answer. Otherwise the
+    truncated JSON draft would flow downstream and die as an opaque
+    ``JSONDecodeError`` in the engine's response parser, hiding the real cause
+    (the 2026-07-15 Vertex live sweep hit exactly this on csf/risk). An absent
+    ``finishReason`` (e.g. hand-built test fixtures) is treated as success.
+    """
+    candidate = data["candidates"][0]
+    finish_reason = candidate.get("finishReason")
+    if finish_reason is not None and finish_reason != "STOP":
+        raise RuntimeError(
+            f"generateContent did not finish cleanly (finishReason={finish_reason}). "
+            "The response is incomplete and was NOT parsed; if this is MAX_TOKENS, "
+            "raise maxOutputTokens for this purpose."
+        )
+    parts = candidate["content"]["parts"]
+    text = "".join(p.get("text", "") for p in parts)
+    usage = data.get("usageMetadata") or {}
+    return LLMResponse(
+        text,
+        usage.get("promptTokenCount"),
+        usage.get("candidatesTokenCount"),
+    )
 
 
 class OpenAIProvider:
@@ -244,15 +313,6 @@ class GeminiProvider:
 
     def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
         url = f"{self._BASE_URL}/{self.model}:generateContent"
-        body = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
-                }
-            ],
-            "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
-        }
         with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
             resp = client.post(
                 url,
@@ -260,18 +320,77 @@ class GeminiProvider:
                     "Content-Type": "application/json",
                     "x-goog-api-key": self._api_key,
                 },
-                json=body,
+                json=_generate_content_body(prompt, payload, model=self.model),
             )
         resp.raise_for_status()
-        data = resp.json()
-        parts = data["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts)
-        usage = data.get("usageMetadata") or {}
-        return LLMResponse(
-            text,
-            usage.get("promptTokenCount"),
-            usage.get("candidatesTokenCount"),
+        return _parse_generate_content(resp.json())
+
+
+class VertexProvider:
+    """Live Google Vertex AI provider via the regional generateContent REST API,
+    authenticated with Application Default Credentials — NO static API key
+    (D-029). ADC is inherited from the host gcloud config (bind-mounted into the
+    api container) or a service account; this is Dave's GCP posture from
+    kentro-cloud-modernization.
+
+    Same seam contract and generateContent schema as ``GeminiProvider`` — the
+    body-build/parse helpers are shared. The only differences: the regional
+    ``{region}-aiplatform.googleapis.com`` endpoint and an ``Authorization:
+    Bearer <ADC token>`` header instead of the ``x-goog-api-key`` header.
+
+    The bearer token rides the Authorization header, never the URL/query, so it
+    cannot leak into an ``HTTPStatusError`` message (which embeds only the
+    request URL) and thence into ``llm_calls.error_message`` or the logs — the
+    same discipline as the Gemini key-in-header lesson above.
+    """
+
+    name = "vertex"
+
+    def __init__(self, *, model: str, project: str, region: str) -> None:
+        if not project:
+            raise RuntimeError(
+                "GCP_PROJECT_ID is not set. Either set it in .env or switch "
+                "SHIELD_LLM_MODE to 'fixture'."
+            )
+        self.model = model
+        self._project = project
+        self._region = region
+        self._credentials: Any | None = None
+
+    def _bearer_token(self) -> str:
+        """Obtain (and lazily refresh) an ADC access token. Isolated so unit
+        tests can inject a canned token without touching real credentials."""
+        import google.auth
+        import google.auth.transport.requests
+
+        from app.config import _GCP_CLOUD_PLATFORM_SCOPE
+
+        if self._credentials is None:
+            credentials, _project = google.auth.default(scopes=[_GCP_CLOUD_PLATFORM_SCOPE])
+            self._credentials = credentials
+        credentials = self._credentials
+        if not credentials.valid:
+            credentials.refresh(google.auth.transport.requests.Request())
+        return credentials.token
+
+    def complete(self, prompt: str, payload: dict[str, Any]) -> LLMResponse:
+        url = (
+            f"https://{self._region}-aiplatform.googleapis.com/v1/projects/"
+            f"{self._project}/locations/{self._region}/publishers/google/models/"
+            f"{self.model}:generateContent"
         )
+        token = self._bearer_token()
+        with httpx.Client(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            resp = client.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+                json=_generate_content_body(prompt, payload, model=self.model),
+            )
+        resp.raise_for_status()
+        return _parse_generate_content(resp.json())
 
 
 def _build_provider(settings: Settings) -> LLMProvider:
@@ -300,11 +419,17 @@ def _build_provider(settings: Settings) -> LLMProvider:
             model=settings.shield_llm_model,
             api_key=settings.gemini_api_key,
         )
+    if settings.shield_llm_provider == "vertex":
+        return VertexProvider(
+            model=settings.shield_llm_model,
+            project=settings.gcp_project_id,
+            region=settings.gcp_region,
+        )
     # azure_openai / bedrock / local are valid config values but have no
     # adapter yet — fail loudly rather than silently degrade (FAIL LOUDLY).
     raise RuntimeError(
         f"LLM provider {settings.shield_llm_provider!r} is not implemented yet. "
-        "Set SHIELD_LLM_PROVIDER to anthropic, openai, or gemini, or switch "
+        "Set SHIELD_LLM_PROVIDER to anthropic, openai, gemini, or vertex, or switch "
         "SHIELD_LLM_MODE to 'fixture'."
     )
 

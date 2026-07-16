@@ -4,14 +4,13 @@
  * account page can render enrollment details. Requires an authenticated session.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function POST(): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const bearer = session?.accessToken;
   if (!bearer) {
     return NextResponse.json(

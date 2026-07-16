@@ -63,32 +63,54 @@ export function TechDebtWorkspace({
   const [approving, setApproving] = React.useState(false);
   const [docsReloadKey, setDocsReloadKey] = React.useState(0);
 
+  // Monotonic request sequences guard two independently-clobberable states.
+  // `listSeq`: only the newest list-producing operation may write `list` — a
+  // fresh extraction / inline edit / approve that fires while the mount load is
+  // in flight bumps it, so the late fetchLatestList is discarded. `overlapSeq`:
+  // refreshOverlap fires from mount AND from every inline edit, so overlapping
+  // fetches can resolve out of order; only the newest may write overlap/plan
+  // (the T8 stale-fetch race).
+  const listSeq = React.useRef(0);
+  const overlapSeq = React.useRef(0);
+
   const refreshOverlap = React.useCallback(async () => {
+    const seq = ++overlapSeq.current;
     setOverlapLoading(true);
     try {
       const next = await fetchOverlapAnalysis(serviceId);
-      setOverlap(next);
-      setOverlapError(null);
+      if (seq === overlapSeq.current) {
+        setOverlap(next);
+        setOverlapError(null);
+      }
     } catch (err) {
-      setOverlapError(
-        err instanceof Error ? err.message : "Failed to load overlap.",
-      );
+      if (seq === overlapSeq.current) {
+        setOverlapError(
+          err instanceof Error ? err.message : "Failed to load overlap.",
+        );
+      }
     } finally {
-      setOverlapLoading(false);
+      if (seq === overlapSeq.current) setOverlapLoading(false);
     }
     try {
       const nextPlan = await fetchConsolidationPlan(serviceId);
-      setPlan(nextPlan);
+      if (seq === overlapSeq.current) setPlan(nextPlan);
     } catch {
       // non-blocking; dashboard already shows the overlap.
     }
   }, [serviceId]);
 
   const refresh = React.useCallback(async () => {
+    const seq = ++listSeq.current;
     try {
       const next = await fetchLatestList(serviceId);
-      setList(next);
-      setLoadError(null);
+      if (seq === listSeq.current) {
+        setList(next);
+        setLoadError(null);
+      } else {
+        console.debug(
+          `[TechDebtWorkspace] discarded stale list load (seq ${seq}, latest ${listSeq.current})`,
+        );
+      }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load list.");
     }
@@ -110,6 +132,7 @@ export function TechDebtWorkspace({
   async function runExtraction(artifactId: string): Promise<void> {
     setExtracting(true);
     setExtractError(null);
+    listSeq.current += 1;
     try {
       const next = await extractCapabilities(serviceId, artifactId);
       setList(next);
@@ -134,6 +157,8 @@ export function TechDebtWorkspace({
   }
 
   function onItemUpdate(next: CapabilityItem): void {
+    // Optimistic per-row merge; the bump invalidates any in-flight mount load.
+    listSeq.current += 1;
     setList((curr) => {
       if (!curr) return curr;
       return {
@@ -148,6 +173,7 @@ export function TechDebtWorkspace({
   async function onApprove(): Promise<void> {
     if (!list) return;
     setApproving(true);
+    listSeq.current += 1;
     try {
       const next = await approveCapabilityList(list.id);
       setList(next);

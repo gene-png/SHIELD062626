@@ -3,11 +3,10 @@
  * csf/_proxy.ts and zt/_proxy.ts.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 export async function proxyJson<T = unknown>(
   upstream: string,
@@ -15,7 +14,7 @@ export async function proxyJson<T = unknown>(
     method: "GET",
   },
 ): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const token = session?.accessToken;
   if (!token) {
     return NextResponse.json(

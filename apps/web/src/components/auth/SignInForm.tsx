@@ -29,8 +29,11 @@ export function SignInForm(): JSX.Element {
         totp: totp || undefined,
         redirect: false,
       });
-      if (result?.error === "mfa_required") {
-        // Correct password; now collect the authenticator code.
+      if (result?.code === "mfa_required") {
+        // Correct password; now collect the authenticator code. In v5 every
+        // credentials failure surfaces as error "CredentialsSignin"; the
+        // distinguishing signal for the MFA branch is the custom `code`
+        // (from the CredentialsSignin subclass thrown in authorize).
         setMfaRequired(true);
         setError(null);
         setPending(false);

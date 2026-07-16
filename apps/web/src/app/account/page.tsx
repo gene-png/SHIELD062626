@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
 
@@ -9,7 +8,7 @@ import { PublicHeader } from "@/components/site/PublicHeader";
 import { SignOutButton } from "@/components/site/SignOutButton";
 import { SkipToContent } from "@/components/site/SkipToContent";
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 import type { JSX } from "react";
 
@@ -46,7 +45,7 @@ function Row({ label, value }: { label: string; value: string }): JSX.Element {
 }
 
 export default async function AccountPage(): Promise<JSX.Element> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const role = session?.role ?? "—";
   const mfaEnrolled = await fetchMfaEnrolled(session?.accessToken);
   return (

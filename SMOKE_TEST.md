@@ -151,9 +151,18 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `pytest -m unit tests/unit` and never collects the live spec, and no committed
 > spec runs a real call in a keyless pipeline. Check a box only after running the
 > opt-in path with a real key on your machine (procedure below).
+>
+> **✅ GCP-validated 2026-07-15 — `vertex` / `gemini-2.5-flash` (D-029).** Dave's
+> box, ADC-only (no static key): the Vertex provider path was exercised live
+> through the redaction seam. The one-command smoke passed (real `csf_score`:
+> 364 in / 307 out tokens, `redacted_counts == {email:2, name:2, client_org:2}`,
+> `llm_calls` row `provider=vertex`/`mode=live`/`status=completed`, no PII). Boxes
+> proven by that opt-in run are checked below; they remain **CI-skipped keyless**
+> (the live spec is never collected by `pytest -m unit tests/unit`). Two adapter
+> defects were found and fixed during this sweep (see §14.1).
 
-- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model **refuses to start** (T0 preflight).
-- [ ] Run the one-command smoke: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api python -m scripts.smoke_live_ai` → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.)
+- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini|vertex>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`; `vertex` uses ADC, no key) and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` / `gemini-2.5-flash` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model / (vertex) unresolvable ADC **refuses to start** (T0/D-029 preflight). *(vertex/gemini-2.5-flash boot verified 2026-07-15.)*
+- [x] Run the one-command smoke: `docker compose exec -T api python -m scripts.smoke_live_ai` (with a live `.env`) → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.) *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — passed.)*
 - [ ] Run **one** Run-AI through the UI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 - [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
 
@@ -172,13 +181,28 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `@pytest.mark.live` only, lives outside `tests/unit`, and **self-skips without
 > a key**, so CI (`pytest -m unit tests/unit`) never collects it and the boxes
 > below stay **unchecked on purpose** until run with a real key.
+>
+> **✅ GCP-validated 2026-07-15 — `vertex` / `gemini-2.5-flash` (D-029).** All
+> five `test_live_purpose_contract[*]` cases passed live against Vertex (opt-in,
+> CI-skipped keyless). The sweep surfaced and fixed **two real adapter defects**
+> in the shared generateContent path that no keyless unit test had exercised:
+> **(1)** `google-auth` needs its `[requests]` extra for the token-refresh
+> transport — the first live token refresh raised `ImportError` without it;
+> **(2)** gemini-2.5 "thinking" spent an unbounded, run-variable slice of the
+> output budget and truncated the longer `csf`/`risk`/`zt` drafts mid-JSON, which
+> `_parse_generate_content` silently returned as "completed" and only died later
+> as an opaque `JSONDecodeError`. Fix: a **loud `finishReason` guard** (a non-STOP
+> reason now raises at the parse seam, failing the `llm_call` cleanly), the shared
+> output cap raised 4096→8192, and a **bounded `thinkingConfig.thinkingBudget`**
+> (2048) added for 2.5+ models only (gemini-1.5 API-key path untouched). All three
+> are `pytest -m unit` locked in `test_llm_providers.py`.
 
-- [ ] Run the full sweep with a key: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api pytest -m live tests/live -q` → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape).
-- [ ] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
-- [ ] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
-- [ ] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
-- [ ] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
-- [ ] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
+- [x] Run the full sweep: `docker compose exec -T api pytest -m live tests/live -q` (with a live `.env`) → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape). *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — 5 passed.)*
+- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
+- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
+- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
+- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
+- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
 
 ## 15. Security headers
 
@@ -280,7 +304,7 @@ token/flow logic is `pytest -m unit` proven with delivery stubbed.
 - [x] `resend-verification` and `forgot-password` return a **uniform** enumeration-safe response whether or not the account exists. (test_email_verification.py — `test_resend_verification_is_uniform_and_reissues`, `test_forgot_password_is_enumeration_safe`)
 - [x] `/auth/reset-password` changes the password, is **single-use**, and enforces the weak-password policy. (test_email_verification.py — `test_reset_password_changes_password`, `test_reset_password_token_single_use`, `test_reset_password_rejects_bad_token`, `test_reset_password_enforces_policy`)
 - [x] With `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=on`, an unverified user is blocked at login (typed `email_not_verified`) then allowed once verified. (test_email_verification.py — `test_login_blocked_when_require_email_verify_and_unverified`)
-- [ ] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. **OPT-IN / CI-skipped:** self-skips unless the api is brought up with `SHIELD_EMAIL_DELIVERY_ENABLED=true`. (s21-email-verify.spec.ts — 2 tests, both `test.skip` without delivery enabled)
+- [x] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. (s21-email-verify.spec.ts — 2 tests) **Now RUNS (not skips) in dev + CI as of Sprint 7 T3 (`d95f5c7`):** `SHIELD_EMAIL_DELIVERY_ENABLED` defaults to `true` in `docker-compose.yml` (SMTP → the `mailhog` service), so both tests execute the real token flow through the wire on every run; T3's full-suite pass confirmed both green. (`SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` deliberately stays `false` — flipping it breaks every e2e sign-in.)
 - [ ] Eyeball the web verify-email / forgot-password / reset-password pages in a browser. (human runtime check — no non-opt-in e2e drives the pages)
 
 ## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8)
@@ -310,6 +334,21 @@ findings are re-asserted by the specs above (§23 anonymous `/ready` redaction,
 - [x] MFA second-factor guesses feed the account-lockout counter; the counter resets ONLY on a fully successful login. (test_mfa_routes.py — see §24)
 - [x] `/ready` reduces per-dependency `detail` to a generic string for anonymous callers. (test_readiness.py — see §23)
 - [ ] Audit scans (bandit, `pnpm audit` root, `npm audit` e2e, pip-audit, gitleaks) clean or documented; no secret/key committed this sprint. (CI + manual — bandit exit 0, JS audit posture carried unchanged from Sprint 5 [0 high / 2 documented moderates], manual secret-diff scan clean; not a runtime checkbox)
+
+## 29. Client release notification email (Sprint 7, T2 / D-030)
+
+On deliverable release the shared `release_deliverable` helper (behind all four
+services + the risk register) emails the tenant's active client-role users when
+`SHIELD_EMAIL_DELIVERY_ENABLED` is on — best-effort, with the release as the
+source of truth. The logic is `pytest -m unit` proven with the sender stubbed;
+there is **no** e2e that eyeballs the notification in MailHog (the T2 commit added
+only unit coverage), so that stays a human/opt-in check.
+
+- [x] Release with delivery on emails **exactly** the tenant's active client-role users; cross-tenant users and admins are never notified. (test_release_notification.py — `test_release_notifies_active_client_users_of_tenant_only`)
+- [x] The notification body carries the **service**, deliverable **title/version**, and the `{WEB_BASE_URL}/documents` link. (test_release_notification.py — `test_notification_body_carries_service_title_version_and_documents_link`)
+- [x] Delivery **off** → the release proceeds exactly as v3.3.0 with a loud skip log; **nothing** is sent. (test_release_notification.py — `test_delivery_off_sends_nothing_but_still_releases`)
+- [x] An SMTP failure is logged **loudly** and the release is **not** rolled back (release is the source of truth). (test_release_notification.py — `test_smtp_failure_does_not_roll_back_release`)
+- [ ] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`). (no committed e2e drives this; human/opt-in check — the four unit tests above prove recipient selection, body, and best-effort semantics with the sender stubbed)
 
 ---
 

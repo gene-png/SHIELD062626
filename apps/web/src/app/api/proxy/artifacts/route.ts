@@ -6,16 +6,15 @@
  */
 
 import { cookies } from "next/headers";
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ACTIVE_CLIENT_COOKIE } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 const BASE_URL = process.env.API_BASE_URL ?? "http://api:8000";
 
 async function bearerOrUnauthorized(): Promise<string | NextResponse> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const token = session?.accessToken;
   if (!token) {
     return NextResponse.json(

@@ -1,7 +1,6 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
 
@@ -10,7 +9,7 @@ export default async function IntakeLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     redirect("/sign-in?callbackUrl=/intake");
   }

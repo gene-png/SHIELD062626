@@ -565,3 +565,101 @@ gate blocks-then-allows across the flag.
 `apps/web/src/components/auth/{VerifyEmailClient,ForgotPasswordForm,ResetPasswordForm}.tsx`,
 `apps/web/src/app/api/proxy/auth/{verify-email,resend-verification,forgot-password,reset-password}/route.ts`,
 `e2e/smoke/s21-email-verify.spec.ts`; DECISIONS D-020, D-027.
+
+---
+
+## D-029 — Vertex AI via Application Default Credentials as the GCP live path
+
+**2026-07-15 · ai/architecture**
+Add a live `VertexProvider` beside `GeminiProvider` in `app/ai/llm.py`, selected
+by `SHIELD_LLM_PROVIDER=vertex`. It calls the regional Vertex endpoint
+`https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent`
+and authenticates with **Application Default Credentials — NO static API key**.
+New settings `GCP_PROJECT_ID` (empty default) and `GCP_REGION`
+(`us-central1`); `google-auth>=2,<3` is a real api dependency (rebuild the
+image). ADC is obtained via
+`google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])`,
+refreshed lazily, and sent as an `Authorization: Bearer` header. The bearer
+token NEVER appears in logs, `llm_calls.error_message`, or exception text — it
+rides the header, not the URL, so an `HTTPStatusError` (which embeds only the
+request URL) cannot leak it (a unit test locks this; mirrors the Gemini
+key-in-header lesson). `gemini` (API key, `generativelanguage`) and `vertex`
+(ADC, `aiplatform`) speak the identical `generateContent` schema, so the
+body-build/parse are factored into shared helpers and the two remain **distinct
+providers** for two distinct GCP postures.
+
+**Boot preflight (D-026 parity).** `live_llm_readiness()` for `vertex` requires
+`GCP_PROJECT_ID` set, `google-auth` importable, AND ADC resolvable
+(`google.auth.default()` succeeds) — a loud `RuntimeError` at boot otherwise, not
+a 500 on the first Run-AI. `/admin/ai-status` and the `/ready` LLM check inherit
+it. Fixture mode is unaffected.
+
+**Compose / credentials.** The api service bind-mounts the host gcloud config
+dir **read-only** (`GCLOUD_CONFIG_DIR`, default `$HOME/.config/gcloud`; this
+Windows box sets `%APPDATA%\gcloud` in the gitignored `.env`) and
+`GOOGLE_APPLICATION_CREDENTIALS` points at the ADC file inside it. Credentials
+are never copied into the repo or the image — the read-only mount is the only
+path in.
+
+**Rationale:** Dave's GCP posture (inherited from kentro-cloud-modernization) is
+Vertex via ADC with no `AIza…` keys committed anywhere. Feasibility was proven
+2026-07-13 — a direct ADC-authenticated `generateContent` call to
+`us-central1-aiplatform` / `kentro-cloudmod-dev` / `gemini-2.5-flash` returned
+HTTP 200. The existing `gemini` adapter only speaks the API-key
+`generativelanguage` path, so it cannot use this machine's credentials; Vertex is
+the FedRAMP-relevant path (the model runs inside the GCP authorization
+boundary). Everything above the seam — redaction, the `llm_calls` audit row,
+"AI suggests, code computes" — is untouched.
+**Addendum (2026-07-15, T1 live sweep hardening).** The first real Vertex sweep
+(all five purposes, ADC-only) surfaced two defects no keyless unit test had
+exercised, both now fixed and `pytest -m unit` locked: **(1)** `google-auth`'s
+token-refresh transport (`google.auth.transport.requests.Request`) hard-requires
+`requests`, so the dep is now `google-auth[requests]>=2,<3` — without the extra
+the first live token refresh raised `ImportError` (the unit test mocks
+`_bearer_token`, so it never hit the real transport). **(2)** gemini-2.5
+"thinking" spends an unbounded, run-variable slice of `maxOutputTokens` before
+the visible answer and truncated the longer drafts mid-JSON;
+`_parse_generate_content` silently returned the half-doc as "completed" and it
+died downstream as an opaque `JSONDecodeError`. Fix: `_parse_generate_content`
+now **fails loudly** on any non-`STOP` `finishReason` (marks the `llm_call`
+failed with the real reason); the shared output cap is raised 4096→8192; and a
+bounded `thinkingConfig.thinkingBudget` (2048) is sent for gemini-2.5+ models
+only (the gemini-1.5 API-key path, which rejects `thinkingConfig`, is untouched).
+All five purposes then passed live (vertex/gemini-2.5-flash).
+
+**Ref:** Master Spec §4.4, §12; SPRINT_7.md T0/T1; `app/ai/llm.py`, `app/config.py`,
+`apps/api/pyproject.toml`, `docker-compose.yml`,
+`tests/unit/test_llm_providers.py`, `tests/unit/test_config.py`,
+`tests/live/test_live_ai.py`, `SMOKE_TEST.md` §14/§14.1; DECISIONS D-024, D-026.
+
+## D-030 — Client release notification email: best-effort notify, release is source of truth
+
+**Decision (Sprint 7 T2).** When a consultant releases a finalized deliverable
+(the shared `release_deliverable` helper behind all four service routes), and
+`SHIELD_EMAIL_DELIVERY_ENABLED` is on, SHIELD emails **every active client-role
+user of that deliverable's tenant** a notification carrying the service, the
+deliverable title/version, and a link to `{WEB_BASE_URL}/documents`. Recipient
+selection is `role == client AND client_id == <tenant> AND is_active` — cross-
+tenant users and consultants (admins) are never notified.
+
+**Best-effort semantics.** The notification is sent **after** the release is
+committed, and the release is the **source of truth**. With delivery off the
+release proceeds exactly as v3.3.0 — a loud skip log ("notify skipped, delivery
+disabled"), no send attempted. With delivery on, each recipient send is wrapped:
+a per-recipient SMTP failure is logged **loudly** (with the deliverable id,
+recipient, and error) and the release **still stands** — a notification failure
+must never roll back a release the consultant already performed. A summary log
+records recipients / sent / failed counts either way.
+
+**Rationale.** Sprint 5 (D-025) shipped the release action but deferred the
+client notification pending a real sender; Sprint 6 T5 shipped
+`app/email/sender.py`. Wiring the notification into the single shared release
+helper means all four services plus the risk register notify identically. The
+"loud but non-blocking" failure mode is the correct reading of "fail loudly":
+the failure IS surfaced (logged with full context), but the durable state the
+user asked for (the release) is not undone by a downstream best-effort side
+effect — that would be the worse lie.
+
+**Ref:** Master Spec §12; SPRINT_7.md T2; `app/deliverable_release.py`,
+`app/email/sender.py`, `tests/unit/test_release_notification.py`; DECISIONS
+D-025, D-028.

@@ -96,6 +96,14 @@ export function ZtWorkspace({
   );
   const [targetStage, setTargetStage] = React.useState(3);
 
+  // Monotonic request sequence: only the newest assessment-producing operation
+  // may write `assessment`. Without this, a slow mount-time load resolving
+  // AFTER the user starts an assessment, edits an answer, or runs the AI would
+  // setAssessment(stale) and clobber the newer state (the T8 stale-fetch race).
+  // Every mutation bumps the sequence before it writes, so any in-flight load
+  // is discarded on arrival.
+  const assessmentSeq = React.useRef(0);
+
   const answersByCode = React.useMemo(() => {
     const out: Record<string, ZtAnswer> = {};
     if (assessment) {
@@ -123,6 +131,7 @@ export function ZtWorkspace({
   );
 
   const initialLoad = React.useCallback(async () => {
+    const seq = ++assessmentSeq.current;
     try {
       const cat = await fetchCatalog(framework);
       setCatalog(cat);
@@ -132,6 +141,12 @@ export function ZtWorkspace({
     }
     try {
       const a = await fetchLatestAssessment(serviceId);
+      if (seq !== assessmentSeq.current) {
+        console.debug(
+          `[ZtWorkspace] discarded stale assessment load (seq ${seq}, latest ${assessmentSeq.current})`,
+        );
+        return;
+      }
       setAssessment(a);
       if (a) {
         // Default the gap target to the client's chosen stage (set at intake).
@@ -158,6 +173,7 @@ export function ZtWorkspace({
 
   async function onCreateAssessment(): Promise<void> {
     setBusy("create");
+    assessmentSeq.current += 1;
     try {
       const next = await createAssessment(serviceId);
       setAssessment(next);
@@ -175,6 +191,9 @@ export function ZtWorkspace({
     answerId: string,
     patch: ZtAnswerPatch,
   ): Promise<void> {
+    // Optimistic update. The bump invalidates any in-flight load so its late
+    // arrival cannot clobber this edit.
+    assessmentSeq.current += 1;
     setAssessment((curr) => {
       if (!curr) return curr;
       return {
@@ -196,14 +215,17 @@ export function ZtWorkspace({
       await refreshScoreAndGap(targetStage);
     } catch (err) {
       setLoadError(describeError(err));
+      // Roll back by re-fetching, guarded so a newer edit still wins.
+      const seq = ++assessmentSeq.current;
       const a = await fetchLatestAssessment(serviceId);
-      setAssessment(a);
+      if (seq === assessmentSeq.current) setAssessment(a);
     }
   }
 
   async function onApprove(): Promise<void> {
     if (!assessment) return;
     setBusy("approve");
+    assessmentSeq.current += 1;
     try {
       const next = await approveAssessment(assessment.id);
       setAssessment(next);
@@ -225,12 +247,14 @@ export function ZtWorkspace({
   async function onRunAi(): Promise<void> {
     setBusy("run");
     setRunResult(null);
+    const seq = ++assessmentSeq.current;
     try {
       const result = await runZtAi(serviceId);
       setRunResult(result);
-      // Re-pull so the questionnaire + score reflect the AI's suggestions.
+      // Re-pull so the questionnaire + score reflect the AI's suggestions,
+      // guarded so a concurrent edit that started meanwhile still wins.
       const a = await fetchLatestAssessment(serviceId);
-      setAssessment(a);
+      if (seq === assessmentSeq.current) setAssessment(a);
       await refreshScoreAndGap(targetStage);
     } catch (err) {
       setLoadError(describeError(err));

@@ -87,6 +87,14 @@ export function CsfWorkspace({
     Record<string, CsfInterviewQuestion[]>
   >({});
 
+  // Monotonic request sequence: only the newest assessment-producing operation
+  // may write `assessment`. Without this, a slow mount-time load (StrictMode
+  // duplicates, next-dev queuing) resolving AFTER the user starts an assessment
+  // or edits an answer would setAssessment(stale) and clobber the newer state
+  // (the T8 stale-fetch race). Every mutation bumps the sequence before it
+  // writes, so any in-flight load is discarded on arrival.
+  const assessmentSeq = React.useRef(0);
+
   const answersByCode = React.useMemo(() => {
     const out: Record<string, CsfAnswer> = {};
     if (assessment) {
@@ -114,6 +122,7 @@ export function CsfWorkspace({
   );
 
   const initialLoad = React.useCallback(async () => {
+    const seq = ++assessmentSeq.current;
     try {
       const cat = await fetchCatalog();
       setCatalog(cat);
@@ -137,6 +146,12 @@ export function CsfWorkspace({
     }
     try {
       const a = await fetchLatestAssessment(serviceId);
+      if (seq !== assessmentSeq.current) {
+        console.debug(
+          `[CsfWorkspace] discarded stale assessment load (seq ${seq}, latest ${assessmentSeq.current})`,
+        );
+        return;
+      }
       setAssessment(a);
       if (a) {
         // Default the gap target to the client's chosen tier (set at intake).
@@ -163,6 +178,7 @@ export function CsfWorkspace({
 
   async function onCreateAssessment(): Promise<void> {
     setBusy("create");
+    assessmentSeq.current += 1;
     try {
       const next = await createAssessment(serviceId);
       setAssessment(next);
@@ -180,7 +196,9 @@ export function CsfWorkspace({
     answerId: string,
     patch: CsfAnswerPatch,
   ): Promise<void> {
-    // Optimistic update.
+    // Optimistic update. The bump invalidates any in-flight load so its late
+    // arrival cannot clobber this edit.
+    assessmentSeq.current += 1;
     setAssessment((curr) => {
       if (!curr) return curr;
       return {
@@ -203,15 +221,18 @@ export function CsfWorkspace({
       await refreshScoreAndGap(targetTier);
     } catch (err) {
       setLoadError(describeError(err));
-      // Roll back by re-fetching authoritative answers.
+      // Roll back by re-fetching authoritative answers, guarded so a newer
+      // edit that started meanwhile still wins.
+      const seq = ++assessmentSeq.current;
       const a = await fetchLatestAssessment(serviceId);
-      setAssessment(a);
+      if (seq === assessmentSeq.current) setAssessment(a);
     }
   }
 
   async function onApprove(): Promise<void> {
     if (!assessment) return;
     setBusy("approve");
+    assessmentSeq.current += 1;
     try {
       const next = await approveAssessment(assessment.id);
       setAssessment(next);

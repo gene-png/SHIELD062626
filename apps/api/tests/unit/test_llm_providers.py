@@ -34,6 +34,7 @@ from app.ai.llm import (
     GeminiProvider,
     LLMClient,
     OpenAIProvider,
+    VertexProvider,
     _build_provider,
 )
 from app.config import Settings
@@ -260,6 +261,69 @@ def test_gemini_request_shape_and_response_parsing(monkeypatch) -> None:
 
 
 @pytest.mark.unit
+def test_generate_content_body_gives_thinking_models_output_headroom() -> None:
+    """gemini-2.5 'thinking' models spend part of maxOutputTokens on hidden
+    reasoning; a 4096 cap truncated the longer csf/risk drafts mid-JSON in the
+    2026-07-15 Vertex live sweep. The shared body must request enough headroom
+    that the visible answer survives."""
+    body = llm_mod._generate_content_body("Draft it.", {"k": "v"})
+    assert body["generationConfig"]["maxOutputTokens"] >= 8192
+
+
+@pytest.mark.unit
+def test_generate_content_body_bounds_thinking_for_2_5_models() -> None:
+    """gemini-2.5 'thinking' spends output budget on hidden reasoning that varies
+    run-to-run; unbounded, it truncated zt_score even at the raised 8192 cap
+    (2026-07-15 sweep). The body must cap the thinking budget for 2.5 models so
+    the visible answer always has room — while leaving the API-key gemini-1.5
+    path (which does NOT support thinkingConfig) untouched."""
+    body_25 = llm_mod._generate_content_body("Draft it.", {"k": "v"}, model="gemini-2.5-flash")
+    tc = body_25["generationConfig"]["thinkingConfig"]
+    assert tc["thinkingBudget"] <= 2048
+    # A generous answer budget remains after the bounded thinking.
+    assert body_25["generationConfig"]["maxOutputTokens"] - tc["thinkingBudget"] >= 4096
+
+    body_15 = llm_mod._generate_content_body("Draft it.", {"k": "v"}, model="gemini-1.5-pro")
+    assert "thinkingConfig" not in body_15["generationConfig"]
+
+
+@pytest.mark.unit
+def test_generate_content_truncation_raises_loudly() -> None:
+    """A truncated generation (finishReason=MAX_TOKENS) must FAIL LOUDLY at the
+    parse seam — not return half a JSON document that dies later as an opaque
+    JSONDecodeError in the engine's response parser (the 2026-07-15 sweep bug)."""
+    truncated = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": '{"scores": [{"tier": "hi'}]},
+                "finishReason": "MAX_TOKENS",
+            }
+        ],
+        "usageMetadata": {"promptTokenCount": 364, "candidatesTokenCount": 8192},
+    }
+    with pytest.raises(RuntimeError, match="MAX_TOKENS"):
+        llm_mod._parse_generate_content(truncated)
+
+
+@pytest.mark.unit
+def test_generate_content_normal_finish_parses(monkeypatch) -> None:
+    """finishReason=STOP (or absent) parses normally — the guard only fires on a
+    non-STOP terminal reason."""
+    ok = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": '{"ok": true}'}]},
+                "finishReason": "STOP",
+            }
+        ],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+    }
+    resp = llm_mod._parse_generate_content(ok)
+    assert resp.content == '{"ok": true}'
+    assert resp.output_tokens == 5
+
+
+@pytest.mark.unit
 def test_gemini_missing_key_raises_loudly() -> None:
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         GeminiProvider(model="gemini-1.5-pro", api_key="")
@@ -276,6 +340,112 @@ def test_gemini_selected_by_build_provider() -> None:
     provider = _build_provider(settings)
     assert isinstance(provider, GeminiProvider)
     assert provider.name == "gemini"
+
+
+# --------------------------------------------------------------------------- #
+# Vertex adapter (ADC bearer token, D-029). Same generateContent schema as
+# Gemini, so it shares the body-build / parse helpers; the token acquisition is
+# monkeypatched so no google-auth / real ADC is needed in the unit run.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_vertex_request_shape_and_response_parsing(monkeypatch) -> None:
+    captured = _install_fake_httpx(
+        monkeypatch,
+        _FakeResponse(
+            200,
+            {
+                "candidates": [{"content": {"parts": [{"text": "vertex "}, {"text": "draft"}]}}],
+                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 6},
+            },
+        ),
+    )
+    provider = VertexProvider(
+        model="gemini-2.5-flash", project="kentro-cloudmod-dev", region="us-central1"
+    )
+    # Avoid touching real google-auth / ADC — inject a canned bearer token.
+    monkeypatch.setattr(provider, "_bearer_token", lambda: "ya29.canned-token")
+    resp = provider.complete(
+        "Draft the summary.", {"framework": "ztmm", "__purpose__": "zt.narrative"}
+    )
+
+    assert resp.content == "vertex draft"
+    assert resp.input_tokens == 10
+    assert resp.output_tokens == 6
+
+    # Regional aiplatform endpoint with the project/location/model path.
+    assert (
+        "us-central1-aiplatform.googleapis.com/v1/projects/kentro-cloudmod-dev/"
+        "locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
+        in captured["url"]
+    )
+    # ADC bearer travels in the Authorization header, never the URL/query.
+    assert captured["headers"]["Authorization"] == "Bearer ya29.canned-token"
+    assert "ya29" not in captured["url"]
+    blob = json.dumps(captured["json"])
+    assert "Draft the summary." in blob
+    assert "ztmm" in blob
+    # Internal control keys are stripped before egress — never sent to the model.
+    assert "__purpose__" not in blob
+
+
+@pytest.mark.unit
+def test_vertex_missing_project_raises_loudly() -> None:
+    with pytest.raises(RuntimeError, match="GCP_PROJECT_ID"):
+        VertexProvider(model="gemini-2.5-flash", project="", region="us-central1")
+
+
+@pytest.mark.unit
+def test_vertex_selected_by_build_provider() -> None:
+    settings = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        shield_llm_model="gemini-2.5-flash",
+        gcp_project_id="kentro-cloudmod-dev",
+        gcp_region="us-central1",
+    )
+    provider = _build_provider(settings)
+    assert isinstance(provider, VertexProvider)
+    assert provider.name == "vertex"
+    assert provider.model == "gemini-2.5-flash"
+
+
+@pytest.mark.unit
+def test_vertex_http_error_does_not_leak_bearer_token(monkeypatch, db_factory) -> None:
+    _install_fake_httpx(monkeypatch, _FakeResponse(500, {"error": "boom"}))
+    provider = VertexProvider(
+        model="gemini-2.5-flash", project="kentro-cloudmod-dev", region="us-central1"
+    )
+    monkeypatch.setattr(provider, "_bearer_token", lambda: "ya29.super-secret-adc-token")
+    live_settings = Settings(
+        shield_llm_mode="live",
+        shield_llm_provider="vertex",
+        gcp_project_id="kentro-cloudmod-dev",
+    )
+    client = LLMClient(provider, settings=live_settings)
+
+    with db_factory() as db:
+        admin = _new_admin(db)
+        with pytest.raises(httpx.HTTPStatusError):  # bubbles through the seam
+            client.invoke(
+                db,
+                purpose="zt.narrative",
+                prompt="x",
+                payload={"a": 1},
+                requested_by=admin.id,
+            )
+        db.commit()
+
+        row = db.execute(select(LLMCall)).scalar_one()
+        assert row.status == LLMCallStatus.FAILED
+        assert row.provider == "vertex"
+        assert row.mode == LLMCallMode.LIVE
+        assert row.error_message
+        # The ADC bearer token must NEVER be persisted to the audit row — it
+        # rides the Authorization header, so it can't leak via the error URL.
+        assert "ya29.super-secret-adc-token" not in row.error_message
+        assert "ya29" not in row.error_message
 
 
 # --------------------------------------------------------------------------- #

@@ -38,7 +38,7 @@ Risk Register (5x5, NIST 800-30) synthesized from them.
                    ▼
 ┌────────────────────────────────────────────────────────────┐
 │  apps/web — Next.js 15 (App Router, TS strict)             │
-│  • NextAuth Credentials → SHIELD-issued JWT                │
+│  • Auth.js v5 (next-auth) Credentials → SHIELD-issued JWT  │
 │    (Keycloak realm scaffolded for later OIDC federation)   │
 │  • Tailwind + shadcn (Round 6 design language)             │
 │  • /api/proxy/* server routes forward to the API with the  │
@@ -74,16 +74,16 @@ loud warning if Redis is down.
 
 ## Tech stack
 
-| Layer          | Choice                                                                             | Notes                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Frontend       | Next.js 15 App Router + React 19 + TypeScript strict + Tailwind 4 + shadcn         | Round 6 design language; `@shield/design-system` package (framework majors bumped Sprint 4)          |
-| Backend        | FastAPI on Python 3.12                                                             | OpenAPI at `:8000/docs`                                                                              |
-| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                                      | Alembic migrations, `batch_alter_table` for SQLite safety                                            |
-| Cache          | Redis 7                                                                            | Rate limiting only — no queue, no Celery                                                             |
-| Object storage | S3-compatible (MinIO in dev)                                                       | Artifact uploads + generated deliverables                                                            |
-| IdP            | SHIELD-issued JWT (HS256) via NextAuth Credentials                                 | Keycloak realm scaffolded under `infra/keycloak/` for later                                          |
-| AI             | Single egress client `app/ai/llm.py`; Anthropic/OpenAI/Gemini or fixtures          | `SHIELD_LLM_MODE=fixture` is the offline default (D-017); provider via `SHIELD_LLM_PROVIDER` (D-024) |
-| Tests          | pytest (unit, SQLite) + web vitest (jsdom) + Playwright e2e (host-run) + axe sweep | Web unit harness added Sprint 5 T8; see `docs/development.md` for the real command matrix            |
+| Layer          | Choice                                                                             | Notes                                                                                                                                    |
+| -------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend       | Next.js 15 App Router + React 19 + TypeScript strict + Tailwind 4 + shadcn         | Round 6 design language; `@shield/design-system` package (framework majors bumped Sprint 4)                                              |
+| Backend        | FastAPI on Python 3.12                                                             | OpenAPI at `:8000/docs`                                                                                                                  |
+| Database       | PostgreSQL 16 (prod/dev), SQLite (unit tests)                                      | Alembic migrations, `batch_alter_table` for SQLite safety                                                                                |
+| Cache          | Redis 7                                                                            | Rate limiting only — no queue, no Celery                                                                                                 |
+| Object storage | S3-compatible (MinIO in dev)                                                       | Artifact uploads + generated deliverables                                                                                                |
+| IdP            | SHIELD-issued JWT (HS256) via Auth.js v5 (next-auth) Credentials                   | Migrated from next-auth v4 to Auth.js v5 in Sprint 7 (T5); Keycloak realm scaffolded under `infra/keycloak/` for later                   |
+| AI             | Single egress client `app/ai/llm.py`; Anthropic/OpenAI/Gemini/Vertex or fixtures   | `SHIELD_LLM_MODE=fixture` is the offline default (D-017); provider via `SHIELD_LLM_PROVIDER` (D-024); Vertex via ADC, no API key (D-029) |
+| Tests          | pytest (unit, SQLite) + web vitest (jsdom) + Playwright e2e (host-run) + axe sweep | Web unit harness added Sprint 5 T8; see `docs/development.md` for the real command matrix                                                |
 
 ## Data isolation (multi-tenant, D-015)
 
@@ -158,7 +158,7 @@ engines (`app/csf/playbook.py`, `app/risk/engine.py`, `app/zt/scoring.py`).
 route → engine.run_job(purpose, payload, client_id)
           → redact_payload(payload)            # app/ai/redact.py, counts only
           → llm_calls row opened (status=running, client_id, service_id)
-          → provider call (Anthropic | OpenAI | Gemini | runtime fixtures)
+          → provider call (Anthropic | OpenAI | Gemini | Vertex | runtime fixtures)
           → llm_calls row finalized (tokens, duration, redacted_counts)
           → route parses the draft and writes rows; engines compute totals
 ```
@@ -172,31 +172,57 @@ route → engine.run_job(purpose, payload, client_id)
 - Five job purposes: `extract.capabilities`, `mitre_map`, `zt_score`,
   `csf_score`, `risk_synthesize`. In fixture mode (the offline default,
   D-017) each has a deterministic, payload-aware canned response; live mode
-  needs `SHIELD_LLM_MODE=live` plus the selected provider's API key.
+  needs `SHIELD_LLM_MODE=live` plus the selected provider's credential (an API
+  key for most providers; `vertex` uses gcloud Application Default Credentials
+  — no static key).
 - **Provider seam (D-024).** `SHIELD_LLM_PROVIDER` selects the live adapter;
   every adapter lives below the egress seam and only translates prompt +
   redacted payload → provider REST API → text back. Redaction, the
   `llm_calls` audit row, and "AI suggests, code computes" all sit _above_ the
   seam and are provider-independent. Thin `httpx` adapters (no SDK) for
-  OpenAI (chat/completions) and Gemini (generateContent); Anthropic
-  lazy-imports its SDK.
+  OpenAI (chat/completions), Gemini (`generateContent`), and Vertex
+  (regional `{region}-aiplatform.googleapis.com` `generateContent`); Anthropic
+  lazy-imports its SDK. `gemini` and `vertex` share the `generateContent`
+  request-build/response-parse helpers (`_generate_content_body` /
+  `_parse_generate_content`) but differ in auth: `gemini` sends an
+  `AIza…` API key, `vertex` exchanges gcloud ADC for a short-lived
+  `Authorization: Bearer` token (D-029, Sprint 7 T0). The bearer rides the
+  header, never the URL, so an `HTTPStatusError` cannot leak it into logs or
+  `llm_calls.error_message`. A non-`STOP` `finishReason` (e.g. a
+  thinking-model output truncation) raises loudly rather than persisting a
+  half-JSON draft as "completed".
 
-  | Provider              | Status          | Key env var         |
-  | --------------------- | --------------- | ------------------- |
-  | `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY` |
-  | `openai`              | Implemented     | `OPENAI_API_KEY`    |
-  | `gemini`              | Implemented     | `GEMINI_API_KEY`    |
-  | `azure_openai`        | Not implemented | —                   |
-  | `bedrock`             | Not implemented | —                   |
-  | `local`               | Not implemented | —                   |
+  | Provider              | Status          | Credential                                                |
+  | --------------------- | --------------- | --------------------------------------------------------- |
+  | `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY`                                       |
+  | `openai`              | Implemented     | `OPENAI_API_KEY`                                          |
+  | `gemini`              | Implemented     | `GEMINI_API_KEY`                                          |
+  | `vertex`              | Implemented     | gcloud ADC (no API key) — `GCP_PROJECT_ID` + `GCP_REGION` |
+  | `azure_openai`        | Not implemented | —                                                         |
+  | `bedrock`             | Not implemented | —                                                         |
+  | `local`               | Not implemented | —                                                         |
 
-  A missing key for the selected provider, or a not-implemented provider,
-  raises a loud `RuntimeError` at construction.
+  A missing credential for the selected provider (a missing API key, or —
+  for `vertex` — an unset `gcp_project_id`, a missing `google-auth`, or
+  unresolvable ADC), or a not-implemented provider, raises a loud
+  `RuntimeError` at construction / boot preflight (`live_llm_readiness`,
+  D-026).
 
 - Run-AI endpoints are rate-limited per client (T3).
 
 ## Auth
 
+- **Web session layer: Auth.js v5 (next-auth).** The browser talks to a
+  Credentials provider (`apps/web/src/lib/auth/options.ts`) that forwards to the
+  API and stores the SHIELD-issued JWT pair in the session; `apps/web` migrated
+  from next-auth v4 to Auth.js v5 in Sprint 7 (T5), swapping
+  `getServerSession(authOptions)` for `auth()` at every server call site. The
+  MFA challenge surfaces via a `CredentialsSignin` subclass whose
+  `code = "mfa_required"` reaches the client as `signIn(...).code` (v5
+  normalizes every credentials failure to `CredentialsSignin`), not `.error`.
+  The credentials-provider seam stays a dormant hook for a later OIDC / Keycloak
+  cutover. Behaviour is identical to v4; the bump cleared the `uuid@8.3.2`
+  moderate advisory.
 - SHIELD-issued HS256 JWTs: 15-minute access tokens, 30-minute refresh tokens
   (the refresh TTL **is** the idle timeout).
 - Refresh rotation: single active refresh jti per user; a replayed token is

@@ -1,12 +1,11 @@
-import { getServerSession } from "next-auth";
 import Link from "next/link";
 
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 import type { JSX } from "react";
 
 export async function Hero(): Promise<JSX.Element> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const authed = Boolean(session);
   return (
     <section className="border-b border-border-subtle bg-surface-card">

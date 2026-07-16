@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { Card, CardBody, CardHeader, CardTitle } from "@shield/design-system";
@@ -9,7 +8,7 @@ import { CsfSelfAssessment } from "@/components/self-assessment/CsfSelfAssessmen
 import { ZtSelfAssessment } from "@/components/self-assessment/ZtSelfAssessment";
 import { PublicFooter } from "@/components/site/PublicFooter";
 import { PublicHeader } from "@/components/site/PublicHeader";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 import type { JSX } from "react";
 
@@ -39,7 +38,7 @@ export default async function SelfAssessmentPage(props: {
 }): Promise<JSX.Element> {
   const searchParams = await props.searchParams;
   const params = await props.params;
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const type = searchParams.type ?? "";
   if (!session) {
     const cb = encodeURIComponent(

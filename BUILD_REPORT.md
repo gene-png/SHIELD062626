@@ -4,52 +4,56 @@
 > and what is deferred. Narrative history lives in `CHANGELOG.md`; non-obvious
 > choices in `DECISIONS.md`; state-of-`main` in `CONTEXT.md`.
 
-## Latest change — 2026-07-12 (Sprint 6 · real demo, `[3.3.0]`)
+## Latest change — 2026-07-16 (Sprint 7 · GCP live path + close the client loop, `[3.4.0]`)
 
-**The platform is now a real, self-standing demo.** Twelve tasks (T0–T11) on
-`feat/real-demo-sprint-6`. See `CHANGELOG.md` `[3.3.0]` and `SPRINT_6.md` for the
-full record.
+**The live-AI path is now proven against a real provider with no static key, and
+the client loop is closed.** Seven tasks (T0–T6) on `feat/gcp-vertex-sprint-7`.
+See `CHANGELOG.md` `[3.4.0]` and `SPRINT_7.md` for the full record.
 
 Highlights:
 
-- **Live-AI enablement + boot preflight (T0, D-026):** `anthropic` is a real
-  declared runtime dep, the stale `claude-opus-4-7` default is replaced with
-  `claude-sonnet-5`, and a misconfigured live deploy (missing key / unimportable
-  SDK / placeholder model) now fails LOUDLY at boot instead of 500ing on first
-  use. Fixture mode untouched.
-- **Live-AI opt-in specs + parity sweep (T1/T7):** the 2026-07-12 manual smoke is
-  a committed `@pytest.mark.live` spec + one-command script, extended to all five
-  purposes (redaction + `llm_calls` + response-parse per adapter); self-skips
-  keyless so CI/loop stay green.
-- **Seed → storage parity (T2):** the seed writes artifact bytes through
-  `get_storage()` (the same backend the API reads — MinIO), so seeded deliverables
-  download 200 (410 before).
-- **Full dependency-health readiness (T3):** `/ready` is now a per-dependency
-  matrix (db/redis/minio/keycloak-dormant/LLM) that flips false + names the
-  offender; `/admin/health` renders it.
-- **Real TOTP MFA (T4, D-027):** migration `0030`; RFC 6238 TOTP on the custom-JWT
-  stack (enroll / verify / login-challenge + recovery codes); the D-020 boot-refusal
-  is gone — the flag now gates enforcement.
-- **Real email verification + password reset (T5, D-028):** migration `0031`;
-  hashed single-use time-bounded tokens over SMTP/MailHog, enumeration-safe; the
-  D-020 boot-refusal is gone — the flag now gates login.
-- **OpenAI reasoning-model token param (T6):** `max_completion_tokens` per model
-  family (Sprint 4 D-024 follow-up).
-- **Demo realism + one-command reset (T8):** the seed synthesizes a coherent Atlas
-  Risk Register (code-derived tiers, downloadable exports); `scripts/demo-reset.*`
-  does `down -v` → build → wait `/ready` → seed → print URLs+creds.
-- **Hosted-demo compose (T9):** `docker-compose.demo.yml` runs web as a production
-  build; cloud/terraform explicitly untouched.
-- **Security + audit pass (T10):** MFA second-factor failures feed account lockout;
-  `/ready` detail redacted for anonymous callers; audits clean/documented, no
-  secret committed.
+- **Vertex AI provider via ADC (T0, D-029):** a live `VertexProvider` beside
+  `GeminiProvider`, selected by `SHIELD_LLM_PROVIDER=vertex`, calling the regional
+  `{region}-aiplatform.googleapis.com` `generateContent` endpoint authenticated
+  with **Application Default Credentials — no static API key**. `google-auth` is a
+  real dep; the bearer token never reaches logs / `llm_calls.error_message` /
+  exception text (rides the header, not the URL — unit-locked). Shared
+  body-build/parse with `gemini`; `live_llm_readiness()` requires project +
+  importable SDK + resolvable ADC or fails loudly at boot (D-026 parity). Compose
+  bind-mounts the host gcloud dir read-only; ADC never enters the repo or image.
+- **GCP live validation sweep (T1):** all five AI purposes exercised live through
+  the redaction seam on Dave's box (`vertex`/`gemini-2.5-flash`, ADC-only,
+  2026-07-15). Two adapter defects found + fixed (`google-auth[requests]` extra;
+  loud `finishReason` guard + output cap 4096→8192 + bounded `thinkingBudget` for
+  gemini-2.5+), all `pytest -m unit` locked. SMOKE §14/§14.1 annotated
+  GCP-validated; `.env` reverted to fixture; keyless self-skips clean.
+- **Client release notification email (T2, D-030):** the shared release helper
+  emails the tenant's active client-role users on release (service, title/version,
+  `/documents` link) when delivery is on — best-effort, release is the source of
+  truth; cross-tenant users/admins never notified. Four `pytest -m unit` tests.
+- **Email delivery on by default in dev/CI (T3):** `SHIELD_EMAIL_DELIVERY_ENABLED`
+  defaults `true` (SMTP → the `mailhog` service) so the register/verify/reset loop
+  is real every run and `s21-email-verify.spec.ts` runs instead of self-skipping;
+  `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` stays `false` (flipping it breaks every e2e
+  sign-in).
+- **reqSeq stale-fetch guard sweep remainder (T4):** finished the Sprint-5
+  carry-over across the admin workspaces/panels the react-hooks rules didn't force,
+  guarding only where a stale mount-fetch can clobber newer state; vitest guards
+  for the two highest-traffic newly-guarded components.
+- **Auth.js v5 migration (T5):** `next-auth@4.24.14` → Auth.js v5
+  (`5.0.0-beta.31` + `@auth/core`); `getServerSession` → `auth()` at 34 sites, MFA
+  code-signal re-wired, behavior-identical (auth e2e green). Clears the
+  `uuid@8.3.2` moderate (`uuid` gone from the lockfile); only the documented
+  `postcss` moderate remains.
 
 ## Overall status
 
-**`v3.0.0` shipped (PR #1, v2 work order Parts A–F). Sprints 1–6 complete on
-their branches. Real MFA + email verification now SHIP (Sprint 6); cloud infra
-(terraform, FedRAMP LLM connector) remains blocked on David's
-cloud/account/region decisions.**
+**`v3.0.0` shipped (PR #1, v2 work order Parts A–F). Sprints 1–6 merged; Sprint 7
+complete on its branch. The live-AI path is now proven against real Vertex AI via
+ADC with no static key (Sprint 7 D-029); the client release-notification loop is
+closed (D-030) and the web auth stack is on Auth.js v5. Cloud infra (terraform,
+FedRAMP LLM connector) remains blocked on David's cloud/account/region
+decisions.**
 
 | Milestone                                                                           | Status                     | Reference                          |
 | ----------------------------------------------------------------------------------- | -------------------------- | ---------------------------------- |
@@ -62,7 +66,8 @@ cloud/account/region decisions.**
 | Sprint 3 — audit correctness & honesty (`fix/audit-correctness-sprint-3`)           | **Complete (PR #26)**      | `SPRINT_3.md`, CHANGELOG `[3.0.3]` |
 | Sprint 4 — framework majors + multi-provider LLM (`feat/majors-providers-sprint-4`) | **Complete (PR #28)**      | `SPRINT_4.md`, CHANGELOG `[3.1.0]` |
 | Sprint 5 — client value loop (`feat/client-value-loop-sprint-5`)                    | **Complete (PR #31)**      | `SPRINT_5.md`, CHANGELOG `[3.2.0]` |
-| Sprint 6 — real demo (`feat/real-demo-sprint-6`)                                    | **Complete (this branch)** | `SPRINT_6.md`, CHANGELOG `[3.3.0]` |
+| Sprint 6 — real demo (`feat/real-demo-sprint-6`)                                    | **Complete (PR #33)**      | `SPRINT_6.md`, CHANGELOG `[3.3.0]` |
+| Sprint 7 — GCP live path + close the client loop (`feat/gcp-vertex-sprint-7`)       | **Complete (this branch)** | `SPRINT_7.md`, CHANGELOG `[3.4.0]` |
 | Infra (cloud terraform, FedRAMP LLM connector)                                      | **Blocked (needs-David)**  | `DELIVERY_PLAN.md`                 |
 
 ## Product surface at `v3.0.0`
@@ -81,17 +86,17 @@ cloud/account/region decisions.**
 
 The repo-wide gates enforced this sprint (and encoded in the sprint queue):
 
-| Gate                  | Command                                                                                                              | Where                 |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                                                       | api container         |
-| Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`                                       | web container         |
-| Web unit tests        | `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"` (vitest, Sprint 5 T8; Sprint 6 added HealthMatrix) | web container         |
-| Web eslint            | `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"` (in the queue gate set, Sprint 6)                  | web container         |
-| Full e2e smoke suite  | `cd e2e && npx playwright test` (21 spec files; s21 email-verify opt-in, self-skips without MailHog delivery)        | host → composed stack |
-| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                                                                | host → composed stack |
-| Python lint/format    | `docker compose exec -T api sh -lc "ruff check --no-cache . && black --check ."` (root-config parity, Sprint 4 T0)   | api container         |
-| Repo format           | `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`                                              | host                  |
-| Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                                                           | host                  |
+| Gate                  | Command                                                                                                                        | Where                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
+| Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                                                                 | api container         |
+| Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`                                                 | web container         |
+| Web unit tests        | `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"` (vitest, Sprint 5 T8; Sprint 6 added HealthMatrix)           | web container         |
+| Web eslint            | `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"` (in the queue gate set, Sprint 6)                            | web container         |
+| Full e2e smoke suite  | `cd e2e && npx playwright test` (21 spec files; s21 email-verify now RUNS — Sprint 7 T3 turned MailHog delivery on by default) | host → composed stack |
+| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                                                                          | host → composed stack |
+| Python lint/format    | `docker compose exec -T api sh -lc "ruff check --no-cache . && black --check ."` (root-config parity, Sprint 4 T0)             | api container         |
+| Repo format           | `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`                                                        | host                  |
+| Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                                                                     | host                  |
 
 ### CI jobs (`.github/workflows/ci.yml`)
 
@@ -109,16 +114,16 @@ Four jobs gate every push / PR to `main`:
 > review-required branch push, which is Dave-manual. The step block was proven
 > locally end-to-end against `e2e/README.md` (T2), and the YAML validated.
 
-## Gate results at HEAD (Sprint 6 close)
+## Gate results at HEAD (Sprint 7 close)
 
 ```
-pytest -m unit         → green (in api container, full suite; Sprint 6 auth/health/config tests added)
-web tsc --noEmit       → clean (Next 15 / React 19 / Tailwind 4)
-web vitest (pnpm test) → green (in web container; Sprint 6 added HealthMatrix.test.tsx)
-web eslint (pnpm lint) → 0 errors (in the queue gate set this sprint)
+pytest -m unit         → green (in api container, full suite; Sprint 7 added Vertex adapter + release-notification tests)
+web tsc --noEmit       → clean (Next 15 / React 19 / Tailwind 4; Auth.js v5)
+web vitest (pnpm test) → green 12/12 (in web container; Sprint 7 added SignInForm.test.tsx)
+web eslint (pnpm lint) → 0 errors (1 pre-existing postcss warning)
 prettier --check       → clean (3.9.5, repo-wide)
 ruff / black --check   → clean (root-config parity)
-e2e (host)             → full suite green (s21 email-verify opt-in self-skips without MailHog delivery)
+e2e (host)             → full suite green (s21 email-verify now RUNS — T3 turned MailHog delivery on by default)
 ```
 
 (Exact figures recorded in the T11 commit / CONTEXT.md. The machine running this
@@ -127,18 +132,18 @@ sprint serves web on **:3001**; Playwright resolves the port via
 
 ## OWASP Top 10 cumulative review (through Sprint 6, `v3.3.0`)
 
-| ID  | Category                  | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A01 | Broken Access Control     | PASS — `current_user` + `require_role`; multi-tenant `X-Client-Id` scoping returns 404 on cross-tenant access (no existence oracle); admin layout double-checks server-side. Sprint 5: the client deliverable list + artifact download are released-only and tenant-scoped (404, never 403; unit-tested deny matrix); `/admin/audit` read routes and `/ai/preview` are admin-only                                                                                                                                                                                                                                                                        |
-| A02 | Cryptographic Failures    | PASS — Argon2id + HS256 JWT; placeholder secret refused in prod; sha256 on every upload; S3 SSE=KMS in prod                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| A03 | Injection                 | PASS — SQLAlchemy parameterized queries only; app-generated storage keys; filename sanitization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| A04 | Insecure Design           | PASS — append-only audit log (two layers); MIME allowlist + size cap; redaction disclosure before upload; explicit service-request lifecycle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| A05 | Security Misconfiguration | PASS — `assert_safe_for_runtime`; HSTS + CSP + X-Frame-Options + Permissions-Policy + Referrer-Policy at the edge (asserted by `s15-headers.spec.ts`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| A06 | Vulnerable Components     | PASS — pip-audit + `pnpm audit` in CI, Dependabot opens fix PRs; on the Next 15 / React 19 / Tailwind 4 / ESLint 9 / Node 22 stack (Sprint 4). Root `pnpm audit` and `e2e/` `npm audit` both report **0 critical / 0 high** (Sprint 4 T5); two root moderates (`postcss` 8.4.31 pinned in next@15, `uuid` 8.3.2 via next-auth@4) are deliberately open and documented — not exploitable in our use, clear on upstream/Auth.js-v5 bumps                                                                                                                                                                                                                   |
-| A07 | ID & Auth Failures        | PASS WITH NOTES — email+password + Argon2id + lockout + account-existence oracle defense + typed reg errors (D-016); refresh-token rotation (replay rejected) + daily forced-reauth ceiling (`auth_time` claim, typed 401) + 30-min refresh TTL as idle timeout. **Sprint 6: real TOTP MFA (D-027, RFC 6238, encrypted secret at rest, single-use recovery codes, second-factor failures feed account lockout) and real email verification + password reset (D-028, hashed single-use time-bounded tokens, enumeration-safe) now SHIP** — the D-020 flags gate enforcement instead of refusing boot. Keycloak SSO cutover remains a needs-David deferral |
-| A08 | Software & Data Integrity | PASS — audit rows immutable by contract; sha256 stored + audited on upload                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| A09 | Logging & Monitoring      | PASS — structured JSON + correlation IDs; audit + notification fan-out on state change; `llm_calls` rows record redacted-count only. Sprint 5: the append-only `audit_entries` + `llm_calls` stores gained their first read surface (`/admin/audit`, admin-only, read-only, correlation-linked) — the trail is now reviewable, not just written                                                                                                                                                                                                                                                                                                          |
-| A10 | SSRF                      | PASS — LLM endpoint env-configured only; no user-supplied URLs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ID  | Category                  | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A01 | Broken Access Control     | PASS — `current_user` + `require_role`; multi-tenant `X-Client-Id` scoping returns 404 on cross-tenant access (no existence oracle); admin layout double-checks server-side. Sprint 5: the client deliverable list + artifact download are released-only and tenant-scoped (404, never 403; unit-tested deny matrix); `/admin/audit` read routes and `/ai/preview` are admin-only                                                                                                                                                                                                                                                                                                                     |
+| A02 | Cryptographic Failures    | PASS — Argon2id + HS256 JWT; placeholder secret refused in prod; sha256 on every upload; S3 SSE=KMS in prod                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| A03 | Injection                 | PASS — SQLAlchemy parameterized queries only; app-generated storage keys; filename sanitization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| A04 | Insecure Design           | PASS — append-only audit log (two layers); MIME allowlist + size cap; redaction disclosure before upload; explicit service-request lifecycle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| A05 | Security Misconfiguration | PASS — `assert_safe_for_runtime`; HSTS + CSP + X-Frame-Options + Permissions-Policy + Referrer-Policy at the edge (asserted by `s15-headers.spec.ts`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| A06 | Vulnerable Components     | PASS — pip-audit + `pnpm audit` in CI, Dependabot opens fix PRs; on the Next 15 / React 19 / Tailwind 4 / ESLint 9 / Node 22 stack (Sprint 4). Root `pnpm audit` and `e2e/` `npm audit` both report **0 critical / 0 high** (Sprint 4 T5); Sprint 7 T5's Auth.js v5 migration (next-auth `5.0.0-beta.31` + `@auth/core@0.41.2`) removed the `uuid@8.3.2` moderate entirely — `uuid` no longer appears in the lockfile — leaving **one** documented root moderate (`postcss` 8.4.31 pinned in next@15, XSS-stringify path N/A at build), deliberately open and not exploitable in our use. (The npm audit HTTP endpoint currently 410s upstream; posture verified from the lockfile dependency graph.) |
+| A07 | ID & Auth Failures        | PASS WITH NOTES — email+password + Argon2id + lockout + account-existence oracle defense + typed reg errors (D-016); refresh-token rotation (replay rejected) + daily forced-reauth ceiling (`auth_time` claim, typed 401) + 30-min refresh TTL as idle timeout. **Sprint 6: real TOTP MFA (D-027, RFC 6238, encrypted secret at rest, single-use recovery codes, second-factor failures feed account lockout) and real email verification + password reset (D-028, hashed single-use time-bounded tokens, enumeration-safe) now SHIP** — the D-020 flags gate enforcement instead of refusing boot. Keycloak SSO cutover remains a needs-David deferral                                              |
+| A08 | Software & Data Integrity | PASS — audit rows immutable by contract; sha256 stored + audited on upload                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| A09 | Logging & Monitoring      | PASS — structured JSON + correlation IDs; audit + notification fan-out on state change; `llm_calls` rows record redacted-count only. Sprint 5: the append-only `audit_entries` + `llm_calls` stores gained their first read surface (`/admin/audit`, admin-only, read-only, correlation-linked) — the trail is now reviewable, not just written                                                                                                                                                                                                                                                                                                                                                       |
+| A10 | SSRF                      | PASS — LLM endpoint env-configured only; no user-supplied URLs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Open items / deferred (needs-David or Sprint 7)
 
@@ -146,23 +151,33 @@ sprint serves web on **:3001**; Playwright resolves the port via
 2. **SMOKE_TEST §10** — human eyeball of the generated export artifacts in
    `e2e/artifacts/` (each already asserted HTTP 200 + content-type by s7/s8),
    including the Sprint-5 CSF Action Plan XLSX sheet.
-3. **SMOKE_TEST §14 / §14.1 (key-gated):** the live-AI opt-in specs are committed
-   but self-skip keyless; run one real live sweep with a provider key to confirm
-   the redacted `llm_calls` row (correct provider/model/client_id), no PII, and
-   the per-adapter response parse for all five purposes (Sprint 6 T1/T7). No adapter
-   parse fix was possible without a key this sprint.
-4. **SMOKE_TEST §25 (MailHog opt-in):** `s21-email-verify.spec.ts` self-skips
-   unless the api is up with `SHIELD_EMAIL_DELIVERY_ENABLED=true`; run it once
-   against MailHog to prove the end-to-end token flow through the wire.
+3. **SMOKE_TEST §14 / §14.1 — GCP-VALIDATED 2026-07-15 (Sprint 7 T1):** the
+   live-AI opt-in specs were run for real against Vertex AI (`vertex`/
+   `gemini-2.5-flash`, ADC-only) across all five purposes — redacted `llm_calls`
+   row, no PII, per-adapter response parse all confirmed; two adapter defects found
+   - fixed (D-029 addendum). The specs still self-skip keyless, so CI/loop stay
+     green without a key; a keyed/ADC re-run remains the way to re-verify.
+4. **SMOKE_TEST §25 — now CI-green (Sprint 7 T3):** `s21-email-verify.spec.ts`
+   RUNS (not skips) in dev + CI because `SHIELD_EMAIL_DELIVERY_ENABLED` now
+   defaults `true` (SMTP → the `mailhog` service); the end-to-end token flow is
+   exercised on every run. **Still open:** SMOKE §29 (release-notification) has no
+   e2e eyeballing the mail in MailHog — the four `test_release_notification.py`
+   unit tests prove recipient selection + body + best-effort semantics with the
+   sender stubbed.
 5. **Cloud infra (needs-David):** `infra/terraform` (AWS GovCloud / Azure Gov —
    needs account/region/network decisions), FedRAMP-authorized LLM connector,
-   Auth.js v5 / Keycloak SSO cutover, DR runbooks. Sprint 6 T9 delivered only a
+   Keycloak OIDC/SSO cutover (the Auth.js v5 migration landed in Sprint 7 T5;
+   the Credentials→OIDC provider swap stays dormant), DR runbooks. Sprint 6 T9 delivered only a
    local hosted-demo compose, not cloud provisioning. See `DELIVERY_PLAN.md`.
-6. **Sprint 7 candidates:** the `reqSeq` guard sweep across the remaining
-   mount-fetch components (only where the react-hooks rules force it is done; the
-   broader sweep remains); ESLint 10 (blocked upstream — no Next lint stack runs
-   on it, D-018); the attack/zt/tech-debt assessment mint routes still share
-   CSF's old unbounded-version pattern (Sprint 2 T7 guarded CSF only).
+6. **Sprint 8 candidates:** ESLint 10 (blocked upstream — no Next lint stack runs
+   on it, D-018); the `postcss` 8.4.31 moderate (clears on the next upstream Next
+   bump); the attack/zt/tech-debt assessment mint routes still share CSF's old
+   unbounded-version pattern (Sprint 2 T7 guarded CSF only); the Auth.js v5
+   Credentials→OIDC/Keycloak SSO cutover (the seam exists, stays dorment);
+   `azure_openai`/`bedrock`/`local` LLM adapters (loud not-implemented until a
+   deployment needs one); an e2e that eyeballs the release notification in MailHog
+   (SMOKE §29). The Sprint-5 `reqSeq` stale-fetch sweep is now COMPLETE (Sprint 7
+   T4).
 
 ## Significant decisions
 
@@ -177,6 +192,12 @@ See [`DECISIONS.md`](DECISIONS.md) for the full log. Highlights:
 - **D-019:** reject reserved/special-use TLDs at domain-approval time
   (renumbered from D-018 this sprint to avoid a collision with the unmerged
   `chore/dependabot-policy` branch, which owns D-018).
+- **D-026 / D-024 / D-017:** live-AI enablement + boot preflight; multi-provider
+  LLM egress; offline deterministic fixture mode.
+- **D-029 (Sprint 7):** Vertex AI via Application Default Credentials as the GCP
+  live path — a `vertex` provider with no static key, ADC-authenticated, token
+  never logged. **D-030 (Sprint 7):** client release-notification email —
+  best-effort notify, the release is the source of truth.
 
 ## How to resume
 

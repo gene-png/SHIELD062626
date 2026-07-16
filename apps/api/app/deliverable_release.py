@@ -12,17 +12,29 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.audit import audit
+from app.config import get_settings
+from app.email.sender import send_release_notification
 from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.deliverable import Deliverable
 from app.models.service import Service, ServiceKind
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.tenant import require_deliverable_in_tenant
 
 _log = get_logger(__name__)
+
+# Human-readable service names for the client-facing release notification.
+_SERVICE_LABELS: dict[ServiceKind, str] = {
+    ServiceKind.TECH_DEBT: "Technical Debt Review",
+    ServiceKind.ZERO_TRUST_CISA: "Zero Trust (CISA ZTMM)",
+    ServiceKind.ZERO_TRUST_DOD: "Zero Trust (DoD ZTRA)",
+    ServiceKind.NIST_CSF: "NIST CSF 2.0",
+    ServiceKind.ATTACK_COVERAGE: "MITRE ATT&CK Coverage",
+}
 
 
 def release_deliverable(
@@ -97,4 +109,68 @@ def release_deliverable(
     )
     db.commit()
     db.refresh(deliv)
+
+    # Best-effort client notification (D-030). The release is already committed
+    # and is the source of truth; a notification failure must never roll it back.
+    _notify_release(db, svc=svc, deliv=deliv, tenant_client_id=tenant_client_id)
     return deliv
+
+
+def _notify_release(
+    db: Session,
+    *,
+    svc: Service,
+    deliv: Deliverable,
+    tenant_client_id: uuid.UUID,
+) -> None:
+    """Email the tenant's active client-role users that a deliverable released.
+
+    Gated by ``shield_email_delivery_enabled`` (loud skip log when off, so a
+    deployment never silently believes it notified). Sends are best-effort: a
+    per-recipient send failure is logged LOUDLY and the release stands (D-030 —
+    the release is the source of truth, the email is notify-only).
+    """
+    if not get_settings().shield_email_delivery_enabled:
+        _log.info(
+            "deliverable.release notify skipped (delivery disabled)",
+            deliverable_id=str(deliv.id),
+        )
+        return
+
+    recipients = list(
+        db.execute(
+            select(User.email).where(
+                User.client_id == tenant_client_id,
+                User.role == UserRole.CLIENT,
+                User.is_active.is_(True),
+            )
+        ).scalars()
+    )
+    service_label = _SERVICE_LABELS.get(svc.kind, svc.kind.value)
+    sent = 0
+    failed = 0
+    for email in recipients:
+        try:
+            send_release_notification(
+                to=email,
+                service_label=service_label,
+                title=deliv.title,
+                version=deliv.version,
+            )
+            sent += 1
+        except Exception as exc:  # noqa: BLE001 - best-effort notify (D-030): loud, no rollback
+            failed += 1
+            _log.error(
+                "deliverable.release notify failed",
+                deliverable_id=str(deliv.id),
+                recipient=email,
+                error=str(exc),
+                exc_info=True,
+            )
+    _log.info(
+        "deliverable.release notified",
+        deliverable_id=str(deliv.id),
+        recipients=len(recipients),
+        sent=sent,
+        failed=failed,
+    )

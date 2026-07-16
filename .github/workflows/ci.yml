@@ -110,7 +110,10 @@ jobs:
   # reproduces the canonical fresh-stack bring-up documented in e2e/README.md
   # and proven end-to-end locally in S2 T2 (down -v + reseed + full suite, 27/27
   # green on a pristine DB). CI runs with no .env, so web stays on :3000 and the
-  # docker-compose.yml defaults apply. The runner has Docker + Compose v2.
+  # docker-compose.yml defaults apply. Those defaults now include
+  # SHIELD_EMAIL_DELIVERY_ENABLED=true (Sprint 7 T3), so `docker compose up -d`
+  # brings up MailHog and the s21 email-verify/reset spec RUNS here (no longer
+  # self-skips). The runner has Docker + Compose v2.
   e2e:
     name: E2E (Playwright smoke suite)
     runs-on: ubuntu-latest

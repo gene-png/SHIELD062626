@@ -5,14 +5,13 @@
  * admins resolve via the active-client cookie that apiFetch forwards.
  */
 
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { authOptions } from "@/lib/auth/options";
+import { auth } from "@/lib/auth/options";
 
 async function bearer(): Promise<string | null> {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   return session?.accessToken ?? null;
 }
 
