@@ -1,53 +1,62 @@
 # Dave — current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-07-16 (Sprint 7 complete on branch)_
+_Last updated: 2026-07-16 (Sprint 8 planned, Codex-reviewed)_
 
 ## Branch / in flight
 
-- **Sprint 7 "GCP live path + close the client loop" COMPLETE** on
-  `feat/gcp-vertex-sprint-7` (`v3.4.0`). All 7 tasks (T0–T6) via
-  `/loop-sprint-cron`, one day. T1 (the live GCP sweep) was run by me in the
-  foreground — real Vertex, ADC-only, all five purposes green, two adapter
-  defects found + fixed (`329f9a5`). Vertex provider via ADC (D-029), client
-  release-notification email (D-030), dev/CI email delivery on by default (s21
-  runs), reqSeq sweep finished, Auth.js v5 migration (clears the `uuid`
-  moderate). No new migrations.
-- **Next:** open the Sprint 7 PR (rich body — task table + test plan + the
-  D-029/D-030 decisions + the "GCP-validated 2026-07-15" note), get it reviewed,
-  squash-merge to `main`.
+- **Sprint 7 MERGED** to `main` as PR #36 (`v3.4.0`, squash `4796429`) —
+  Vertex via ADC (D-029), release notification (D-030), MailHog delivery
+  default-on, reqSeq sweep done, Auth.js v5. Done and closed.
+- **Sprint 8 "prove it in the browser" PLANNED** on branch
+  `docs/sprint-8-plan` (this planning PR): `SPRINT_8.md` + staged queue
+  `.claude/sprint-queue.sprint-8.json`, target `v3.4.1`. Eight tasks (T0–T7):
+  shared MailHog helper, tech-debt extract draft-guard (the last mint-route
+  debt), s22 release-notify e2e (§29), s23 verify/forgot/reset pages e2e,
+  s24 MFA e2e split into TOTP (T4) + recovery-code (T5) parts, s25
+  admin-health + `/documents` empty state, wrap-up.
+- **Plan was reviewed by OpenAI Codex** (CLI v0.144.5, read-only,
+  2026-07-16): verdict "ship-with-changes"; its two blockers (T1 guard
+  placement before the LLM call; explicit re-contract of
+  `test_extract_versions_subsequent_lists`) and the rest of its findings are
+  folded into `SPRINT_8.md`. Codex CLI is installed + authenticated on this
+  box for future plan reviews.
 
 ## Decisions made / carried (recorded for agents)
 
-- **Infra: local containers for now.** No terraform/cloud deploy; `infra/` stubs
-  stay stubs. Revisit when I pick cloud/account/region.
-- **GCP, not Anthropic, for live-AI validation — DONE.** Vertex AI via ADC
-  (project `kentro-cloudmod-dev`, `us-central1`), no static key. The five-purpose
-  live sweep passed 2026-07-15 on `gemini-2.5-flash`. `.env` is back to fixture.
-- **MFA manual UI walkthrough** is still mine to do by hand (SMOKE eyeball item);
-  email-verify enforcement flag stays default-off.
+- **Agents never launch the sprint loop.** Dave starts `/loop-sprint-cron`
+  himself after the planning PR merges.
+- **Corrected a stale note:** attack/zt mint routes were ALREADY fixed in
+  Sprint 3 T1 (`attack.py:258-273`, `zt.py:539-554`) — only tech-debt still
+  had the unbounded-version pattern; Sprint 8 T1 pays it.
+- **Keycloak SSO / OIDC cutover excluded** from Sprint 8 (my call,
+  2026-07-16); stays on the deferred list.
+- **Infra: local containers for now** (2026-07-13 call unchanged); GCP live
+  path validated 2026-07-15, `.env` back to fixture.
+- Sprint 8 retires my manual MFA walkthrough (T4/T5 drive the UI for real) —
+  I no longer owe that hand-check once the sprint lands.
 
 ## Next steps
 
-1. Open + merge the Sprint 7 PR.
-2. My manual MFA walkthrough (SMOKE_TEST eyeball item) + eyeball the
-   verify/forgot/reset web pages (§25 / §24 UI).
-3. Sprint 8 planning candidates: an e2e that eyeballs the release notification in
-   MailHog (SMOKE §29); the attack/zt/tech-debt mint routes still share CSF's old
-   unbounded-version pattern; ESLint 10 / `postcss` moderate (both blocked
-   upstream); Auth.js v5 Credentials→OIDC / Keycloak SSO cutover.
+1. Merge the Sprint 8 planning PR.
+2. Launch checklist (me, when ready): archive old runtime queue, copy
+   `.claude/sprint-queue.sprint-8.json` → `.claude/sprint-queue.json`, set
+   `working_dir`/`expected_gh_user`, `git checkout -b
+   feat/browser-proof-sprint-8 main`, then `/loop-sprint-cron`.
+3. After Sprint 8: candidates are Keycloak SSO cutover, tech-debt
+   replace-draft affordance, demo-reset automation decision.
 
 ## Notes for Gene
 
-- Sprint 7 added a `vertex` LLM provider (ADC, no API key) beside `gemini`. Live
-  mode now selects `SHIELD_LLM_PROVIDER=vertex` and needs host gcloud ADC
-  bind-mounted read-only — all in the gitignored `.env`. Fixture mode (the
-  default) is untouched; nothing changes for you unless you flip to live.
-- Web auth is now Auth.js v5 (next-auth `5.0.0-beta.31`). `getServerSession` is
-  gone — server code calls `auth()`. The MFA sign-in signal moved from
-  `result.error` to `result.code`. Behavior is identical; all auth e2e green.
-- Email delivery is ON by default in dev/CI compose now (MailHog on `:8025`), so
-  `s21-email-verify` runs. `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` still defaults off —
-  flipping it breaks every e2e sign-in (seeded users are unverified).
+- Sprint 8 is planned and staged (`SPRINT_8.md` + queue) — all e2e/spec work
+  plus one api idempotency fix; no migrations, no dep changes except a TOTP
+  lib inside `e2e/` (host-run harness).
+- Sprint 8 T1 deliberately re-contracts
+  `test_extract_versions_subsequent_lists` (tech-debt extract becomes
+  idempotent-200 on an open draft, like CSF/attack/zt) — flagged here so the
+  test change doesn't read as weakening.
+- We now run OpenAI Codex as a read-only plan reviewer before sprint PRs
+  (`npm i -g @openai/codex`, `codex login`, `codex exec --sandbox read-only`).
+  Its review is summarized in the Sprint 8 planning PR body.
 - Lint pins unchanged: `ruff==0.15.20` / `black==26.5.1` exact,
   `known-first-party=["app"]` in root pyproject — don't remove.
