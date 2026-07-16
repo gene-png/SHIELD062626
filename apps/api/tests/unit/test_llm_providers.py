@@ -261,6 +261,69 @@ def test_gemini_request_shape_and_response_parsing(monkeypatch) -> None:
 
 
 @pytest.mark.unit
+def test_generate_content_body_gives_thinking_models_output_headroom() -> None:
+    """gemini-2.5 'thinking' models spend part of maxOutputTokens on hidden
+    reasoning; a 4096 cap truncated the longer csf/risk drafts mid-JSON in the
+    2026-07-15 Vertex live sweep. The shared body must request enough headroom
+    that the visible answer survives."""
+    body = llm_mod._generate_content_body("Draft it.", {"k": "v"})
+    assert body["generationConfig"]["maxOutputTokens"] >= 8192
+
+
+@pytest.mark.unit
+def test_generate_content_body_bounds_thinking_for_2_5_models() -> None:
+    """gemini-2.5 'thinking' spends output budget on hidden reasoning that varies
+    run-to-run; unbounded, it truncated zt_score even at the raised 8192 cap
+    (2026-07-15 sweep). The body must cap the thinking budget for 2.5 models so
+    the visible answer always has room — while leaving the API-key gemini-1.5
+    path (which does NOT support thinkingConfig) untouched."""
+    body_25 = llm_mod._generate_content_body("Draft it.", {"k": "v"}, model="gemini-2.5-flash")
+    tc = body_25["generationConfig"]["thinkingConfig"]
+    assert tc["thinkingBudget"] <= 2048
+    # A generous answer budget remains after the bounded thinking.
+    assert body_25["generationConfig"]["maxOutputTokens"] - tc["thinkingBudget"] >= 4096
+
+    body_15 = llm_mod._generate_content_body("Draft it.", {"k": "v"}, model="gemini-1.5-pro")
+    assert "thinkingConfig" not in body_15["generationConfig"]
+
+
+@pytest.mark.unit
+def test_generate_content_truncation_raises_loudly() -> None:
+    """A truncated generation (finishReason=MAX_TOKENS) must FAIL LOUDLY at the
+    parse seam — not return half a JSON document that dies later as an opaque
+    JSONDecodeError in the engine's response parser (the 2026-07-15 sweep bug)."""
+    truncated = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": '{"scores": [{"tier": "hi'}]},
+                "finishReason": "MAX_TOKENS",
+            }
+        ],
+        "usageMetadata": {"promptTokenCount": 364, "candidatesTokenCount": 8192},
+    }
+    with pytest.raises(RuntimeError, match="MAX_TOKENS"):
+        llm_mod._parse_generate_content(truncated)
+
+
+@pytest.mark.unit
+def test_generate_content_normal_finish_parses(monkeypatch) -> None:
+    """finishReason=STOP (or absent) parses normally — the guard only fires on a
+    non-STOP terminal reason."""
+    ok = {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": '{"ok": true}'}]},
+                "finishReason": "STOP",
+            }
+        ],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+    }
+    resp = llm_mod._parse_generate_content(ok)
+    assert resp.content == '{"ok": true}'
+    assert resp.output_tokens == 5
+
+
+@pytest.mark.unit
 def test_gemini_missing_key_raises_loudly() -> None:
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         GeminiProvider(model="gemini-1.5-pro", api_key="")

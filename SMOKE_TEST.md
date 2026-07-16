@@ -151,9 +151,18 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `pytest -m unit tests/unit` and never collects the live spec, and no committed
 > spec runs a real call in a keyless pipeline. Check a box only after running the
 > opt-in path with a real key on your machine (procedure below).
+>
+> **✅ GCP-validated 2026-07-15 — `vertex` / `gemini-2.5-flash` (D-029).** Dave's
+> box, ADC-only (no static key): the Vertex provider path was exercised live
+> through the redaction seam. The one-command smoke passed (real `csf_score`:
+> 364 in / 307 out tokens, `redacted_counts == {email:2, name:2, client_org:2}`,
+> `llm_calls` row `provider=vertex`/`mode=live`/`status=completed`, no PII). Boxes
+> proven by that opt-in run are checked below; they remain **CI-skipped keyless**
+> (the live spec is never collected by `pytest -m unit tests/unit`). Two adapter
+> defects were found and fixed during this sweep (see §14.1).
 
-- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`), and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model **refuses to start** (T0 preflight).
-- [ ] Run the one-command smoke: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api python -m scripts.smoke_live_ai` → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.)
+- [ ] Set `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini|vertex>`, that provider's key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`; `vertex` uses ADC, no key) and a matching **current** `SHIELD_LLM_MODEL` (e.g. `claude-sonnet-5` / `gpt-4o-mini` / `gemini-1.5-pro` / `gemini-2.5-flash` — **not** `claude-opus-4-7`, a now-rejected placeholder, see D-026) in `.env`; restart `api`. Boot itself is now a check: live + missing key / unimportable SDK / placeholder model / (vertex) unresolvable ADC **refuses to start** (T0/D-029 preflight). *(vertex/gemini-2.5-flash boot verified 2026-07-15.)*
+- [x] Run the one-command smoke: `docker compose exec -T api python -m scripts.smoke_live_ai` (with a live `.env`) → prints the real response + the `llm_calls` row and asserts mode=live / status=completed / tokens set / `redacted_counts` populated / no PII. (Equivalently: `… api pytest -m live tests/live -q`.) *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — passed.)*
 - [ ] Run **one** Run-AI through the UI (e.g. csf_score) → real suggestions return; `llm_calls` has a logged, **redacted** entry with the correct **`provider`**/**`model`** and a **`client_id`** set (Sprint 3 T5 tenant attribution); no PII in the log.
 - [ ] Selecting a provider with its key unset, or a not-implemented provider (`azure_openai`/`bedrock`/`local`), fails loudly at startup — no silent fallback.
 
@@ -172,13 +181,28 @@ The part only a human can do — confirm the documents actually _look_ right.
 > `@pytest.mark.live` only, lives outside `tests/unit`, and **self-skips without
 > a key**, so CI (`pytest -m unit tests/unit`) never collects it and the boxes
 > below stay **unchecked on purpose** until run with a real key.
+>
+> **✅ GCP-validated 2026-07-15 — `vertex` / `gemini-2.5-flash` (D-029).** All
+> five `test_live_purpose_contract[*]` cases passed live against Vertex (opt-in,
+> CI-skipped keyless). The sweep surfaced and fixed **two real adapter defects**
+> in the shared generateContent path that no keyless unit test had exercised:
+> **(1)** `google-auth` needs its `[requests]` extra for the token-refresh
+> transport — the first live token refresh raised `ImportError` without it;
+> **(2)** gemini-2.5 "thinking" spent an unbounded, run-variable slice of the
+> output budget and truncated the longer `csf`/`risk`/`zt` drafts mid-JSON, which
+> `_parse_generate_content` silently returned as "completed" and only died later
+> as an opaque `JSONDecodeError`. Fix: a **loud `finishReason` guard** (a non-STOP
+> reason now raises at the parse seam, failing the `llm_call` cleanly), the shared
+> output cap raised 4096→8192, and a **bounded `thinkingConfig.thinkingBudget`**
+> (2048) added for 2.5+ models only (gemini-1.5 API-key path untouched). All three
+> are `pytest -m unit` locked in `test_llm_providers.py`.
 
-- [ ] Run the full sweep with a key: `docker compose exec -T -e SHIELD_LLM_MODE=live -e ANTHROPIC_API_KEY=… api pytest -m live tests/live -q` → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape).
-- [ ] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
-- [ ] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
-- [ ] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
-- [ ] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
-- [ ] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
+- [x] Run the full sweep: `docker compose exec -T api pytest -m live tests/live -q` (with a live `.env`) → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape). *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — 5 passed.)*
+- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
+- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
+- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
+- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
+- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
 
 ## 15. Security headers
 

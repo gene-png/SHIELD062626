@@ -30,7 +30,12 @@ dependencies = [
     # API key. Lazy-imported on the live path; the live-mode boot preflight
     # (config.py) checks importability + ADC resolvability. Rebuild the api image
     # after adding this — a plain restart does not install it.
-    "google-auth>=2,<3",
+    # The [requests] extra pulls in `requests`, which google-auth's token-refresh
+    # transport (google.auth.transport.requests.Request) hard-requires — without
+    # it the FIRST live token refresh raises ImportError (the keyless unit test
+    # mocks _bearer_token, so it never exercised the real transport; caught by the
+    # T1 live sweep 2026-07-15).
+    "google-auth[requests]>=2,<3",
     # Deliverable rendering (app/*/exporters.py): PDF via reportlab, XLSX via
     # openpyxl. Imported lazily inside the finalize endpoints, so a missing
     # declaration only surfaces as a 500 when a deliverable is rendered.

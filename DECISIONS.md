@@ -610,10 +610,27 @@ HTTP 200. The existing `gemini` adapter only speaks the API-key
 the FedRAMP-relevant path (the model runs inside the GCP authorization
 boundary). Everything above the seam — redaction, the `llm_calls` audit row,
 "AI suggests, code computes" — is untouched.
-**Ref:** Master Spec §4.4, §12; SPRINT_7.md T0; `app/ai/llm.py`, `app/config.py`,
+**Addendum (2026-07-15, T1 live sweep hardening).** The first real Vertex sweep
+(all five purposes, ADC-only) surfaced two defects no keyless unit test had
+exercised, both now fixed and `pytest -m unit` locked: **(1)** `google-auth`'s
+token-refresh transport (`google.auth.transport.requests.Request`) hard-requires
+`requests`, so the dep is now `google-auth[requests]>=2,<3` — without the extra
+the first live token refresh raised `ImportError` (the unit test mocks
+`_bearer_token`, so it never hit the real transport). **(2)** gemini-2.5
+"thinking" spends an unbounded, run-variable slice of `maxOutputTokens` before
+the visible answer and truncated the longer drafts mid-JSON;
+`_parse_generate_content` silently returned the half-doc as "completed" and it
+died downstream as an opaque `JSONDecodeError`. Fix: `_parse_generate_content`
+now **fails loudly** on any non-`STOP` `finishReason` (marks the `llm_call`
+failed with the real reason); the shared output cap is raised 4096→8192; and a
+bounded `thinkingConfig.thinkingBudget` (2048) is sent for gemini-2.5+ models
+only (the gemini-1.5 API-key path, which rejects `thinkingConfig`, is untouched).
+All five purposes then passed live (vertex/gemini-2.5-flash).
+
+**Ref:** Master Spec §4.4, §12; SPRINT_7.md T0/T1; `app/ai/llm.py`, `app/config.py`,
 `apps/api/pyproject.toml`, `docker-compose.yml`,
-`tests/unit/test_llm_providers.py`, `tests/unit/test_config.py`; DECISIONS
-D-024, D-026.
+`tests/unit/test_llm_providers.py`, `tests/unit/test_config.py`,
+`tests/live/test_live_ai.py`, `SMOKE_TEST.md` §14/§14.1; DECISIONS D-024, D-026.
 
 ## D-030 — Client release notification email: best-effort notify, release is source of truth
 

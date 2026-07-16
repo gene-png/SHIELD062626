@@ -148,7 +148,13 @@ class AnthropicProvider:
 
 
 _HTTP_TIMEOUT_SECONDS = 60.0
-_MAX_OUTPUT_TOKENS = 4096
+# gemini-2.5 "thinking" models spend part of this budget on hidden reasoning
+# tokens before emitting the visible answer, so a 4096 cap truncated the longer
+# csf_score / risk_synthesize drafts mid-JSON in the 2026-07-15 Vertex live
+# sweep. 8192 gives the structured drafts real headroom above the thinking
+# overhead; the finishReason guard in _parse_generate_content still FAILS LOUDLY
+# if a generation ever exceeds even this (never silently returns half a doc).
+_MAX_OUTPUT_TOKENS = 8192
 
 # OpenAI reasoning / `responses` model families (the o-series and gpt-5) REJECT
 # the legacy ``max_tokens`` Chat Completions key with an HTTP 400 and require
@@ -175,8 +181,23 @@ def _egress_payload(payload: dict[str, Any]) -> dict[str, Any]:
 # adapters (D-024 / D-029). Only the endpoint host and the auth mechanism differ.
 
 
-def _generate_content_body(prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
+# gemini-2.5 model family enables "thinking" by default and, left unbounded,
+# consumes a run-to-run-variable slice of the output budget before the visible
+# answer — it truncated zt_score even at the raised 8192 cap in the 2026-07-15
+# Vertex sweep. Bounding thinkingBudget guarantees the structured draft always
+# has room. gemini-1.5 does NOT accept thinkingConfig (HTTP 400), so the field
+# is added ONLY for 2.5+ models; the API-key gemini-1.5 path stays untouched.
+_GEMINI_THINKING_RE = re.compile(r"gemini-2\.[5-9]", re.IGNORECASE)
+_THINKING_BUDGET_TOKENS = 2048
+
+
+def _generate_content_body(
+    prompt: str, payload: dict[str, Any], *, model: str | None = None
+) -> dict[str, Any]:
     """Shape a redacted prompt + payload into a generateContent request body."""
+    generation_config: dict[str, Any] = {"maxOutputTokens": _MAX_OUTPUT_TOKENS}
+    if model is not None and _GEMINI_THINKING_RE.search(model):
+        generation_config["thinkingConfig"] = {"thinkingBudget": _THINKING_BUDGET_TOKENS}
     return {
         "contents": [
             {
@@ -184,13 +205,30 @@ def _generate_content_body(prompt: str, payload: dict[str, Any]) -> dict[str, An
                 "parts": [{"text": prompt}, {"text": json.dumps(_egress_payload(payload))}],
             }
         ],
-        "generationConfig": {"maxOutputTokens": _MAX_OUTPUT_TOKENS},
+        "generationConfig": generation_config,
     }
 
 
 def _parse_generate_content(data: dict[str, Any]) -> LLMResponse:
-    """Parse a generateContent response body into text + token counts."""
-    parts = data["candidates"][0]["content"]["parts"]
+    """Parse a generateContent response body into text + token counts.
+
+    Guards the FAIL-LOUDLY contract: a truncated or otherwise non-STOP
+    generation (``finishReason`` = ``MAX_TOKENS``, ``SAFETY``, ``RECITATION`` …)
+    is raised here rather than returned as a half-formed answer. Otherwise the
+    truncated JSON draft would flow downstream and die as an opaque
+    ``JSONDecodeError`` in the engine's response parser, hiding the real cause
+    (the 2026-07-15 Vertex live sweep hit exactly this on csf/risk). An absent
+    ``finishReason`` (e.g. hand-built test fixtures) is treated as success.
+    """
+    candidate = data["candidates"][0]
+    finish_reason = candidate.get("finishReason")
+    if finish_reason is not None and finish_reason != "STOP":
+        raise RuntimeError(
+            f"generateContent did not finish cleanly (finishReason={finish_reason}). "
+            "The response is incomplete and was NOT parsed; if this is MAX_TOKENS, "
+            "raise maxOutputTokens for this purpose."
+        )
+    parts = candidate["content"]["parts"]
     text = "".join(p.get("text", "") for p in parts)
     usage = data.get("usageMetadata") or {}
     return LLMResponse(
@@ -282,7 +320,7 @@ class GeminiProvider:
                     "Content-Type": "application/json",
                     "x-goog-api-key": self._api_key,
                 },
-                json=_generate_content_body(prompt, payload),
+                json=_generate_content_body(prompt, payload, model=self.model),
             )
         resp.raise_for_status()
         return _parse_generate_content(resp.json())
@@ -349,7 +387,7 @@ class VertexProvider:
                     "Content-Type": "application/json",
                     "Authorization": f"Bearer {token}",
                 },
-                json=_generate_content_body(prompt, payload),
+                json=_generate_content_body(prompt, payload, model=self.model),
             )
         resp.raise_for_status()
         return _parse_generate_content(resp.json())
