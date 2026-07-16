@@ -7,6 +7,94 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.4.0] — Sprint 7 · GCP live path + close the client loop — 2026-07-16
+
+Branch `feat/gcp-vertex-sprint-7`. Seven tasks (T0–T6). The sprint proves the
+live-AI path against a **real** provider with no static key — Vertex AI via
+Application Default Credentials (D-029) — validated end-to-end on Dave's box
+across all five AI purposes; closes the client loop with a release-notification
+email (D-030); turns dev/CI email delivery on by default so the MailHog flow is
+real in every run; finishes the Sprint-5 stale-fetch (`reqSeq`) guard sweep; and
+migrates the web auth stack from next-auth v4 to Auth.js v5, clearing the
+`uuid@8.3.2` moderate advisory. New user-facing surface (release notification) +
+a real GCP live path justify the **minor** bump. All exit gates green: the full
+Playwright suite, `pytest -m unit`, web `tsc --noEmit`, in-container web vitest,
+in-container web eslint, host prettier `--check` (3.9.5), and in-container
+ruff/black (root-config parity).
+
+- **Vertex AI provider adapter via ADC (T0, `7dcf159`):** added a live
+  `VertexProvider` beside `GeminiProvider` in `app/ai/llm.py`, selected by
+  `SHIELD_LLM_PROVIDER=vertex`. It calls the regional
+  `{region}-aiplatform.googleapis.com` `generateContent` endpoint and
+  authenticates with **Application Default Credentials — no static API key**;
+  `google-auth` is a real `apps/api` dep (rebuild the image). The bearer token
+  never appears in logs, `llm_calls.error_message`, or exception text (it rides
+  the header, not the URL — a unit test locks it). `gemini` (API key,
+  `generativelanguage`) and `vertex` (ADC, `aiplatform`) speak the identical
+  `generateContent` schema, so body-build/parse are factored into shared helpers.
+  `live_llm_readiness()` for `vertex` requires `GCP_PROJECT_ID` set, `google-auth`
+  importable, AND ADC resolvable — a loud boot `RuntimeError` otherwise (D-026
+  parity); `/admin/ai-status` + `/ready` inherit it. Compose bind-mounts the host
+  gcloud config dir read-only; ADC is never copied into the repo or image. See
+  DECISIONS **D-029**.
+- **GCP live validation sweep + SMOKE §14 GCP annotation (T1, `329f9a5`):** ran
+  the sprint's is-it-real payoff — all five AI purposes through the redaction seam
+  against real Vertex (`vertex`/`gemini-2.5-flash`, ADC-only) on Dave's box. The
+  sweep surfaced and fixed **two adapter defects** no keyless unit test had
+  exercised, both now `pytest -m unit` locked: (1) `google-auth`'s token-refresh
+  transport hard-requires `requests`, so the dep is now `google-auth[requests]`;
+  (2) gemini-2.5 "thinking" spent an unbounded slice of `maxOutputTokens` and
+  truncated the longer drafts mid-JSON, silently returned as "completed" — fixed
+  with a **loud `finishReason` guard** (non-STOP now raises at the parse seam),
+  the output cap raised 4096→8192, and a bounded `thinkingConfig.thinkingBudget`
+  (2048) for gemini-2.5+ only. SMOKE_TEST §14/§14.1 annotated GCP-validated
+  2026-07-15 (opt-in spec is the proof, CI-skipped keyless). `.env` reverted to
+  fixture; a keyless run self-skips clean. See DECISIONS **D-029** addendum.
+- **Client release notification email (T2, `4420b53`):** the shared
+  `release_deliverable` helper (behind all four services + risk register) now
+  emails **every active client-role user of the deliverable's tenant** on release
+  when delivery is on — carrying the service, title/version, and a
+  `{WEB_BASE_URL}/documents` link. Best-effort: delivery-off releases behave
+  exactly as v3.3.0 (loud skip log); a per-recipient SMTP failure is logged loudly
+  and the release **still stands** (release is the source of truth — a
+  notification failure must never roll it back). Cross-tenant users and admins are
+  never notified. Four `pytest -m unit` tests
+  (`test_release_notification.py`). See DECISIONS **D-030**.
+- **Enable email delivery in dev/CI compose (T3, `d95f5c7`):** flipped
+  `SHIELD_EMAIL_DELIVERY_ENABLED` default to `true` in `docker-compose.yml`
+  (SMTP → the `mailhog` service, so boot never refuses) so the registration /
+  verify / reset email loop is real in every dev and CI run and
+  `s21-email-verify.spec.ts` **runs** instead of self-skipping.
+  `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` stays `false` — flipping it would break every
+  e2e sign-in (seeded/spec users are unverified); enforcement remains a
+  deploy-time choice. The CI `e2e` job comment notes MailHog is now exercised.
+- **reqSeq stale-fetch guard sweep remainder (T4, `37f9bd6`):** finished the
+  Sprint-5 carry-over — swept the admin workspaces/panels the 14 react-hooks rules
+  did not force, applying a `reqSeq` guard **only** where a stale mount-fetch
+  response can clobber newer state (each edit justified in the commit body, no
+  speculative guards). Vitest guards added for the two highest-traffic
+  newly-guarded components (deferred-promise pattern).
+- **Auth.js (next-auth) v5 migration (T5, `3de0626`):** migrated web auth from
+  `next-auth@4.24.14` to Auth.js v5 (`next-auth@5.0.0-beta.31` + `@auth/core`).
+  `lib/auth/options.ts` now owns `NextAuth()` and exports
+  `{handlers, auth, signIn, signOut}`; the `[...nextauth]` route re-exports the
+  handlers; 34 `getServerSession(authOptions)` call sites moved to `auth()`. The
+  MFA signal is re-wired for v5 (every credentials failure normalizes to
+  `CredentialsSignin`, so the password-ok-need-TOTP branch throws a subclass whose
+  `code='mfa_required'` surfaces via `signIn(redirect:false).code`; `SignInForm`
+  reads `result.code`, not `result.error`). Behavior-identical: auth e2e green.
+  `pnpm audit`: the `uuid@8.3.2` moderate is **gone** (`uuid` no longer in the
+  lockfile); only the documented `postcss` moderate remains. New
+  `SignInForm.test.tsx` locks the code-based MFA signal. BUILD_REPORT audit
+  posture updated.
+- **Wrap-up (T6, this commit):** SMOKE_TEST §14 GCP annotation (T1), §25 checked
+  via the now-running `s21` (T3), new §29 release-notification section (T2) — boxes
+  only where a green committed spec proves it (honesty convention); this
+  `[3.4.0]` CHANGELOG entry; BUILD_REPORT synced (Vertex in the provider matrix,
+  post-T5 audit posture, gate results); DECISIONS D-029/D-030 verified landed;
+  full exit gate set green; CONTEXT.md end-of-sprint snapshot; `context/dave.md`
+  refreshed.
+
 ## [3.3.0] — Sprint 6 · real demo — 2026-07-12
 
 Branch `feat/real-demo-sprint-6`. Twelve tasks (T0–T11) turning the platform

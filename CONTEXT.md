@@ -1,9 +1,10 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-12 (Sprint 6 close — real demo). This file describes the
-project as of the branch it sits on and is updated ONLY as part of a PR. Durable
-facts and environment gotchas live in `CLAUDE.md`; personal in-flight status
-lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
+_Last updated: 2026-07-16 (Sprint 7 close — GCP live path + close the client
+loop). This file describes the project as of the branch it sits on and is
+updated ONLY as part of a PR. Durable facts and environment gotchas live in
+`CLAUDE.md`; personal in-flight status lives in `context/<name>.md`; per-sprint
+detail lives in `SPRINT_<n>.md`._
 
 ## Current state
 
@@ -26,53 +27,43 @@ lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
   `/home` executive dashboard + §2.5 value-loop card, `/documents`, a CSF POA&M
   step, a pre-egress redaction preview, and the first read surface over the
   append-only audit stores (`/admin/audit`).
-- **Sprint 6 "real demo" COMPLETE** (this branch `feat/real-demo-sprint-6`,
-  `v3.3.0`): the platform is now a real, self-standing demo. The live-AI path is
-  runnable and fails LOUDLY at boot when misconfigured (D-026); seeded
-  deliverables actually download (seed→storage parity); real TOTP MFA (D-027) and
-  real email verification + password reset (D-028) ship on the custom-JWT stack —
-  the D-020 boot-refusals are gone, the flags now gate enforcement; a full-matrix
-  `/ready` + `/admin/health` operator view lands; the demo seed tells a coherent,
-  downloadable Atlas story with a one-command reset; and `docker-compose.demo.yml`
-  runs web as a production build. Two additive/C0 migrations (0030 MFA TOTP, 0031
-  email tokens). New user-facing auth features + a runnable live path justify the
-  **minor** bump. Full exit gate set green — full Playwright e2e, `pytest -m
-  unit`, web `tsc`, in-container web vitest, in-container web eslint, host
-  prettier `--check` (3.9.5), and in-container ruff/black.
+- **Sprint 6 "real demo"** (PR #33, `v3.3.0`): the platform became a real,
+  self-standing demo — runnable live-AI path with boot-time fail-loud (D-026),
+  seed→MinIO storage parity, real TOTP MFA (D-027) + real email verification /
+  password reset (D-028) on the custom-JWT stack (D-020 boot-refusals gone, flags
+  now gate enforcement), a full-matrix `/ready` + `/admin/health` operator view,
+  a coherent downloadable Atlas demo seed with one-command reset, and a
+  hosted-demo production compose. Migrations 0030 (MFA TOTP) + 0031 (email
+  tokens).
+- **Sprint 7 "GCP live path + close the client loop" COMPLETE** (this branch
+  `feat/gcp-vertex-sprint-7`, `v3.4.0`): the live-AI path is now **proven against
+  a real provider with no static key** — Vertex AI via Application Default
+  Credentials (D-029), validated end-to-end across all five AI purposes on Dave's
+  box (2026-07-15). The client loop is closed with a best-effort release
+  notification email (D-030); dev/CI email delivery is on by default so the
+  MailHog register/verify/reset loop is real every run (s21 runs, not skips); the
+  Sprint-5 `reqSeq` stale-fetch guard sweep is finished; and the web auth stack
+  migrated from next-auth v4 to Auth.js v5, clearing the `uuid@8.3.2` moderate
+  advisory. No new migrations. New user-facing surface (release notification) + a
+  real GCP live path justify the **minor** bump. Full exit gate set green — full
+  Playwright e2e, `pytest -m unit`, web `tsc`, in-container web vitest (12/12),
+  in-container web eslint (0 errors), host prettier `--check` (3.9.5), and
+  in-container ruff/black.
 
-### Sprint 6 task → commit
+### Sprint 7 task → commit
 
 | Task | What shipped | Commit |
 | --- | --- | --- |
-| T0 | Live-AI enablement: declared `anthropic` dep, replaced stale `claude-opus-4-7` default with `claude-sonnet-5`, live-mode boot preflight (fails loudly on missing key / unimportable SDK / placeholder model); D-026 | `8aebe51` |
-| T1 | Live-AI opt-in integration spec (`@pytest.mark.live`, self-skips keyless) + `smoke_live_ai.py`; SMOKE_TEST §14 codified | `a19fded` |
-| T2 | Seed → storage parity: seed writes bytes via `get_storage()` so seeded deliverables download 200 (410 before); s17 parity test | `0bbabac` |
-| T3 | Full dependency-health `/ready` matrix (db/redis/minio/keycloak-dormant/LLM) + `/admin/health` operator view (`HealthMatrix`, vitest) | `9b2c74b` |
-| T4 | Real TOTP MFA: migration 0030, RFC 6238 (`totp.py`), enroll/verify/login-challenge + recovery codes, flag gates enforcement; D-027 | `bf8e7c6` |
-| T5 | Real email verification + password reset: migration 0031, hashed single-use tokens over SMTP/MailHog, enumeration-safe, flag gates login; D-028 | `f67c79f` |
-| T6 | OpenAI reasoning models send `max_completion_tokens` per model family (Sprint 4 D-024 follow-up) | `19636b5` |
-| T7 | Live-AI parity sweep across all five purposes (opt-in, self-skips keyless); SMOKE_TEST §14.1 | `8761d91` |
-| T8 | Demo realism: seed synthesizes a coherent Atlas Risk Register (code-derived tiers, downloadable exports) + `scripts/demo-reset.*` one-command reset; s8 read-only test | `39b3cfc` |
-| T9 | Hosted-demo compose (`docker-compose.demo.yml`, web prod build); root `.dockerignore` + Dockerfile rewrite; fixed latent HealthMatrix CI lint failure; cloud/terraform NOT touched | `db33372` |
-| T10 | Security + audit pass: MFA second-factor failures feed account lockout, `/ready` detail redacted for anonymous callers; audits clean/documented, no secret committed | `18b7d85` |
-| T11 | Wrap-up: SMOKE_TEST §22–§28, CHANGELOG `[3.3.0]`, BUILD_REPORT sync, DECISIONS D-026/027/028 verify, full gates, this snapshot | `215097c` |
+| T0 | Vertex AI provider adapter via ADC — `VertexProvider` on `{region}-aiplatform.googleapis.com` generateContent, Bearer ADC (no static key), shared body-build/parse with `gemini`, token never logged, `live_llm_readiness()` boot preflight; D-029 | `7dcf159` |
+| T1 | GCP live validation sweep (opt-in) — all five purposes live on `vertex`/`gemini-2.5-flash` (ADC-only) through the redaction seam; found+fixed 2 adapter defects (`google-auth[requests]`; loud `finishReason` guard + cap 4096→8192 + `thinkingBudget` for 2.5+); SMOKE §14/§14.1 GCP-annotated | `329f9a5` |
+| T2 | Client release notification email — shared release helper emails the tenant's active client users on release (best-effort, release is source of truth); D-030 | `4420b53` |
+| T3 | Email delivery on by default in dev/CI compose (MailHog); s21 email-verify now RUNS instead of self-skipping; REQUIRE_EMAIL_VERIFY stays off | `d95f5c7` |
+| T4 | reqSeq stale-fetch guard sweep remainder (Sprint-5 carry-over) across admin workspaces/panels; guards only where a stale mount-fetch clobbers newer state; two vitest guards | `37f9bd6` |
+| T5 | Auth.js (next-auth) v5 migration — `getServerSession`→`auth()` at 34 sites, MFA code-signal re-wired, behavior-identical; clears the `uuid@8.3.2` moderate | `3de0626` |
+| T6 | Wrap-up: SMOKE §14 GCP annotation / §25 checked / new §29 release-notification, CHANGELOG `[3.4.0]`, BUILD_REPORT sync, DECISIONS D-029/D-030 verify, full gates, this snapshot | _this commit_ |
 
-A post-T11 final audit (four parallel sub-audits: types, logic/runtime, spec
-compliance, coverage) found no critical/high defects and produced one hardening
-fix + one docs fix (the `chore(sprint-6): final audit and CONTEXT refresh`
-commit): `/auth/mfa/enroll` now refuses (409 `mfa_already_enrolled`) when MFA is
-already active — a bare re-enroll would overwrite the live TOTP secret while
-`mfa_enrolled` stayed true, silently breaking the user's working authenticator
-(rotating an active factor needs an explicit disable-with-current-factor flow,
-a Sprint 7 candidate) — and `docs/architecture.md`'s Auth section was refreshed
-(it still described the pre-Sprint-6 D-020 boot-refusals; it now documents the
-MFA + email flows and the shared second-factor lockout). `pytest -m unit`
-re-verified green after the fix.
-
-New migrations: **0030** (MFA TOTP secret + recovery codes, T4) + **0031**
-(email verification/reset tokens, T5), both additive/SQLite-safe (C0). New
-DECISIONS: **D-026** (live-AI enablement + boot preflight), **D-027** (real TOTP
-MFA), **D-028** (real email verification + password reset).
+No new migrations this sprint. New DECISIONS: **D-029** (Vertex AI via ADC as the
+GCP live path) + **D-030** (client release notification, best-effort notify).
 
 ## Machine-local facts (this box)
 
@@ -89,124 +80,104 @@ MFA), **D-028** (real email verification + password reset).
   `e2e/node_modules/@playwright/test/cli.js`. Docker CLI needs
   `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` per shell.
   Host Node LTS is 22 (matches the container after Sprint 4 T4).
-- **Six queue gates (Sprint 6):** the runtime queue `gates` array now runs
-  `pytest -m unit`, web `tsc`, host prettier 3.9.5 `--check`, in-container
-  ruff/black (root-config parity), in-container web vitest (`pnpm -F web test`),
-  and in-container web eslint (`pnpm -F web lint` — added this sprint after T9's
-  HealthMatrix lint failure slipped a loop that omitted eslint).
+- **Six queue gates:** `pytest -m unit`, web `tsc`, host prettier 3.9.5
+  `--check`, in-container ruff/black (root-config parity), in-container web vitest
+  (`pnpm -F web test`), in-container web eslint (`pnpm -F web lint`). Bandit is
+  CI-only (a ruff `# noqa` does NOT suppress it — a flagged string needs its own
+  `# nosec`).
+- **GCP live path (Sprint 7):** live Vertex needs `SHIELD_LLM_MODE=live`,
+  `SHIELD_LLM_PROVIDER=vertex`, `SHIELD_LLM_MODEL=gemini-2.5-flash`,
+  `GCP_PROJECT_ID=kentro-cloudmod-dev`, `GCP_REGION=us-central1`, and host gcloud
+  ADC bind-mounted read-only (`GCLOUD_CONFIG_DIR`, `%APPDATA%\gcloud` on this box)
+  with `GOOGLE_APPLICATION_CREDENTIALS` pointing at the mounted file — all in the
+  **gitignored** `.env`, reverted to fixture after validation. There is NO static
+  Google API key anywhere. Adding `google-auth` (T0) required
+  `docker compose build api` — a plain restart won't install it.
 - **Framework/module reinstall dance:** after editing any `apps/web` source,
   `docker compose up -d --force-recreate web` before any e2e (next-dev hot-reload
-  does not fire through the Windows bind mount). A NEW python module under `app/`
-  needs `docker compose restart api`; NEVER restart api while an in-container
-  pytest is running (SIGKILL 137). After editing `apps/web/package.json`,
-  reinstall INSIDE the web container.
-- **`anthropic` SDK is now a real dep (T0):** adding it required
-  `docker compose build api` (a plain restart won't install it). Live mode also
-  needs a **current** model (`claude-sonnet-5`, not the rejected `claude-opus-4-7`
-  placeholder) or the boot preflight refuses to start.
+  does not fire through the Windows bind mount). After `apps/web/package.json`
+  changes (T5 Auth.js v5), reinstall INSIDE the web container. A NEW python module
+  under `app/` needs `docker compose restart api`; NEVER restart api while an
+  in-container pytest is running (SIGKILL 137).
 
 ## Deferred / needs a human
 
-- **SMOKE_TEST §14 / §14.1 (live AI, key-gated):** the opt-in `@pytest.mark.live`
-  specs and `smoke_live_ai.py` are committed but self-skip without a real provider
-  key — no committed spec runs a live call in a keyless pipeline. Run one real
-  sweep with a key to confirm the redacted `llm_calls` row and per-adapter parse
-  for all five purposes. Provider-agnostic since Sprint 4 (D-024). No adapter parse
-  fix was possible without a key this sprint.
-- **SMOKE_TEST §25 (MailHog e2e, opt-in):** `s21-email-verify.spec.ts` self-skips
-  unless the api is up with `SHIELD_EMAIL_DELIVERY_ENABLED=true`; run it once
-  against MailHog to prove the token flow end-to-end through the wire.
+- **SMOKE_TEST §14 / §14.1 — GCP-validated 2026-07-15 (Sprint 7 T1):** the
+  opt-in `@pytest.mark.live` specs were run for real against Vertex (ADC-only)
+  across all five purposes; still self-skip keyless so CI/loop stay green without
+  credentials. Re-verify with a keyed/ADC run.
+- **SMOKE_TEST §29 (release notification):** no e2e eyeballs the notification in
+  MailHog — the four `test_release_notification.py` unit tests prove recipient
+  selection, body, and best-effort semantics with the sender stubbed. An e2e that
+  reads the mail out of MailHog is a Sprint 8 candidate.
 - **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts in
-  `e2e/artifacts/`, incl. the CSF Action Plan XLSX sheet (asserted HTTP 200 by s7).
-- **MFA / email web UI eyeball:** the sign-in MFA step, account enrollment section,
-  and verify/forgot/reset pages have no e2e driving the UI (backend flows are
-  `pytest -m unit` proven); eyeball them in a browser.
-- **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` (T9) and
-  `scripts/demo-reset.*` (T8) were verified end-to-end by hand this sprint; no
-  automated spec drives them.
-- **reqSeq guard sweep remainder:** the broader mount-fetch-then-mutate sweep
-  across the components the react-hooks rules did not force stays a Sprint 7
-  candidate.
-- **ESLint 10** — deferred upstream: no published Next lint stack runs on it today
-  (`eslint-plugin-react` 7.37.5 uses the removed `context.getFilename()`; Next's
-  babel parser hits an `eslint-scope` gap). D-018 carries a dated deferral.
-- **Two documented moderate audit findings** left deliberately open (Sprint 4 T5):
-  `postcss` 8.4.31 (pinned in `next@15.5.20`; XSS-stringify path N/A at build) and
-  `uuid` 8.3.2 (via `next-auth@4.24.14`; buffer bug is v3/v5/v6-only). No JS dep
-  manifests changed this sprint, so the posture carries unchanged.
+  `e2e/artifacts/` (each asserted HTTP 200 by s7/s8).
+- **MFA / email web UI eyeball:** the sign-in MFA step, enrollment section, and
+  verify/forgot/reset pages have no e2e driving the UI (backend flows are
+  `pytest -m unit` proven). Dave is doing the MFA walkthrough by hand.
+- **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` and
+  `scripts/demo-reset.*` verified by hand; no automated spec drives them.
+- **ESLint 10** — deferred upstream (D-018 dated deferral): no published Next lint
+  stack runs on it today.
+- **One documented moderate audit finding** left deliberately open: `postcss`
+  8.4.31 (pinned in `next@15`; XSS-stringify path N/A at build). The `uuid@8.3.2`
+  moderate is GONE as of Sprint 7 T5 (Auth.js v5; `uuid` no longer in the
+  lockfile). The npm audit HTTP endpoint currently 410s upstream; posture verified
+  from the lockfile dependency graph.
 - **Needs David (cloud infra):** `infra/terraform` (cloud/account/region/network)
-  and DR runbooks are stubs; FedRAMP-authorized LLM connector; Auth.js v5 /
-  Keycloak SSO cutover (the Credentials→OIDC seam exists but stays dormant);
+  and DR runbooks are stubs; FedRAMP-authorized LLM connector; the Auth.js v5
+  Credentials→OIDC / Keycloak SSO cutover (the seam exists but stays dormant);
   `azure_openai`/`bedrock`/`local` LLM adapters stay loud not-implemented until a
-  deployment needs one. T9 delivered only a local hosted-demo compose.
+  deployment needs one. Dave's 2026-07-13 call: local containers for now.
 
 ## Test coverage status
 
-- Backend: full `pytest -m unit` green in-container. Sprint 6 added: the live-mode
-  boot preflight (`test_config.py` — missing key / unimportable SDK / placeholder
-  model raise, valid boots, fixture unaffected, default-not-stale); the full
-  `/ready` dependency matrix incl. offender-naming on a simulated-down dep,
-  keycloak-dormant, fixture-LLM informational-only, and the anonymous-vs-authenticated
-  detail redaction (`test_readiness.py`); RFC 6238 TOTP + at-rest encrypt roundtrip
-  (`test_totp.py`) and the MFA enroll/verify/login-challenge + recovery-code +
-  lockout-integration flow (`test_mfa_routes.py`); email verification + reset with
-  hashed single-use tokens, enumeration-safety, and the login gate
-  (`test_email_verification.py`); and the OpenAI token-key-per-model-family adapter
-  (`test_llm_providers.py`). Live-AI parity has committed opt-in specs
-  (`tests/live/test_live_ai.py`, `@pytest.mark.live`) excluded from `-m unit` and CI.
-- Web unit tests: `pnpm -F web test` (vitest + testing-library + jsdom) — Sprint 6
-  added `HealthMatrix.test.tsx` (renders every dependency row + all-green badge;
-  degraded badge names the offender) beside the two Sprint-5 `reqSeq` guard tests.
-- Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4. ESLint green (all 14
-  react-hooks v6 rules enabled; the in-container `pnpm -F web lint` gate joined the
-  queue this sprint).
-- e2e: full suite green across 21 spec files (host, resolves `:3001`). Sprint 6
-  added `s21-email-verify.spec.ts` (MailHog end-to-end, OPT-IN — 2 tests self-skip
-  without `SHIELD_EMAIL_DELIVERY_ENABLED=true`), a seed→storage parity test to
-  `s17-documents.spec.ts` (seeded client downloads a seeded released deliverable →
-  200), and a seeded-Risk-Register read-only test to `s8-risk-register.spec.ts`
-  (code-derived tiers + downloadable exports). Known cold-compile flake under load
-  documented in `CLAUDE.md`.
+- Backend: full `pytest -m unit` green in-container. Sprint 7 added: the Vertex
+  adapter contract + shared generateContent helpers + bearer-token-never-logged
+  lock + the `finishReason`/`thinkingBudget`/output-cap fixes
+  (`test_llm_providers.py`); the vertex live-readiness boot preflight
+  (`test_config.py`); and release-notification recipient selection / body /
+  delivery-off / SMTP-failure-doesn't-roll-back (`test_release_notification.py`).
+  Live-AI parity has committed opt-in specs (`tests/live/test_live_ai.py`,
+  `@pytest.mark.live`) excluded from `-m unit` and CI — GCP-validated 2026-07-15.
+- Web unit tests: `pnpm -F web test` (vitest) 12/12 — Sprint 7 added
+  `SignInForm.test.tsx` (Auth.js v5 code-based MFA signal) beside the reqSeq guard
+  tests and `HealthMatrix.test.tsx`.
+- Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4 / Auth.js v5. ESLint
+  0 errors (1 pre-existing postcss warning).
+- e2e: full suite green across 21 spec files (host, resolves `:3001`).
+  `s21-email-verify.spec.ts` now RUNS (not skips) because Sprint 7 T3 turned
+  MailHog delivery on by default. Known cold-compile flake under load documented
+  in `CLAUDE.md`.
 - Format: repo-wide prettier `--check` clean at 3.9.5. Python ruff/black clean
   (root-config parity).
-- Audit: bandit exit 0. No JS dep manifests changed this sprint, so root `pnpm
-  audit` / `e2e/` `npm audit` posture carries from Sprint 5 (0 high, 2 documented
-  moderates). The only python dep added is the official `anthropic` SDK (T0). No
-  secret committed this sprint (manual `main...HEAD` diff scan clean).
+- Audit: bandit CI-only, exit 0. Root `pnpm audit` posture: 0 high; the
+  `uuid@8.3.2` moderate cleared this sprint (T5), one documented `postcss`
+  moderate remains. No secret / ADC file / token committed this sprint.
 
-## Lessons learned (Sprint 6)
+## Lessons learned (Sprint 7)
 
-- **A feature flag that refuses to boot is worse than a real control.** The D-020
-  MFA / email-verify flags used to refuse startup because no flow existed. Sprint 6
-  built the flows (D-027/D-028) and flipped the flags to GATE enforcement — an
-  enrolled user is always challenged; the flag decides what happens to the
-  not-yet-enrolled. "Fail loudly" means fail on the real misconfiguration, not on
-  a control you simply haven't built yet.
-- **"Declared" is not "installed."** T0's live-AI dep (`anthropic`) surfaced only
-  as an `ImportError` on the first live Run-AI because the adapter lazy-imports and
-  the image was never rebuilt. The boot preflight now explicitly checks SDK
-  importability, not just that the key is set — guarding the "declared but image
-  not rebuilt" trap that a config check alone would miss.
-- **The seed must write where the API reads.** T2's 410 was a pure storage-backend
-  mismatch: the seed wrote to a local-FS stub while the S3-backed API read MinIO.
-  Routing the seed through the SAME `get_storage()` factory the API uses is the
-  fix, and the e2e now downloads a seeded deliverable to prove the two agree.
-- **Reset counters ONLY on a fully successful login.** T10's subtle MFA bug: the
-  login path cleared the password-failure counter the moment the password was
-  correct — before the SECOND factor gate. A password-holding attacker could then
-  re-login between TOTP guesses to evade second-factor lockout. The rule is now
-  invariant: counters reset only on `_register_successful_login`, and both
-  second-factor endpoints feed the same lockout counter.
-- **A public probe must not leak operator detail to anonymous callers.** T10's
-  `/ready` reduced each dependency's `detail` (exception types, LLM config state)
-  to a generic per-status string for anonymous callers while still naming offenders
-  + statuses (LBs/k8s need those); authenticated callers get the full detail. A
-  health endpoint is an information-disclosure surface, not just a boolean.
-- **Run every gate the pipeline runs.** T9 caught a latent CI lint failure
-  (`HealthMatrix.tsx`, react-hooks set-state-in-effect) that slipped because the
-  loop's gate set omitted eslint. The in-container `pnpm -F web lint` gate is now in
-  the queue array — the loop's gates now equal CI's.
-- **Poll long gates in the foreground to the end of the iteration.** The loop's
-  recurring failure mode is parking on a background monitor and returning
-  mid-iteration. Run pytest/e2e detached and poll synchronously in sub-timeout
-  bursts within the iteration.
+- **"Feasible with curl" is not "works through the adapter."** T0's Vertex path
+  was proven by a raw ADC `generateContent` curl, but the first live sweep (T1)
+  still found two defects a keyless unit test could never hit: `google-auth`'s
+  token-refresh transport needs the `[requests]` extra (the unit test mocked
+  `_bearer_token`, so it never exercised the real transport), and gemini-2.5
+  "thinking" ate the output budget and truncated JSON. A real end-to-end sweep is
+  the only thing that exercises the transport and the model's real output shape.
+- **A silent "completed" on a truncated response is a lie.** `_parse_generate_content`
+  returned a half-JSON draft as "completed" and it died downstream as an opaque
+  `JSONDecodeError`. The fix is to fail LOUDLY at the seam: any non-`STOP`
+  `finishReason` now raises and marks the `llm_call` failed with the real reason.
+- **The token rides the header, not the URL.** The Vertex bearer token is sent as
+  an `Authorization` header so an `HTTPStatusError` (which embeds only the request
+  URL) cannot leak it into logs or `llm_calls.error_message` — mirroring the
+  Gemini key-in-header lesson, and unit-locked.
+- **Best-effort side effects must not roll back durable state.** A
+  release-notification SMTP failure is logged loudly but the release still stands
+  — the release is the source of truth. "Fail loudly" means surface the failure,
+  not undo the thing the user already asked for.
+- **A major auth dep bump is behavior-preservation work, not a feature.** The
+  Auth.js v5 migration touched 34 call sites and re-wired the MFA signal (v5
+  normalizes every credentials failure to `CredentialsSignin`, so the MFA branch
+  surfaces via `signIn(...).code`, not `.error`). The bar was every auth e2e green
+  and not one weakened test.
