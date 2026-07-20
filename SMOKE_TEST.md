@@ -341,14 +341,14 @@ On deliverable release the shared `release_deliverable` helper (behind all four
 services + the risk register) emails the tenant's active client-role users when
 `SHIELD_EMAIL_DELIVERY_ENABLED` is on — best-effort, with the release as the
 source of truth. The logic is `pytest -m unit` proven with the sender stubbed;
-there is **no** e2e that eyeballs the notification in MailHog (the T2 commit added
-only unit coverage), so that stays a human/opt-in check.
+`s22-release-notify.spec.ts` (Sprint 8 T2) now also eyeballs the notification in
+MailHog end-to-end for a real registered client of an isolated tenant.
 
 - [x] Release with delivery on emails **exactly** the tenant's active client-role users; cross-tenant users and admins are never notified. (test_release_notification.py — `test_release_notifies_active_client_users_of_tenant_only`)
 - [x] The notification body carries the **service**, deliverable **title/version**, and the `{WEB_BASE_URL}/documents` link. (test_release_notification.py — `test_notification_body_carries_service_title_version_and_documents_link`)
 - [x] Delivery **off** → the release proceeds exactly as v3.3.0 with a loud skip log; **nothing** is sent. (test_release_notification.py — `test_delivery_off_sends_nothing_but_still_releases`)
 - [x] An SMTP failure is logged **loudly** and the release is **not** rolled back (release is the source of truth). (test_release_notification.py — `test_smtp_failure_does_not_roll_back_release`)
-- [ ] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`). (no committed e2e drives this; human/opt-in check — the four unit tests above prove recipient selection, body, and best-effort semantics with the sender stubbed)
+- [x] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`) for the tenant's registered client, with the release subject + `/documents` link. (s22-release-notify.spec.ts — self-skips when delivery is off, mirroring s21)
 
 ---
 
