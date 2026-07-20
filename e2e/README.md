@@ -3,12 +3,12 @@
 Host-run Playwright suite that drives the composed Docker stack's web app. The
 specs share **one seeded database** and run **serialized** (`fullyParallel:
 false`, `workers: 1`) so DB-mutating flows stay deterministic. This README is
-the canonical fresh-stack bring-up sequence and the script the planned CI e2e
-job (S2 T3, `.github/workflows/ci.yml`) will reproduce.
+the canonical fresh-stack bring-up sequence and the script the CI `e2e` job
+(`.github/workflows/ci.yml`, added in Sprint 2 T3) reproduces.
 
 ## Layout
 
-- `smoke/` — the numbered smoke specs (`s0`–`s15`, sections mirror
+- `smoke/` — the numbered smoke specs (`s0`–`s21` today; sections mirror
   `SMOKE_TEST.md`).
 - `helpers/baseUrl.ts` — resolves the web base URL (see [Ports](#ports)).
 - `helpers/ids.ts` — resolves seeded Atlas client/service ids **at runtime**

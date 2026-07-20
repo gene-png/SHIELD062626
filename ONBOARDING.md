@@ -7,12 +7,18 @@ is `context/<your-name>.md` (create it from the template in `context/`)._
 
 ## 1. Prerequisites (install once)
 
-| Tool           | How                                                       | Notes                                                                                                                                          |
-| -------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Docker Desktop | docker.com installer                                      | The whole stack runs in compose; first `up` pulls ~2 GB                                                                                        |
-| Node.js 22 LTS | `winget install OpenJS.NodeJS.LTS --scope user` (Windows) | Host-run Playwright + prettier. The stack runs Node 22 (Docker + CI); match it on the host. `--scope user` needs no admin; new shells get PATH |
-| GitHub CLI     | `winget install GitHub.cli --scope user`                  | Then `gh auth login` → github.com → HTTPS → browser, with YOUR personal account                                                                |
-| Git            | you have it                                               | Credential Manager stores your push identity on first push                                                                                     |
+| Tool           | How                                                       | Notes                                                                                                                                                                                     |
+| -------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop | docker.com installer                                      | The whole stack runs in compose; first `up` pulls ~2 GB                                                                                                                                   |
+| Node.js 22 LTS | `winget install OpenJS.NodeJS.LTS --scope user` (Windows) | Host-run Playwright + prettier. The stack runs Node 22 (Docker + CI); match it on the host. `--scope user` needs no admin; new shells get PATH                                            |
+| GitHub CLI     | `winget install GitHub.cli --scope user`                  | Then `gh auth login` → github.com → HTTPS → browser, with YOUR personal account                                                                                                           |
+| Git            | you have it                                               | Credential Manager stores your push identity on first push. Also set `git config --global user.name` / `user.email` — loop agents commit as you; the first commit fails without them      |
+| Claude Code    | `npm install -g @anthropic-ai/claude-code`                | The sprint loop runs inside it — sign in with an account that has Opus-class model access. Babysit the first `/loop-sprint-cron` fire: it raises tool-permission prompts you must approve |
+
+**Repo access first:** ask Gene (gene-png, repo owner) to add your GitHub
+account as a collaborator with write access. Verify before launching anything:
+`gh api repos/gene-png/SHIELD062626 --jq .permissions` — `push` must be `true`
+(EMU/corporate accounts cannot write here at all; see below).
 
 Windows PATH gotchas (this repo's docs assume them): Docker CLI is not on Git
 Bash PATH (`export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"`
@@ -102,20 +108,36 @@ agents per `.claude/commands/loop-sprint.md`). Each sprint ships a plan doc
 (`SPRINT_<n>.md`) and a committed staged queue
 (`.claude/sprint-queue.sprint-<n>.json`).
 
-**The staged, ready-to-launch sprint is `SPRINT_7.md`** (queue
-`.claude/sprint-queue.sprint-7.json`, branch `feat/gcp-vertex-sprint-7`,
-target v3.4.0): Vertex-AI-via-ADC provider, release notification email,
-dev MailHog delivery, reqSeq sweep, Auth.js v5.
+**The staged, ready-to-launch sprint is `SPRINT_8.md`** (queue
+`.claude/sprint-queue.sprint-8.json`, branch `feat/browser-proof-sprint-8`,
+target v3.4.1): shared MailHog e2e helper, tech-debt extract draft-guard,
+release-notification e2e, verify/forgot/reset pages e2e, MFA e2e (TOTP +
+recovery codes), admin-health + `/documents` empty state. The plan was
+reviewed by OpenAI Codex before merge (PR #37 carries the findings table).
+(Convention: the staged sprint is always the highest-numbered committed
+`SPRINT_<n>.md` / `sprint-queue.sprint-<n>.json` pair — each planning PR must
+bump this paragraph.)
 
-1. Follow the sprint doc's launch checklist (`SPRINT_7.md` → _Prerequisites_).
+**Launching the loop is a HUMAN action.** Agents stage the plan and queue but
+never start `/loop-sprint-cron` — you (the dev at the keyboard) do, after
+walking the checklist below.
+
+1. Follow the sprint doc's launch checklist (`SPRINT_8.md` → _Prerequisites_).
 2. Copy the staged queue to `.claude/sprint-queue.json` (gitignored — your
    machine-local runtime copy).
 3. **Edit your runtime copy**: set `working_dir` to your absolute repo path
    and `expected_gh_user` to your GitHub login. The loop halts on either
    being wrong. Confirm the `gates` array's command strings match YOUR
-   OS/Docker/Node layout — the six gates themselves are the invariant.
+   OS/Docker/Node layout — the six gates themselves are the invariant. Known
+   trap: gate 3 (prettier) discovers Node via the **winget** package path
+   (`$LOCALAPPDATA/Microsoft/WinGet/Packages/OpenJS.NodeJS.LTS…`); if you
+   installed Node any other way (.msi, nvm), replace the `NODE_DIR` discovery
+   with your node dir — or drop it if `npx` is already on the gate shell's
+   PATH.
 4. Create the sprint branch named in the queue, from `main`.
-5. In Claude Code, run `/loop-sprint-cron`. It fires every ~10 min, one task
+5. **YOU (the human) run `/loop-sprint-cron` in Claude Code** — never ask an
+   agent to start the loop (rule of the road, see `CLAUDE.md`). It fires
+   every ~10 min, one task
    per fire, checkpoints (full suite + audit) every 4 done. Watch
    `.claude/scheduler-debug.log`. Known babysitting duty: dispatched agents
    sometimes park on a background monitor mid-gate — nudge them to
@@ -124,12 +146,17 @@ dev MailHog delivery, reqSeq sweep, Auth.js v5.
    `/loop-sprint-cron` to resume (queue state survives on disk; a `halt` in
    the queue explains any stop).
 
-**Sprint 7 specific:** the live-AI tasks (T1) authenticate to Google Vertex
-via **gcloud Application Default Credentials** — verify
-`gcloud auth application-default print-access-token` works on your box before
-launching (project `kentro-cloudmod-dev`, region `us-central1`). No API key
-exists or is needed. Without ADC the live tasks self-skip and the loop stays
-green — you just won't get the live validation payoff.
+**Sprint 8 specific:** no cloud credentials or API keys are needed —
+everything runs against the fixture-mode dev stack + MailHog (delivery is on
+by default in dev compose since Sprint 7). Two things to know before your
+first fire:
+
+- T4 adds a TOTP dependency to `e2e/package.json`; after it lands, run
+  `npm ci` inside `e2e/` on the **host** (the e2e harness is not
+  containerized — no image rebuild involved).
+- T1 deliberately re-contracts one pytest
+  (`test_extract_versions_subsequent_lists`) — the sprint doc calls this out;
+  it is a changed API contract, not a weakened test.
 
 ## 6. Collaboration rules (short version — full table in CLAUDE.md)
 
@@ -141,3 +168,7 @@ green — you just won't get the live validation payoff.
   with the spec filename.
 - Dependabot: majors are suppressed by policy (D-018) — framework majors are
   sprint-planned, never auto-merged.
+- Sprint planning PRs get a **read-only OpenAI Codex review** before merge
+  (`npm i -g @openai/codex`, `codex login`, `codex exec --sandbox read-only`
+  with the draft plan); fold findings in and table the verdict in the PR body
+  (see PR #37 for the format). Codex reviews — it never authors.

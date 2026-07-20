@@ -15,7 +15,7 @@
         "active": false,
         "reason": null
     },
-    "scratch": "Sprint 8 queue seeded 2026-07-16 after Sprint 7 merged (PR #36, v3.4.0). NOT YET LAUNCHED - Dave launches /loop-sprint-cron HIMSELF; agents never start the loop. THEME: PROVE IT IN THE BROWSER - convert human-eyeball SMOKE debt into committed green specs + the last mint-route fix. Plan Codex-reviewed 2026-07-16 (ship-with-changes, findings folded into SPRINT_8.md). Version at close 3.4.1 (tag/CHANGELOG only - do NOT touch package manifests). No live-AI or cloud credentials needed - fixture mode + MailHog throughout. Email delivery is ON by default in dev compose since Sprint 7 T3; REQUIRE_MFA and REQUIRE_EMAIL_VERIFY stay FALSE (flipping either breaks existing e2e sign-ins). T1 (tech-debt guard) DELIBERATELY re-contracts test_extract_versions_subsequent_lists - call it out in the commit body, never silently weaken. T4 adds a TOTP dep to e2e/package.json -> npm ci inside e2e/ on the HOST (host-run harness, no container rebuild). New specs: s22 release-notify, s23 auth-pages, s24 mfa (parts A+B), s25 admin-health + an s17 empty-state assertion. MailHog assertions ALWAYS unique timestamped recipient + expected subject (registration also mails the same address - first-message-wins races). SIX gates unchanged. ruff==0.15.20/black==26.5.1 pinned + known-first-party=['app'] in ROOT pyproject - do not remove. gh auth switch before gh writes.",
+    "scratch": "Sprint 8 queue seeded 2026-07-16 after Sprint 7 merged (PR #36, v3.4.0). NOT YET LAUNCHED - the human dev launching this sprint runs /loop-sprint-cron THEMSELVES; agents never start the loop. THEME: PROVE IT IN THE BROWSER - convert human-eyeball SMOKE debt into committed green specs + the last mint-route fix. Plan Codex-reviewed 2026-07-16 (ship-with-changes, findings folded into SPRINT_8.md). Version at close 3.4.1 (tag/CHANGELOG only - do NOT touch package manifests). No live-AI or cloud credentials needed - fixture mode + MailHog throughout. Email delivery is ON by default in dev compose since Sprint 7 T3; REQUIRE_MFA and REQUIRE_EMAIL_VERIFY stay FALSE (flipping either breaks existing e2e sign-ins). T1 (tech-debt guard) DELIBERATELY re-contracts test_extract_versions_subsequent_lists - call it out in the commit body, never silently weaken. T4 adds a TOTP dep to e2e/package.json -> npm ci inside e2e/ on the HOST (host-run harness, no container rebuild). New specs: s22 release-notify, s23 auth-pages, s24 mfa (parts A+B), s25 admin-health + an s17 empty-state assertion. MailHog assertions ALWAYS unique timestamped recipient + expected subject (registration also mails the same address - first-message-wins races). SIX gates unchanged. ruff==0.15.20/black==26.5.1 pinned + known-first-party=['app'] in ROOT pyproject - do not remove. gh auth switch before gh writes.",
     "gates": [
         "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T api pytest -m unit -q",
         "export PATH=\"$PATH:/c/Program Files/Docker/Docker/resources/bin\" && cd \"$(git rev-parse --show-toplevel)\" && docker compose exec -T web sh -lc \"cd /app && pnpm -F web exec tsc --noEmit\"",
@@ -144,7 +144,7 @@
             ],
             "verify": [
                 "self-contained test with its OWN fresh user (enroll via the same UI flow, capture recovery codes, sign out) - no cross-test state with part A",
-                "sign in with ONE recovery code in the TOTP field (SignInForm.tsx:74 accepts it) -> success asserted",
+                "sign in with ONE recovery code in the TOTP field (SignInForm.tsx:104-119; placeholder '6-digit code or recovery code' at :114) -> success asserted",
                 "sign out, SAME code again -> rejection asserted (single-use consumed)",
                 "T4+T5 together retire the manual MFA walkthrough (SMOKE MFA eyeball item - annotate in T7); full suite green"
             ],
@@ -191,13 +191,13 @@
                 "CHANGELOG.md",
                 "CONTEXT.md",
                 "BUILD_REPORT.md",
-                "context/dave.md"
+                "context/"
             ],
             "verify": [
                 "SMOKE_TEST: 29 (s22), verify/forgot/reset pages (s23), MFA UI (s24), /admin/health (s25), /documents empty state (s17) - each box checked ONLY with its spec filename (honesty convention)",
                 "boxes that stay UNCHECKED stay unchecked: unit-proven backend invariants (16 release deny paths, 20 preview internals, 21 audit filters) and the end-of-file sign-off boxes - nothing this sprint proves them in a browser (note this in the PR body)",
                 "CHANGELOG [3.4.1] per-task entries with commits (tag/CHANGELOG only - package manifests untouched); BUILD_REPORT synced (gate results at HEAD, e2e spec files 21 -> 25)",
-                "CONTEXT.md overwritten with end-of-sprint snapshot; context/dave.md refreshed (corrected only-tech-debt mint-route fact carried)",
+                "CONTEXT.md overwritten with end-of-sprint snapshot; the LAUNCHING dev's own context/<name>.md refreshed (owner-only rule - NEVER write another dev's context file)",
                 "FULL exit gate set green (all six) + full e2e"
             ],
             "notes": "See SPRINT_8.md T7. Carry the deferred list forward: Keycloak SSO, demo-reset/hosted-demo automation, section-10 export eyeballs, ESLint 10, postcss moderate, terraform/FedRAMP/other adapters, tech-debt replace-draft affordance.",

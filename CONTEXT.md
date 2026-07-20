@@ -1,10 +1,10 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-16 (Sprint 7 close — GCP live path + close the client
-loop). This file describes the project as of the branch it sits on and is
-updated ONLY as part of a PR. Durable facts and environment gotchas live in
-`CLAUDE.md`; personal in-flight status lives in `context/<name>.md`; per-sprint
-detail lives in `SPRINT_<n>.md`._
+_Last updated: 2026-07-16 (Sprint 7 merged as PR #36; Sprint 8 planned and
+staged via PR #37). This file describes the project as of the branch it sits
+on and is updated ONLY as part of a PR. Durable facts and environment gotchas
+live in `CLAUDE.md`; personal in-flight status lives in `context/<name>.md`;
+per-sprint detail lives in `SPRINT_<n>.md`._
 
 ## Current state
 
@@ -35,8 +35,8 @@ detail lives in `SPRINT_<n>.md`._
   a coherent downloadable Atlas demo seed with one-command reset, and a
   hosted-demo production compose. Migrations 0030 (MFA TOTP) + 0031 (email
   tokens).
-- **Sprint 7 "GCP live path + close the client loop" COMPLETE** (this branch
-  `feat/gcp-vertex-sprint-7`, `v3.4.0`): the live-AI path is now **proven against
+- **Sprint 7 "GCP live path + close the client loop" MERGED** (PR #36,
+  `v3.4.0`): the live-AI path is now **proven against
   a real provider with no static key** — Vertex AI via Application Default
   Credentials (D-029), validated end-to-end across all five AI purposes on Dave's
   box (2026-07-15). The client loop is closed with a best-effort release
@@ -60,10 +60,20 @@ detail lives in `SPRINT_<n>.md`._
 | T3 | Email delivery on by default in dev/CI compose (MailHog); s21 email-verify now RUNS instead of self-skipping; REQUIRE_EMAIL_VERIFY stays off | `d95f5c7` |
 | T4 | reqSeq stale-fetch guard sweep remainder (Sprint-5 carry-over) across admin workspaces/panels; guards only where a stale mount-fetch clobbers newer state; two vitest guards | `37f9bd6` |
 | T5 | Auth.js (next-auth) v5 migration — `getServerSession`→`auth()` at 34 sites, MFA code-signal re-wired, behavior-identical; clears the `uuid@8.3.2` moderate | `3de0626` |
-| T6 | Wrap-up: SMOKE §14 GCP annotation / §25 checked / new §29 release-notification, CHANGELOG `[3.4.0]`, BUILD_REPORT sync, DECISIONS D-029/D-030 verify, full gates, this snapshot | _this commit_ |
+| T6 | Wrap-up: SMOKE §14 GCP annotation / §25 checked / new §29 release-notification, CHANGELOG `[3.4.0]`, BUILD_REPORT sync, DECISIONS D-029/D-030 verify, full gates, this snapshot | `4796429` (PR #36 squash) |
 
 No new migrations this sprint. New DECISIONS: **D-029** (Vertex AI via ADC as the
 GCP live path) + **D-030** (client release notification, best-effort notify).
+
+- **Sprint 8 "prove it in the browser" PLANNED & STAGED** (PR #37): `SPRINT_8.md`
+  + queue `.claude/sprint-queue.sprint-8.json`, branch-to-be
+  `feat/browser-proof-sprint-8`, target `v3.4.1`. Converts human-eyeball
+  SMOKE debt into committed specs (release-notify §29, verify/forgot/reset
+  pages, MFA TOTP + recovery codes, `/admin/health`, `/documents` empty state)
+  and pays the last mint-route debt (tech-debt extract draft-guard). Plan
+  reviewed read-only by OpenAI Codex pre-merge (findings table in PR #37).
+  **Not yet launched — the dev at the keyboard starts `/loop-sprint-cron`,
+  never an agent** (see `ONBOARDING.md` §5 for the launch checklist).
 
 ## Machine-local facts (this box)
 
@@ -109,12 +119,13 @@ GCP live path) + **D-030** (client release notification, best-effort notify).
 - **SMOKE_TEST §29 (release notification):** no e2e eyeballs the notification in
   MailHog — the four `test_release_notification.py` unit tests prove recipient
   selection, body, and best-effort semantics with the sender stubbed. An e2e that
-  reads the mail out of MailHog is a Sprint 8 candidate.
+  reads the mail out of MailHog is planned in `SPRINT_8.md` (T0/T2).
 - **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts in
   `e2e/artifacts/` (each asserted HTTP 200 by s7/s8).
 - **MFA / email web UI eyeball:** the sign-in MFA step, enrollment section, and
   verify/forgot/reset pages have no e2e driving the UI (backend flows are
-  `pytest -m unit` proven). Dave is doing the MFA walkthrough by hand.
+  `pytest -m unit` proven). Committed specs are planned in `SPRINT_8.md`
+  (T3–T5); the manual walkthrough retires when they land.
 - **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` and
   `scripts/demo-reset.*` verified by hand; no automated spec drives them.
 - **ESLint 10** — deferred upstream (D-018 dated deferral): no published Next lint

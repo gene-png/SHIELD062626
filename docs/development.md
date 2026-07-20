@@ -33,16 +33,19 @@ current two-developer workflow runs plain Docker Compose on the host.)
 # Watch api logs
 docker compose logs -f api
 
-# Run the real test matrix (these are the sprint gates; CI runs the same)
+# Run the real test matrix (the six sprint gates; CI runs the same + bandit/gitleaks)
 docker compose exec -T api pytest -m unit -q
 docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
+docker compose exec -T web sh -lc "cd /app && pnpm -F web test"
+docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"
+docker compose exec -T api sh -lc "cd /app && ruff check --no-cache . && black --check ."
 npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
 cd e2e && npx playwright test          # host-run, stack must be up + seeded
 ```
 
-There is no `pytest -m integration` suite (the marker is declared but unused)
-and no web unit-test runner (`pnpm test` does not exist); the Playwright suite
-covers the integrated stack.
+There is no `pytest -m integration` suite (the marker is declared but unused);
+web unit tests run in-container via vitest (`pnpm -F web test`, a loop gate
+since Sprint 5) and the Playwright suite covers the integrated stack.
 
 Environment gotchas that will bite you (full list in `CLAUDE.md`):
 

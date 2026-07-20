@@ -8,21 +8,24 @@
 
 `docker-compose.yml` at the repo root runs the whole platform:
 
-| Service                 | Image / build                 | Notes                                                                                                                                    |
-| ----------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| db                      | postgres:16                   | Alembic migrations at `api` start                                                                                                        |
-| redis                   | redis:7                       | **Rate limiting only** (auth + run-AI, `app/security/rate_limit.py`); fails open with a loud warning on outage. No queue, no Celery      |
-| minio (+ createbuckets) | minio                         | S3-compatible artifact/deliverable storage; console `:9001`                                                                              |
-| keycloak                | keycloak 25                   | Realm imported from `infra/keycloak/`; scaffolding for future OIDC — the active login path is SHIELD-issued JWT via NextAuth Credentials |
-| mailhog                 | mailhog                       | SMTP capture UI `:8025`                                                                                                                  |
-| api                     | `apps/api` (uvicorn --reload) | FastAPI; **AI jobs run synchronously in-process** — there is no worker service                                                           |
-| web                     | `apps/web` (next dev)         | `:3000` (override with `WEB_PORT` in the root `.env`)                                                                                    |
+| Service                 | Image / build                 | Notes                                                                                                                                                  |
+| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| db                      | postgres:16                   | Alembic migrations at `api` start                                                                                                                      |
+| redis                   | redis:7                       | **Rate limiting only** (auth + run-AI, `app/security/rate_limit.py`); fails open with a loud warning on outage. No queue, no Celery                    |
+| minio (+ createbuckets) | minio                         | S3-compatible artifact/deliverable storage; console `:9001`                                                                                            |
+| keycloak                | keycloak 25                   | Realm imported from `infra/keycloak/`; scaffolding for future OIDC — the active login path is SHIELD-issued JWT via Auth.js v5 (next-auth) Credentials |
+| mailhog                 | mailhog                       | SMTP capture UI `:8025`                                                                                                                                |
+| api                     | `apps/api` (uvicorn --reload) | FastAPI; **AI jobs run synchronously in-process** — there is no worker service                                                                         |
+| web                     | `apps/web` (next dev)         | `:3000` (override with `WEB_PORT` in the root `.env`)                                                                                                  |
 
 - Seed the demo data: `docker compose exec -T api python scripts/seed_demo.py`
   (idempotent).
 - LLM defaults to `SHIELD_LLM_MODE=fixture` — deterministic offline responses
   for all five AI purposes (DECISIONS D-017); live mode needs
-  `ANTHROPIC_API_KEY`.
+  `SHIELD_LLM_MODE=live` + `SHIELD_LLM_PROVIDER` and that provider's
+  credential — an API key for `anthropic`/`openai`/`gemini`, gcloud ADC (no
+  key) for `vertex` (D-024/D-029). A misconfigured live boot fails loudly at
+  startup (D-026).
 - Logs: structured JSON (structlog) to stdout with request correlation IDs —
   `docker compose logs -f api`. There is no metrics/Prometheus endpoint.
 - Production-shaped Dockerfiles exist (`apps/api/Dockerfile`, least-privilege
