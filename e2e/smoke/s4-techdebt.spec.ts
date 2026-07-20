@@ -15,9 +15,15 @@ import { atlasServiceId } from "../helpers/ids";
  *   2. Editing any cell clears that row's AI-confidence badge and re-labels it
  *      "Human-curated" (the API sets confidence_pct = NULL on a human edit).
  *
- * The seeded capability list is RELEASED/read-only, so each extraction layers a
- * new editable DRAFT version on top; fetchLatestList always returns our fresh
- * four-row draft, keeping the "AI 60%" row deterministic across re-runs.
+ * Draft-exists contract (Sprint 8 T1, commit 4396f60): a POST to /extract while a
+ * DRAFT capability list is already open now REUSES that draft (idempotent 200)
+ * instead of minting a fresh version — matching CSF / ATT&CK / Zero Trust. This
+ * spec edits a row on the draft it extracts, so on the shared seeded DB a plain
+ * re-run would hand back that already-curated draft and the "AI 60%" row would be
+ * gone. The spec therefore APPROVES any open draft first (moving it out of DRAFT),
+ * so the upload's extraction cuts a genuinely fresh four-row draft and the
+ * "AI 60%" row stays deterministic across re-runs — the s5-attack.spec.ts
+ * openFreshDraft pattern applied to tech-debt.
  */
 
 // A tiny inventory. The fixture extractor reads the redacted rows and stamps a
@@ -43,10 +49,31 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
   await page.goto(`/admin/services/${techDebtServiceId}/tech-debt`);
 
   // EnsureActiveClient aligns the active tenant to Atlas before the workspace
-  // renders its header.
+  // renders its header — and it must render before the API calls below so the
+  // active-client cookie is set and the proxy requests are tenant-scoped.
   await expect(
     page.getByRole("heading", { name: "Tech Debt Review" }),
   ).toBeVisible({ timeout: 30000 });
+
+  // Approve any open draft first. Sprint 8 T1 (tech_debt.py:184) added a
+  // draft-exists guard: a POST to /extract while a DRAFT is open REUSES that
+  // draft (idempotent 200) instead of minting a new version, so a plain upload
+  // would hand back a previous run's already-curated draft and the "AI 60%" row
+  // would be gone. Approving moves the open DRAFT out of DRAFT (ignored when
+  // nothing is open — seeded latest is RELEASED), so the upload below cuts a
+  // genuinely fresh v+1 draft — the s5-attack.spec.ts openFreshDraft pattern.
+  const prior = await page.request.get(
+    `/api/proxy/tech-debt/services/${techDebtServiceId}/capability-lists/latest`,
+  );
+  if (prior.ok()) {
+    const p = (await prior.json()) as { id: string; status: string };
+    if (p.status === "draft") {
+      const approved = await page.request.post(
+        `/api/proxy/tech-debt/capability-lists/${p.id}/approve`,
+      );
+      expect(approved.ok()).toBeTruthy();
+    }
+  }
 
   // Upload the inventory via the hidden Dropzone file input. The upload triggers
   // a fixture-mode extraction that mints a fresh draft capability list.
