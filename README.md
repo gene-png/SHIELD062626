@@ -135,19 +135,19 @@ base `docker-compose.yml` for day-to-day development.
 
 Every variable in [`.env.example`](.env.example) is required. Summary:
 
-| Group          | Vars                                                                                                                                           | Notes                                         |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Runtime        | `ENVIRONMENT`, `LOG_LEVEL`                                                                                                                     |                                               |
-| Database       | `DATABASE_URL`                                                                                                                                 | Postgres 16, locked in Master Spec §2         |
-| Redis          | `REDIS_URL`                                                                                                                                    | Rate limiting (auth + run-AI); no queue       |
-| Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID`                                                              | MinIO in dev, S3+KMS in prod                  |
-| OIDC           | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`                                      |                                               |
-| NextAuth       | `NEXTAUTH_URL`, `NEXTAUTH_SECRET`                                                                                                              | Generate secret with `openssl rand -hex 32`   |
-| LLM            | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`                          | `MODE=fixture` for offline tests              |
-| Feature flags  | `SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`, `SHIELD_EMAIL_DELIVERY_ENABLED`                                                 | All `false` for v1                            |
-| Redaction      | `SHIELD_REDACTION_MODE`                                                                                                                        | `strict` in prod; `off` forbidden outside dev |
-| Sessions       | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`, `SHIELD_ACCOUNT_LOCKOUT_*`, `SHIELD_IDLE_TIMEOUT_SECONDS`, `SHIELD_FORCED_REAUTH_SECONDS` | Compensating controls for deferred MFA        |
-| Mail           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`                                                                                                          | MailHog locally                               |
+| Group          | Vars                                                                                                                                                                  | Notes                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Runtime        | `ENVIRONMENT`, `LOG_LEVEL`                                                                                                                                            |                                                                  |
+| Database       | `DATABASE_URL`                                                                                                                                                        | Postgres 16, locked in Master Spec §2                            |
+| Redis          | `REDIS_URL`                                                                                                                                                           | Rate limiting (auth + run-AI); no queue                          |
+| Object storage | `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_KMS_KEY_ID`                                                                                     | MinIO in dev, S3+KMS in prod                                     |
+| OIDC           | `KEYCLOAK_ISSUER`, `KEYCLOAK_AUDIENCE`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD`                                                             |                                                                  |
+| NextAuth       | `NEXTAUTH_URL`, `NEXTAUTH_SECRET`                                                                                                                                     | Generate secret with `openssl rand -hex 32`                      |
+| LLM            | `SHIELD_LLM_PROVIDER`, `SHIELD_LLM_MODEL`, `SHIELD_LLM_MODE`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GCP_PROJECT_ID` + `GCP_REGION` (`vertex`/ADC) | `MODE=fixture` for offline tests                                 |
+| Feature flags  | `SHIELD_AUTH_REQUIRE_MFA`, `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY`, `SHIELD_EMAIL_DELIVERY_ENABLED`                                                                        | All `false` for v1                                               |
+| Redaction      | `SHIELD_REDACTION_MODE`                                                                                                                                               | `strict` in prod; `off` forbidden outside dev                    |
+| Sessions       | `JWT_ACCESS_TTL_SECONDS`, `JWT_REFRESH_TTL_SECONDS`, `SHIELD_ACCOUNT_LOCKOUT_*`, `SHIELD_IDLE_TIMEOUT_SECONDS`, `SHIELD_FORCED_REAUTH_SECONDS`                        | Compensating controls (MFA enforcement is optional, default off) |
+| Mail           | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`                                                                                                                                 | MailHog locally                                                  |
 
 ### LLM providers
 
@@ -157,18 +157,21 @@ mode (`SHIELD_LLM_MODE=fixture`, the default) is fully offline and never touches
 any provider. Every provider sits below the same egress seam — redaction and the
 `llm_calls` audit row run identically regardless of provider.
 
-| Provider              | Status          | Key env var         | Example `SHIELD_LLM_MODEL` |
-| --------------------- | --------------- | ------------------- | -------------------------- |
-| `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY` | `claude-opus-4-7`          |
-| `openai`              | Implemented     | `OPENAI_API_KEY`    | `gpt-4o-mini`              |
-| `gemini`              | Implemented     | `GEMINI_API_KEY`    | `gemini-1.5-pro`           |
-| `azure_openai`        | Not implemented | —                   | —                          |
-| `bedrock`             | Not implemented | —                   | —                          |
-| `local`               | Not implemented | —                   | —                          |
+| Provider              | Status          | Credential                                               | Example `SHIELD_LLM_MODEL` |
+| --------------------- | --------------- | -------------------------------------------------------- | -------------------------- |
+| `anthropic` (default) | Implemented     | `ANTHROPIC_API_KEY`                                      | `claude-opus-4-7`          |
+| `openai`              | Implemented     | `OPENAI_API_KEY`                                         | `gpt-4o-mini`              |
+| `gemini`              | Implemented     | `GEMINI_API_KEY`                                         | `gemini-2.5-flash`         |
+| `vertex`              | Implemented     | gcloud ADC — no API key (`GCP_PROJECT_ID`, `GCP_REGION`) | `gemini-2.5-flash`         |
+| `azure_openai`        | Not implemented | —                                                        | —                          |
+| `bedrock`             | Not implemented | —                                                        | —                          |
+| `local`               | Not implemented | —                                                        | —                          |
 
-Selecting a provider whose key is unset fails loudly at construction; selecting
-a not-implemented provider raises a loud `RuntimeError`. FedRAMP deployments pick
-the provider that sits inside their authorization boundary (D-024).
+Selecting a provider whose credential is unset fails loudly at startup
+(`vertex` needs resolvable Application Default Credentials instead of a key —
+D-029, validated end-to-end 2026-07-15); selecting a not-implemented provider
+raises a loud `RuntimeError`. FedRAMP deployments pick the provider that sits
+inside their authorization boundary (D-024).
 
 ## Running tests
 
@@ -181,19 +184,27 @@ docker compose exec -T api pytest -m unit -q
 # Web typecheck
 docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"
 
+# Web unit tests (vitest, in-container)
+docker compose exec -T web sh -lc "cd /app && pnpm -F web test"
+
+# Web lint (in-container)
+docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"
+
+# Python lint/format (in-container, CI-parity)
+docker compose exec -T api sh -lc "cd /app && ruff check --no-cache . && black --check ."
+
 # Formatting (lockfile-pinned prettier; CI enforces it)
 npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"
 
 # End-to-end (Playwright) - host-run against the running stack on :3000.
-# 16 spec files / 34 tests under e2e/smoke/. Chromium only, serialized;
+# 21 spec files under e2e/smoke/ (s0-s21). Chromium only, serialized;
 # needs the stack up and the demo seed loaded (scripts/seed_demo.py).
 cd e2e && npm install && npx playwright test          # whole suite
 cd e2e && npx playwright test smoke/s15-headers.spec.ts   # one spec
 ```
 
-There is no separate web unit-test runner (`pnpm test` does not exist) and no
-`pytest -m integration` suite — the marker is declared but unused; Playwright
-covers the integrated stack end-to-end.
+There is no `pytest -m integration` suite — the marker is declared but unused;
+Playwright covers the integrated stack end-to-end.
 
 ## Documentation
 
@@ -214,7 +225,7 @@ are pending.
 Per Master Spec §2, two risks are explicitly accepted for v1:
 
 1. **Commercial LLM provider may not be FedRAMP-authorized.** Egress may leave the FedRAMP boundary. Mandatory PII redaction (`apps/api/app/ai/redact.py`) is the primary control. See [`docs/security.md`](docs/security.md).
-2. **MFA and email verification deferred for v1.** Compensating controls that are actually enforced: 15-minute access-token lifetime; a 30-minute refresh-token TTL that functions as the idle timeout (an idle session cannot refresh past it); a daily (24h) forced re-auth ceiling enforced at `/auth/refresh` via an `auth_time` claim (typed 401 `reason=reauth_required`, tunable with `SHIELD_FORCED_REAUTH_SECONDS`); single-use refresh-token rotation (a replayed/rotated-out refresh token is rejected, `reason=refresh_reused`); and account lockout after 10 failed attempts in 15 minutes. The MFA and email-verification **flows do not exist yet** — the `SHIELD_AUTH_REQUIRE_MFA` / `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` flags therefore **fail loudly at startup** if set true (the app refuses to boot rather than silently pretend a control is active); wiring the flows up is planned for a later sprint.
+2. **MFA and email-verification enforcement is optional (default off) for v1.** The flows themselves are real since Sprint 6: TOTP MFA with recovery codes (D-027) and email verification / password reset (D-028). Enforcement is flag-gated — `SHIELD_AUTH_REQUIRE_MFA` / `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` default `false`; flipping them on is a deploy-time choice with no code changes. Compensating controls that are always enforced: 15-minute access-token lifetime; a 30-minute refresh-token TTL that functions as the idle timeout (an idle session cannot refresh past it); a daily (24h) forced re-auth ceiling enforced at `/auth/refresh` via an `auth_time` claim (typed 401 `reason=reauth_required`, tunable with `SHIELD_FORCED_REAUTH_SECONDS`); single-use refresh-token rotation (a replayed/rotated-out refresh token is rejected, `reason=refresh_reused`); and account lockout after 10 failed attempts in 15 minutes.
 
 ## License
 

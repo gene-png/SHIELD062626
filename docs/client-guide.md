@@ -6,7 +6,7 @@
 
 SHIELD is structured around a guided engagement with Kentro:
 
-1. **Sign up** — short registration form, plain-English; verification + MFA enrollment will arrive in a v1.x update.
+1. **Sign up** — short registration form, plain-English; email verification and optional MFA enrollment are available (whether they're required is configured per deployment).
 2. **Intake** — six-step wizard, auto-saved on every blur. Pick which assessment(s) you'd like (Tech Debt, Zero Trust, NIST CSF 2.0, MITRE ATT&CK Coverage) or pick "I'm not sure" to start with a consultation request.
 3. **Engagement** — Kentro consultants run the assessment(s) in their admin workspace. You can return at any time to see status.
 4. **Deliverables** — once a deliverable is released, you'll see it in your home dashboard. Every deliverable is exportable as PDF and XLSX.
@@ -15,5 +15,7 @@ SHIELD is structured around a guided engagement with Kentro:
 ## Pending phases
 
 - **Phase 2 (Intake):** plain-English wizard, auto-save, document upload with redaction disclosure.
-- **Phase 3-5:** released deliverables surface on home.
 - **Phase 6 (Polish):** complete client docs and walkthroughs.
+
+(Released deliverables surfacing on your home dashboard and `/documents` —
+formerly "Phase 3-5" — shipped in Sprint 5.)

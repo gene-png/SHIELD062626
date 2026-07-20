@@ -103,9 +103,9 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
   five AI purposes (D-017). Live mode (D-024/D-026): `SHIELD_LLM_MODE=live` +
   `SHIELD_LLM_PROVIDER=<anthropic|openai|gemini>` + that provider's key + a
   valid `SHIELD_LLM_MODEL` — a misconfigured live boot fails LOUDLY at startup
-  (`live_llm_readiness()`), not on first Run-AI. Sprint 7 adds `vertex`
-  (ADC-based, no API key — D-029). Live tests are opt-in (`pytest -m live`,
-  self-skip keyless).
+  (`live_llm_readiness()`), not on first Run-AI. Sprint 7 added `vertex`
+  (ADC-based, no API key — D-029; GCP-validated 2026-07-15). Live tests are
+  opt-in (`pytest -m live`, self-skip keyless).
 - Real auth flows exist since Sprint 6 but enforcement is flag-gated, default
   OFF: `SHIELD_AUTH_REQUIRE_MFA` (TOTP challenge, D-027) and
   `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` (typed 403 on unverified login, D-028).
@@ -141,4 +141,13 @@ Rules of the road:
 - `.claude/sprint-queue.json` is machine-local loop runtime state (gitignored).
   Staged sprint queues (`.claude/sprint-queue.sprint-<n>.json`) ARE committed —
   they're the plan of record.
+- **Sprint loops are launched by the human dev at the keyboard, never by an
+  agent.** Agents plan the sprint, stage the queue, and merge the planning PR;
+  the dev walks the launch checklist and starts `/loop-sprint-cron` themselves
+  (the cron is session-scoped and needs babysitting only a human can commit to).
+- **Sprint plans get a read-only Codex review before the planning PR merges**
+  (since Sprint 8): `npm i -g @openai/codex`, `codex login`, then
+  `codex exec --sandbox read-only` with the draft plan + pointed questions.
+  Adopted/rejected findings are tabled in the planning PR body. Codex is a
+  reviewer only — it authors nothing.
 - Never commit: credentials, tokens, `.env`, `e2e/artifacts/` binaries.

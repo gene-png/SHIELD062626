@@ -44,12 +44,13 @@ tag/CHANGELOG-level only — package manifests are NOT touched.
 
 1. Merge this planning PR.
 2. `git checkout -b feat/browser-proof-sprint-8 main` BEFORE the first fire.
-3. Archive the old runtime queue, COPY `.claude/sprint-queue.sprint-8.json` to
+3. Archive the old runtime queue if one exists on your box (fresh clones have
+   none), then COPY `.claude/sprint-queue.sprint-8.json` to
    `.claude/sprint-queue.json`; set `working_dir` + `expected_gh_user` for
    YOUR box; confirm the `gates` array matches your environment (six gates
    unchanged from Sprint 7).
-4. Dave launches `/loop-sprint-cron` himself when ready — agents do NOT
-   start the loop.
+4. The human dev launching this sprint runs `/loop-sprint-cron` themselves —
+   agents do NOT start the loop.
 5. No live-AI or cloud credentials needed this sprint — everything runs
    against the fixture-mode dev stack + MailHog.
 
@@ -173,8 +174,9 @@ All CLAUDE.md gotchas hold, plus:
 - Self-contained test with its OWN fresh user (no cross-test state): enroll
   via the same UI flow, capture the recovery codes, sign out.
 - Sign in using one recovery code in the TOTP field (the input accepts it —
-  `SignInForm.tsx:74`) → assert success. Sign out, attempt the SAME code
-  again → assert rejection (single-use consumed).
+  `SignInForm.tsx:104-119`, placeholder "6-digit code or recovery code" at
+  `:114`) → assert success. Sign out, attempt the SAME code again → assert
+  rejection (single-use consumed).
 - Split from T4 deliberately (Codex review): enrollment/TOTP and
   recovery-code redemption are distinct failure seams; each task stays
   independently green. Together T4+T5 retire Dave's manual MFA walkthrough
@@ -201,8 +203,9 @@ All CLAUDE.md gotchas hold, plus:
   in a browser.
 - CHANGELOG `[3.4.1]` per-task entries with commits; BUILD_REPORT sync (gate
   results at HEAD, e2e spec count 21 → 25 files).
-- `CONTEXT.md` overwritten with the end-of-sprint snapshot; `context/dave.md`
-  refreshed (including the corrected only-tech-debt mint-route fact).
+- `CONTEXT.md` overwritten with the end-of-sprint snapshot; the LAUNCHING
+  dev's own `context/<name>.md` refreshed (owner-only rule — never write
+  another dev's context file).
 - Full exit gate set (all six) + full e2e.
 
 ## Definition of done
@@ -222,7 +225,8 @@ All CLAUDE.md gotchas hold, plus:
 
 ## Explicitly out of scope (needs-Dave / later)
 
-- **Loop launch** — Dave starts `/loop-sprint-cron` himself; agents never do.
+- **Loop launch** — the human dev at the keyboard starts `/loop-sprint-cron`;
+  agents never do.
 - Keycloak SSO / Auth.js OIDC cutover (seam stays dormant).
 - demo-reset / hosted-demo automation (destructive `down -v`; stays a manual
   checklist item).
