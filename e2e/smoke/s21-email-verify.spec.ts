@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 import { uniqueEmail } from "../helpers/auth";
+import {
+  extractToken,
+  fetchLatestMessage,
+  subjectOf,
+} from "../helpers/mailhog";
 
 /**
  * Sprint 6 T5 (D-028): email verification + password reset via MailHog.
@@ -12,44 +17,13 @@ import { uniqueEmail } from "../helpers/auth";
  * and re-run. When delivery is on, the specs register through the same proxy the
  * UI uses, read the real message out of the MailHog API, extract the token from
  * the link, and complete the verify / reset flow end to end.
+ *
+ * The MailHog reader (MAILHOG_API, fetchLatestMessage, extractToken) moved to
+ * e2e/helpers/mailhog.ts in Sprint 8 T0; this spec is unchanged behaviorally.
  */
 
 const PASSWORD = "correct horse battery staple!";
 const NEW_PASSWORD = "brand new battery staple 99!";
-const MAILHOG_API = "http://localhost:8025/api/v2";
-
-interface MailHogItem {
-  Content: { Headers: Record<string, string[]>; Body: string };
-}
-
-/** Poll MailHog for the most recent message to `email`; null if none arrives. */
-async function fetchLatestMessage(
-  request: import("@playwright/test").APIRequestContext,
-  email: string,
-  timeoutMs = 8000,
-): Promise<MailHogItem | null> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const res = await request
-      .get(`${MAILHOG_API}/search?kind=to&query=${encodeURIComponent(email)}`)
-      .catch(() => null);
-    if (res?.ok()) {
-      const body = (await res.json()) as { items?: MailHogItem[] };
-      if (body.items && body.items.length > 0) {
-        return body.items[0];
-      }
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return null;
-}
-
-/** MailHog quoted-prints long links across lines; join then pull the token. */
-function extractToken(body: string): string | null {
-  const collapsed = body.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
-  const match = collapsed.match(/token=([A-Za-z0-9_-]+)/);
-  return match ? match[1] : null;
-}
 
 test("verification email confirms the address (MailHog)", async ({
   request,
@@ -100,8 +74,7 @@ test("forgot-password link resets the password (MailHog)", async ({
   );
 
   // The latest message must be the reset (subject), not the earlier verify.
-  const subject = message!.Content.Headers["Subject"]?.[0] ?? "";
-  expect(subject.toLowerCase()).toContain("reset");
+  expect(subjectOf(message!).toLowerCase()).toContain("reset");
   const token = extractToken(message!.Content.Body);
   expect(token).not.toBeNull();
 
