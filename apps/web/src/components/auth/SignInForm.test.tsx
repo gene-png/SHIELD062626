@@ -59,6 +59,29 @@ describe("SignInForm — Auth.js v5 credentials signal", () => {
     );
   });
 
+  it("omits the totp key entirely on an empty-code submit", async () => {
+    // Real bug found in Sprint 8 T4: passing `totp: totp || undefined` puts a
+    // `totp: undefined` key on the signIn options. next-auth's client serializes
+    // the body with `new URLSearchParams({...})`, which coerces `undefined` to
+    // the literal string "undefined" — a truthy value that defeats authorize's
+    // `if (!totp)` guard, so the MFA-required branch tries to verify a bogus code
+    // instead of prompting and the authenticator field never appears. The
+    // first (code-less) submit must carry NO totp key at all.
+    signInMock.mockResolvedValue({
+      error: "CredentialsSignin",
+      code: "mfa_required",
+      status: 401,
+      ok: false,
+      url: null,
+    } as never);
+
+    render(<SignInForm />);
+    await submit();
+
+    const secondArg = signInMock.mock.calls[0][1] as object;
+    expect(Object.prototype.hasOwnProperty.call(secondArg, "totp")).toBe(false);
+  });
+
   it("shows a generic error (no code field) on a plain credentials failure", async () => {
     // Wrong password: v5 returns error "CredentialsSignin" with the default
     // code "credentials" — must NOT be mistaken for the MFA branch.
