@@ -86,7 +86,10 @@ documents, live AI). Work top-to-bottom in one sitting.
 
 ## 10. Exports & documents — eyeball each file
 
-The part only a human can do — confirm the documents actually _look_ right.
+Deliverable _content_ is now locked by `pytest -m unit` export-content tests
+(cited per box); reportlab PDFs are read back with `pypdf.PdfReader`, Word with
+`docx.Document`, and workbooks with `openpyxl`. Only the visual appearance,
+which no test can assert, stays a human check (the last box).
 
 > **Ready for review:** s7/s8 save 8 generated artifacts to `e2e/artifacts/`
 > (gitignored). As of Sprint 3 T4 every download name follows Master Spec §15.5
@@ -98,11 +101,12 @@ The part only a human can do — confirm the documents actually _look_ right.
 > with the correct content-type; **eyeballed by David 2026-07-09** against the
 > `Atlas_Defense_Solutions_*` v19 (CSF) / v22 (Risk Register) artifact set.
 
-- [x] **CSF executive briefing** PDF: cover, exec summary, scorecard with **colored maturity cells**, top gaps, next steps — spacing / page-breaks look right. (David, 2026-07-09)
-- [x] **CSF full playbook** PDF: contents, methodology, per-function tables, appendix; colors render. (David, 2026-07-09)
-- [x] Both **CSF .docx** files in Word: tables + **shaded level cells** render. (David, 2026-07-09)
-- [x] **CSF .xlsx**: Enterprise sheet + per-tier sheets + About cover. (David, 2026-07-09)
-- [x] **Risk Register** XLSX / PDF / Word: 5×5 matrix + entries + blank governance columns. (David, 2026-07-09)
+- [x] **CSF executive briefing** PDF content: client name, document title, a CSF function name, a known gap row. (test_playbook_export_content.py, `test_exec_pdf_carries_client_title_function_and_gap`)
+- [x] **CSF full playbook** PDF content: client, title, methodology, per-function detail, appendix rows. (test_playbook_export_content.py, `test_full_pdf_carries_client_title_function_and_gap`)
+- [x] Both **CSF .docx** files: title, headings, scorecard table headers, a known maturity cell value. (test_playbook_export_content.py, `test_exec_docx_heading_scorecard_and_maturity_cell`, `test_full_docx_heading_scorecard_and_maturity_cell`)
+- [x] **CSF .xlsx**: Enterprise + per-tier sheets + About cover, plus the Action Plan sheet headers and priority default-vs-override (§19). (test_csf_playbook_export.py + test_playbook_export_content.py)
+- [x] **Risk Register** PDF / Word carry the title, client, and a known entry; XLSX 5x5 matrix + entries + blank governance columns. (test_risk_register.py, `test_pdf_carries_title_client_and_a_known_entry`, `test_docx_carries_title_client_and_a_known_entry`, `test_export_renders_and_stores_three_files`)
+- [ ] **Visual appearance only** (human, optional): maturity/level cell shading, heatmap colors, spacing, and page-breaks. The tests assert values, not layout or color.
 
 ## 11. Auto-versioned docs (C3)
 
@@ -239,7 +243,7 @@ below are e2e-proven.
 ## 19. CSF POA&M / action plan (Sprint 5, step 10 — T5)
 
 - [x] The gap-analysis view renders an **action-plan editor** card per enterprise gap; Characterize (accept/mitigate/transfer/avoid) + owner **auto-save** and survive a `page.reload()`. (s7-csf-playbook.spec.ts — `gap-action-{code}` card, `selectOption("mitigate")` + owner blur each waits on the gap-actions PUT, values survive reload)
-- [ ] The playbook **XLSX** gains an **Action Plan** sheet (characterization / owner / deadline / resources / success criteria / poam_ref; priority defaults from `gap_priority()`, override wins). (`pytest -m unit` export-content test; the s7 5-file export assertion covers download presence, not the sheet's cell content — that stays a §10 human eyeball item)
+- [x] The playbook **XLSX** gains an **Action Plan** sheet (characterization / owner / deadline / resources / success criteria / poam_ref; priority defaults from `gap_priority()`, override wins). (test_playbook_export_content.py, `test_xlsx_action_plan_sheet_has_expected_headers`, `test_xlsx_action_plan_only_lists_gaps`, `test_xlsx_action_plan_priority_defaults_from_gap_priority`, `test_xlsx_action_plan_priority_override_wins`)
 
 ## 20. Redaction preview gate (Sprint 5 — T6)
 

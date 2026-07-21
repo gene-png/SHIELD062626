@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from alembic import command
@@ -14,6 +16,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ai.llm import FixtureProvider, LLMClient, LLMResponse
+from app.risk.exporters import build_context as build_risk_context
+from app.risk.exporters import render_docx, render_pdf
 
 
 @pytest.fixture()
@@ -170,6 +174,71 @@ def test_export_renders_and_stores_three_files(app_client) -> None:
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
     docx = c.get(f"/artifacts/{body['docx_artifact_id']}/download", headers=dh)
     assert docx.status_code == 200 and docx.content[:2] == b"PK"
+
+
+# ---------------------------------------------------------------------------
+# Exporter content (pure renderers — no DB). The XLSX is already content-tested
+# via the download in test_export_renders_and_stores_three_files; here we prove
+# the PDF + DOCX carry the title and a known entry (SMOKE §10).
+# ---------------------------------------------------------------------------
+
+
+def _risk_entry() -> SimpleNamespace:
+    return SimpleNamespace(
+        title="Credential theft exposure",
+        description="EDR coverage gap",
+        axis="detection",
+        source="coverage_finding",
+        source_id="T1078",
+        linked_techniques=["T1078"],
+        linked_controls=["ID.PA.01"],
+        likelihood="high",
+        impact="catastrophic",
+        tier="critical",
+        compensating_controls=None,
+        residual_risk=None,
+        recommended_action="remediate",
+        rationale="Primary detection layer absent.",
+        origin="ai_generated",
+        trust=None,
+    )
+
+
+def _pdf_text(raw: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.unit
+def test_pdf_carries_title_client_and_a_known_entry() -> None:
+    ctx = build_risk_context(
+        client_legal_name="Atlas Defense Solutions", version=3, entries=[_risk_entry()]
+    )
+    raw = render_pdf(ctx)
+    assert raw.startswith(b"%PDF-")
+    text = _pdf_text(raw)
+    assert "Risk Register" in text  # document title
+    assert "Atlas Defense Solutions" in text  # client name
+    assert "Credential theft exposure" in text  # a known register entry
+
+
+@pytest.mark.unit
+def test_docx_carries_title_client_and_a_known_entry() -> None:
+    from docx import Document
+
+    ctx = build_risk_context(
+        client_legal_name="Atlas Defense Solutions", version=3, entries=[_risk_entry()]
+    )
+    raw = render_docx(ctx)
+    assert raw[:2] == b"PK"  # docx is a zip envelope
+    doc = Document(io.BytesIO(raw))
+    paras = [p.text for p in doc.paragraphs if p.text]
+    assert "Risk Register (v3)" in paras  # title heading
+    assert "Atlas Defense Solutions" in paras  # client subtitle
+    cells = [c.text for t in doc.tables for row in t.rows for c in row.cells]
+    assert "Credential theft exposure" in cells  # a known register entry
 
 
 @pytest.mark.unit

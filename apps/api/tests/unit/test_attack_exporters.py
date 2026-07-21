@@ -102,6 +102,24 @@ def test_pdf_renders_valid_bytes() -> None:
     assert len(raw) > 2000
 
 
+def _pdf_text(raw: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.unit
+def test_pdf_carries_title_client_and_a_known_tactic() -> None:
+    # SMOKE §10: upgrade from %PDF- magic to real content — the title prefix
+    # (the "&" in "ATT&CK" is reportlab-escaped, so match the stable "MITRE"),
+    # the client name, and one known per-tactic rollup row.
+    text = _pdf_text(render_pdf(_ctx()))
+    assert "MITRE" in text  # service title prefix
+    assert "Atlas Defense Solutions" in text  # client name
+    assert "Reconnaissance" in text  # a known tactic rollup row
+
+
 @pytest.mark.unit
 def test_pdf_handles_zero_gaps() -> None:
     ctx = _ctx(default_status=CoverageStatus.COVERED.value)
