@@ -100,6 +100,15 @@ export async function approveAssessment(
   );
 }
 
+export async function discardAssessment(
+  assessmentId: string,
+): Promise<AttackAssessment> {
+  return jsonRequest<AttackAssessment>(
+    `/api/proxy/attack/assessments/${assessmentId}/discard`,
+    { method: "POST" },
+  );
+}
+
 export async function runAttackAi(
   serviceId: string,
 ): Promise<AttackRunAiResponse> {

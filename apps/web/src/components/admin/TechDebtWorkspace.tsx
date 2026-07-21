@@ -16,6 +16,7 @@ import { Dropzone } from "@/components/intake/Dropzone";
 import { RedactionDisclosure } from "@/components/intake/RedactionDisclosure";
 import {
   approveCapabilityList,
+  discardCapabilityList,
   extractCapabilities,
   fetchConsolidationPlan,
   fetchLatestDeliverable,
@@ -34,6 +35,7 @@ import type {
 import { AiStatusBanner } from "./AiStatusBanner";
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { DeliverableCard } from "./DeliverableCard";
+import { DiscardDraftButton } from "./DiscardDraftButton";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
@@ -61,6 +63,7 @@ export function TechDebtWorkspace({
   const [extracting, setExtracting] = React.useState(false);
   const [extractError, setExtractError] = React.useState<string | null>(null);
   const [approving, setApproving] = React.useState(false);
+  const [discarding, setDiscarding] = React.useState(false);
   const [docsReloadKey, setDocsReloadKey] = React.useState(0);
 
   // Monotonic request sequences guard two independently-clobberable states.
@@ -182,6 +185,26 @@ export function TechDebtWorkspace({
     }
   }
 
+  async function onDiscard(): Promise<void> {
+    if (!list) return;
+    setDiscarding(true);
+    // Bump BEFORE the discard so any in-flight mount fetch still holding the
+    // pre-discard draft is invalidated on arrival and can't resurrect it.
+    listSeq.current += 1;
+    try {
+      await discardCapabilityList(list.id);
+      // Refetch latest (also bumps the seq): now 404 → empty upload state, or
+      // the prior approved version where one exists. Extract is live again.
+      await refresh();
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to discard draft.",
+      );
+    } finally {
+      setDiscarding(false);
+    }
+  }
+
   const totalCost =
     list?.items.reduce((acc, i) => acc + (i.annual_cost_usd ?? 0), 0) ?? 0;
   const lowConfidence =
@@ -189,6 +212,11 @@ export function TechDebtWorkspace({
       (i) => i.confidence_pct !== null && i.confidence_pct < 70,
     ).length ?? 0;
   const readOnly = list?.status === "released";
+
+  const itemCount = list?.items.length ?? 0;
+  const discardSummary = `${itemCount} capability item${
+    itemCount === 1 ? "" : "s"
+  } will be discarded.`;
 
   const dispositionCounts = (list?.items ?? []).reduce(
     (acc, i) => {
@@ -343,6 +371,12 @@ export function TechDebtWorkspace({
                       ? "Approving…"
                       : "Approve list"}
               </button>
+              <DiscardDraftButton
+                status={list.status}
+                destructionSummary={discardSummary}
+                onConfirm={onDiscard}
+                disabled={approving || extracting || discarding}
+              />
             </div>
           </header>
           <EditableCapabilityTable

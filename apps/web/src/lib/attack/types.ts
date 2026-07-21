@@ -1,7 +1,8 @@
 /** Wire types mirroring apps/api/app/schemas/attack.py. */
 
 export type CoverageStatus = "covered" | "partial" | "gap" | "not_applicable";
-export type AttackAssessmentStatus = "draft" | "approved" | "released";
+export type AttackAssessmentStatus =
+  "draft" | "approved" | "released" | "discarded";
 
 export interface CatalogTactic {
   id: string;

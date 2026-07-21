@@ -14,6 +14,7 @@ import {
   approveAssessment,
   AttackProxyError,
   createAssessment,
+  discardAssessment,
   fetchCatalog,
   fetchHeatmap,
   fetchLatestAssessment,
@@ -36,6 +37,7 @@ import type {
 import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 import { AiPreviewButton } from "@/components/admin/AiPreviewButton";
+import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
 
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
@@ -74,9 +76,9 @@ export function AttackWorkspace({
   const [deliverable, setDeliverable] =
     React.useState<AttackDeliverable | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<"create" | "approve" | "run" | null>(
-    null,
-  );
+  const [busy, setBusy] = React.useState<
+    "create" | "approve" | "run" | "discard" | null
+  >(null);
   const [runResult, setRunResult] = React.useState<AttackRunAiResponse | null>(
     null,
   );
@@ -231,6 +233,32 @@ export function AttackWorkspace({
     }
   }
 
+  async function onDiscard(): Promise<void> {
+    if (!assessment) return;
+    setBusy("discard");
+    const seq = ++assessmentSeq.current;
+    try {
+      await discardAssessment(assessment.id);
+      // Refetch latest, guarded: any in-flight load holding the pre-discard
+      // draft is discarded on arrival, so it can't resurrect it. 404 → null
+      // (empty state, Start live again) or the prior approved version.
+      const a = await fetchLatestAssessment(serviceId);
+      if (seq === assessmentSeq.current) {
+        setAssessment(a);
+        if (a) {
+          await refreshHeatmap();
+        } else {
+          setHeatmap(null);
+          setDeliverable(null);
+        }
+      }
+    } catch (err) {
+      setLoadError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onRunAi(): Promise<void> {
     setBusy("run");
     setRunResult(null);
@@ -252,6 +280,12 @@ export function AttackWorkspace({
 
   const readOnly =
     assessment?.status === "approved" || assessment?.status === "released";
+
+  const scoredCount =
+    assessment?.coverage.filter((c) => c.status !== null).length ?? 0;
+  const discardSummary = `${scoredCount} scored technique${
+    scoredCount === 1 ? "" : "s"
+  } will be discarded.`;
 
   const selectedTechnique = selectedCode
     ? (techniqueByCode[selectedCode] ?? null)
@@ -323,6 +357,14 @@ export function AttackWorkspace({
               {busy === "create" ? "Creating…" : "Start assessment"}
             </button>
           )}
+          {assessment ? (
+            <DiscardDraftButton
+              status={assessment.status}
+              destructionSummary={discardSummary}
+              onConfirm={onDiscard}
+              disabled={busy !== null}
+            />
+          ) : null}
         </div>
       </header>
 

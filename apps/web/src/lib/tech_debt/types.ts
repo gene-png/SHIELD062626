@@ -10,7 +10,8 @@ export type ServiceKind =
 export type ServiceStatus =
   "draft" | "in_progress" | "review" | "released" | "archived";
 
-export type CapabilityListStatus = "draft" | "approved" | "released";
+export type CapabilityListStatus =
+  "draft" | "approved" | "released" | "discarded";
 
 export type CapabilityDisposition = "keep" | "consolidate" | "cut";
 

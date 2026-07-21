@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import * as csfClient from "@/lib/csf/client";
 import type {
@@ -27,6 +27,7 @@ vi.mock("@/lib/csf/client", () => ({
   fetchGapAnalysis: vi.fn(),
   createAssessment: vi.fn(),
   approveAssessment: vi.fn(),
+  discardAssessment: vi.fn(),
   patchAnswer: vi.fn(),
 }));
 
@@ -81,6 +82,45 @@ function draft(): CsfAssessment {
   } as unknown as CsfAssessment;
 }
 
+// A draft with two answered rows (a maturity tier and a client note) plus one
+// untouched row — the discard dialog must report "2 answers".
+function draftWithAnswers(): CsfAssessment {
+  return {
+    id: "assess-2",
+    status: "draft",
+    version: 1,
+    answers: [
+      { id: "a1", maturity_tier: 3, notes: null, evidence_artifact_id: null },
+      {
+        id: "a2",
+        maturity_tier: null,
+        notes: "client note",
+        evidence_artifact_id: null,
+      },
+      {
+        id: "a3",
+        maturity_tier: null,
+        notes: null,
+        evidence_artifact_id: null,
+      },
+    ],
+    client_target_tier: 3,
+    documents_stale: false,
+  } as unknown as CsfAssessment;
+}
+
+// jsdom does not implement <dialog>.showModal()/.close(); the shared
+// DiscardDraftButton opens the design-system Modal, so stub them here too.
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal(): void {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function close(): void {
+    this.open = false;
+    this.dispatchEvent(new Event("close"));
+  };
+});
+
 describe("CsfWorkspace reqSeq stale-fetch guard", () => {
   it("discards the slow mount assessment GET after a newer create", async () => {
     fetchCatalog.mockResolvedValue(CATALOG);
@@ -128,5 +168,34 @@ describe("CsfWorkspace reqSeq stale-fetch guard", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("boom-catalog");
+  });
+});
+
+describe("CsfWorkspace discard affordance", () => {
+  it("warns with the client-entered answer count in the discard dialog", async () => {
+    fetchCatalog.mockResolvedValue(CATALOG);
+    fetchInterviewQuestionnaire.mockResolvedValue(null);
+    fetchLatestAssessment.mockResolvedValue(draftWithAnswers());
+    fetchScore.mockResolvedValue(SCORE);
+    fetchGapAnalysis.mockResolvedValue(GAP);
+
+    const { container } = render(
+      <CsfWorkspace serviceId="svc-1" serviceTitle="Atlas CSF" />,
+    );
+
+    // Draft is loaded → the Discard draft affordance is live beside Approve.
+    await screen.findByText("Draft v1");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    });
+
+    const dialog = container.querySelector("dialog") as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+    expect(
+      within(dialog).getByText(
+        "2 answers, including client-entered data, will be discarded.",
+      ),
+    ).toBeInTheDocument();
   });
 });
