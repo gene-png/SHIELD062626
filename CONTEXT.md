@@ -1,8 +1,9 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-21 (Sprint 8 "prove it in the browser" complete on
-`feat/browser-proof-sprint-8`, target `v3.4.1`, PR to open; Sprint 7 merged as
-PR #36). This file describes the project as of the branch it sits on and is
+_Last updated: 2026-07-21 (Sprint 8 "prove it in the browser" MERGED as PR
+#42, `v3.4.1`; Sprint 9 "activate the seam" planned — see `SPRINT_9.md` and
+the staged `.claude/sprint-queue.sprint-9.json`, not yet launched). This file
+describes the project as of the branch it sits on and is
 updated ONLY as part of a PR. Durable facts and environment gotchas live in
 `CLAUDE.md`; personal in-flight status lives in `context/<name>.md`; per-sprint
 detail lives in `SPRINT_<n>.md`._
@@ -66,8 +67,8 @@ detail lives in `SPRINT_<n>.md`._
 No new migrations this sprint. New DECISIONS: **D-029** (Vertex AI via ADC as the
 GCP live path) + **D-030** (client release notification, best-effort notify).
 
-- **Sprint 8 "prove it in the browser" COMPLETE on `feat/browser-proof-sprint-8`**
-  (target `v3.4.1`, PR to open): eight tasks (T0 through T7) that convert
+- **Sprint 8 "prove it in the browser" MERGED** (PR #42,
+  `v3.4.1`): eight tasks (T0 through T7) that convert
   human-eyeball SMOKE debt into committed Playwright specs and pay the last
   mint-route debt. The release notification is now eyeballed in MailHog (§29,
   s22), the verify/forgot/reset pages and the MFA enrollment / TOTP / recovery-code
