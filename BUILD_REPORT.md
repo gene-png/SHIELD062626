@@ -4,54 +4,50 @@
 > and what is deferred. Narrative history lives in `CHANGELOG.md`; non-obvious
 > choices in `DECISIONS.md`; state-of-`main` in `CONTEXT.md`.
 
-## Latest change — 2026-07-16 (Sprint 7 · GCP live path + close the client loop, `[3.4.0]`)
+## Latest change — 2026-07-21 (Sprint 8 · prove it in the browser, `[3.4.1]`)
 
-**The live-AI path is now proven against a real provider with no static key, and
-the client loop is closed.** Seven tasks (T0–T6) on `feat/gcp-vertex-sprint-7`.
-See `CHANGELOG.md` `[3.4.0]` and `SPRINT_7.md` for the full record.
+**Human-eyeball SMOKE debt is now committed Playwright specs, and an out-of-plan
+product bug fix is the headline.** Eight tasks (T0 through T7) on
+`feat/browser-proof-sprint-8`. See `CHANGELOG.md` `[3.4.1]` and `SPRINT_8.md` for
+the full record.
 
 Highlights:
 
-- **Vertex AI provider via ADC (T0, D-029):** a live `VertexProvider` beside
-  `GeminiProvider`, selected by `SHIELD_LLM_PROVIDER=vertex`, calling the regional
-  `{region}-aiplatform.googleapis.com` `generateContent` endpoint authenticated
-  with **Application Default Credentials — no static API key**. `google-auth` is a
-  real dep; the bearer token never reaches logs / `llm_calls.error_message` /
-  exception text (rides the header, not the URL — unit-locked). Shared
-  body-build/parse with `gemini`; `live_llm_readiness()` requires project +
-  importable SDK + resolvable ADC or fails loudly at boot (D-026 parity). Compose
-  bind-mounts the host gcloud dir read-only; ADC never enters the repo or image.
-- **GCP live validation sweep (T1):** all five AI purposes exercised live through
-  the redaction seam on Dave's box (`vertex`/`gemini-2.5-flash`, ADC-only,
-  2026-07-15). Two adapter defects found + fixed (`google-auth[requests]` extra;
-  loud `finishReason` guard + output cap 4096→8192 + bounded `thinkingBudget` for
-  gemini-2.5+), all `pytest -m unit` locked. SMOKE §14/§14.1 annotated
-  GCP-validated; `.env` reverted to fixture; keyless self-skips clean.
-- **Client release notification email (T2, D-030):** the shared release helper
-  emails the tenant's active client-role users on release (service, title/version,
-  `/documents` link) when delivery is on — best-effort, release is the source of
-  truth; cross-tenant users/admins never notified. Four `pytest -m unit` tests.
-- **Email delivery on by default in dev/CI (T3):** `SHIELD_EMAIL_DELIVERY_ENABLED`
-  defaults `true` (SMTP → the `mailhog` service) so the register/verify/reset loop
-  is real every run and `s21-email-verify.spec.ts` runs instead of self-skipping;
-  `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` stays `false` (flipping it breaks every e2e
-  sign-in).
-- **reqSeq stale-fetch guard sweep remainder (T4):** finished the Sprint-5
-  carry-over across the admin workspaces/panels the react-hooks rules didn't force,
-  guarding only where a stale mount-fetch can clobber newer state; vitest guards
-  for the two highest-traffic newly-guarded components.
-- **Auth.js v5 migration (T5):** `next-auth@4.24.14` → Auth.js v5
-  (`5.0.0-beta.31` + `@auth/core`); `getServerSession` → `auth()` at 34 sites, MFA
-  code-signal re-wired, behavior-identical (auth e2e green). Clears the
-  `uuid@8.3.2` moderate (`uuid` gone from the lockfile); only the documented
-  `postcss` moderate remains.
+- **MFA sign-in browser bug fixed (out of plan, `f10b803`):** the web `SignInForm`
+  sent `totp: undefined` into `signIn()`, which next-auth serialized through
+  `URLSearchParams` into the literal string `"undefined"`, defeating the `!totp`
+  guard in `authorize()` so the TOTP second-step field never appeared in the
+  browser. Sending `totp` only when present fixes it; the backend and `@auth/core`
+  were correct. The new T4 browser spec caught what the Sprint-7 vitest could not,
+  because that test mocks `signIn()`. A launch-blocker for MFA (D-027), now green,
+  and the reason the browser proof mattered.
+- **Tech-debt extract draft-exists guard (T1, `4396f60`; e2e follow-up
+  `b4fe0ba`):** a second POST while a draft is open returns it with an idempotent
+  200 before the LLM call, matching CSF/attack/zt. No second LLM call, no second
+  audit row, consultant edits survive. The last mint route that still minted
+  unbounded versions on every POST is closed;
+  `test_extract_versions_subsequent_lists` was re-contracted to prove versioning
+  across the APPROVED/RELEASED boundary. No new D-number.
+- **Browser proof for five eyeball items:** the release notification in MailHog
+  (`s22-release-notify.spec.ts`, SMOKE §29), the verify/forgot/reset pages
+  (`s23-auth-pages.spec.ts`), MFA enrollment + TOTP sign-in and recovery-code
+  single-use (`s24-mfa.spec.ts`, T4/T5), the `/admin/health` all-green operator
+  matrix (`s25-admin-health.spec.ts`), and the `/documents` empty state
+  (`s17-documents.spec.ts`). A shared MailHog reader helper
+  (`e2e/helpers/mailhog.ts`, T0) that polls by recipient plus subject underpins
+  the mail specs.
+
+No new migrations, no new DECISIONS. Version is tag/CHANGELOG level only; package
+manifests are untouched.
 
 ## Overall status
 
-**`v3.0.0` shipped (PR #1, v2 work order Parts A–F). Sprints 1–6 merged; Sprint 7
-complete on its branch. The live-AI path is now proven against real Vertex AI via
-ADC with no static key (Sprint 7 D-029); the client release-notification loop is
-closed (D-030) and the web auth stack is on Auth.js v5. Cloud infra (terraform,
+**`v3.0.0` shipped (PR #1, v2 work order Parts A–F). Sprints 1–7 merged (Sprint 7
+as PR #36); Sprint 8 complete on its branch. The live-AI path is proven against
+real Vertex AI via ADC with no static key (Sprint 7 D-029); the client
+release-notification loop is closed (D-030) and the web auth stack is on Auth.js
+v5. Sprint 8 turns the human-eyeball SMOKE debt into committed browser specs and
+fixes an MFA sign-in bug that unit tests could not see. Cloud infra (terraform,
 FedRAMP LLM connector) remains blocked on David's cloud/account/region
 decisions.**
 
@@ -67,7 +63,8 @@ decisions.**
 | Sprint 4 — framework majors + multi-provider LLM (`feat/majors-providers-sprint-4`) | **Complete (PR #28)**      | `SPRINT_4.md`, CHANGELOG `[3.1.0]` |
 | Sprint 5 — client value loop (`feat/client-value-loop-sprint-5`)                    | **Complete (PR #31)**      | `SPRINT_5.md`, CHANGELOG `[3.2.0]` |
 | Sprint 6 — real demo (`feat/real-demo-sprint-6`)                                    | **Complete (PR #33)**      | `SPRINT_6.md`, CHANGELOG `[3.3.0]` |
-| Sprint 7 — GCP live path + close the client loop (`feat/gcp-vertex-sprint-7`)       | **Complete (this branch)** | `SPRINT_7.md`, CHANGELOG `[3.4.0]` |
+| Sprint 7 — GCP live path + close the client loop (`feat/gcp-vertex-sprint-7`)       | **Complete (PR #36)**      | `SPRINT_7.md`, CHANGELOG `[3.4.0]` |
+| Sprint 8 · prove it in the browser (`feat/browser-proof-sprint-8`)                  | **Complete (this branch)** | `SPRINT_8.md`, CHANGELOG `[3.4.1]` |
 | Infra (cloud terraform, FedRAMP LLM connector)                                      | **Blocked (needs-David)**  | `DELIVERY_PLAN.md`                 |
 
 ## Product surface at `v3.0.0`
@@ -86,17 +83,17 @@ decisions.**
 
 The repo-wide gates enforced this sprint (and encoded in the sprint queue):
 
-| Gate                  | Command                                                                                                                        | Where                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                                                                 | api container         |
-| Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`                                                 | web container         |
-| Web unit tests        | `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"` (vitest, Sprint 5 T8; Sprint 6 added HealthMatrix)           | web container         |
-| Web eslint            | `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"` (in the queue gate set, Sprint 6)                            | web container         |
-| Full e2e smoke suite  | `cd e2e && npx playwright test` (21 spec files; s21 email-verify now RUNS — Sprint 7 T3 turned MailHog delivery on by default) | host → composed stack |
-| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                                                                          | host → composed stack |
-| Python lint/format    | `docker compose exec -T api sh -lc "ruff check --no-cache . && black --check ."` (root-config parity, Sprint 4 T0)             | api container         |
-| Repo format           | `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`                                                        | host                  |
-| Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                                                                     | host                  |
+| Gate                  | Command                                                                                                              | Where                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| Backend unit tests    | `docker compose exec -T api pytest -m unit -q`                                                                       | api container         |
+| Web typecheck         | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`                                       | web container         |
+| Web unit tests        | `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"` (vitest, Sprint 5 T8; Sprint 6 added HealthMatrix) | web container         |
+| Web eslint            | `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"` (in the queue gate set, Sprint 6)                  | web container         |
+| Full e2e smoke suite  | `cd e2e && npx playwright test` (25 spec files; Sprint 8 added s22/s23/s24/s25 and an s17 empty-state test)          | host → composed stack |
+| Runtime axe WCAG A/AA | `s16-axe.spec.ts` (part of the suite)                                                                                | host → composed stack |
+| Python lint/format    | `docker compose exec -T api sh -lc "ruff check --no-cache . && black --check ."` (root-config parity, Sprint 4 T0)   | api container         |
+| Repo format           | `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`                                              | host                  |
+| Dependency audit      | `pnpm audit` (root) / `npm audit` (`e2e/`)                                                                           | host                  |
 
 ### CI jobs (`.github/workflows/ci.yml`)
 
@@ -114,20 +111,20 @@ Four jobs gate every push / PR to `main`:
 > review-required branch push, which is Dave-manual. The step block was proven
 > locally end-to-end against `e2e/README.md` (T2), and the YAML validated.
 
-## Gate results at HEAD (Sprint 7 close)
+## Gate results at HEAD (Sprint 8 close)
 
 ```
-pytest -m unit         → green (in api container, full suite; Sprint 7 added Vertex adapter + release-notification tests)
+pytest -m unit         → green (in api container; Sprint 8 T1 re-contracted the tech-debt versioning test + added the draft-reuse contracts)
 web tsc --noEmit       → clean (Next 15 / React 19 / Tailwind 4; Auth.js v5)
-web vitest (pnpm test) → green 12/12 (in web container; Sprint 7 added SignInForm.test.tsx)
+web vitest (pnpm test) → green 13/13 (in web container; Sprint 8 T4 added the SignInForm empty-code omit-totp guard)
 web eslint (pnpm lint) → 0 errors (1 pre-existing postcss warning)
-prettier --check       → clean (3.9.5, repo-wide)
-ruff / black --check   → clean (root-config parity)
-e2e (host)             → full suite green (s21 email-verify now RUNS — T3 turned MailHog delivery on by default)
+prettier --check       → clean (3.9.5, repo-wide; the T7 docs-only gate run)
+ruff / black --check   → clean (root-config parity; no apps/api change since T1)
+e2e (host)             → 25 spec files; the four new specs (s22/s23/s24/s25) and the s17 empty-state test pass standalone. The authoritative full-suite run is the shutdown checkpoint: this box is overload-prone, so per-spec standalone is the flake arbiter (a cold-compile sign-in timeout under load is a documented flake, not a logic failure)
 ```
 
-(Exact figures recorded in the T11 commit / CONTEXT.md. The machine running this
-sprint serves web on **:3001**; Playwright resolves the port via
+(Exact figures recorded in the T7 wrap-up commit / CONTEXT.md. The machine running
+this sprint serves web on **:3001**; Playwright resolves the port via
 `e2e/helpers/baseUrl.ts`, canonical/CI is `:3000`.)
 
 ## OWASP Top 10 cumulative review (through Sprint 6, `v3.3.0`)
@@ -145,7 +142,7 @@ sprint serves web on **:3001**; Playwright resolves the port via
 | A09 | Logging & Monitoring      | PASS — structured JSON + correlation IDs; audit + notification fan-out on state change; `llm_calls` rows record redacted-count only. Sprint 5: the append-only `audit_entries` + `llm_calls` stores gained their first read surface (`/admin/audit`, admin-only, read-only, correlation-linked) — the trail is now reviewable, not just written                                                                                                                                                                                                                                                                                                                                                       |
 | A10 | SSRF                      | PASS — LLM endpoint env-configured only; no user-supplied URLs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
-## Open items / deferred (needs-David or Sprint 7)
+## Open items / deferred (needs-David or a future sprint)
 
 1. **PR push / merge** of `feat/real-demo-sprint-6` — review-required.
 2. **SMOKE_TEST §10** — human eyeball of the generated export artifacts in
@@ -160,24 +157,28 @@ sprint serves web on **:3001**; Playwright resolves the port via
 4. **SMOKE_TEST §25 — now CI-green (Sprint 7 T3):** `s21-email-verify.spec.ts`
    RUNS (not skips) in dev + CI because `SHIELD_EMAIL_DELIVERY_ENABLED` now
    defaults `true` (SMTP → the `mailhog` service); the end-to-end token flow is
-   exercised on every run. **Still open:** SMOKE §29 (release-notification) has no
-   e2e eyeballing the mail in MailHog — the four `test_release_notification.py`
-   unit tests prove recipient selection + body + best-effort semantics with the
-   sender stubbed.
+   exercised on every run. **Closed in Sprint 8:** SMOKE §29 (release-notification)
+   now has an e2e that reads the mail out of MailHog for a real registered client
+   of an isolated tenant (`s22-release-notify.spec.ts`, T2); the verify/forgot/reset
+   **pages** and the MFA enrollment/sign-in **UI** are also now browser-driven
+   (`s23-auth-pages.spec.ts`, `s24-mfa.spec.ts`), retiring the manual MFA
+   walkthrough.
 5. **Cloud infra (needs-David):** `infra/terraform` (AWS GovCloud / Azure Gov —
    needs account/region/network decisions), FedRAMP-authorized LLM connector,
    Keycloak OIDC/SSO cutover (the Auth.js v5 migration landed in Sprint 7 T5;
    the Credentials→OIDC provider swap stays dormant), DR runbooks. Sprint 6 T9 delivered only a
    local hosted-demo compose, not cloud provisioning. See `DELIVERY_PLAN.md`.
-6. **Sprint 8 candidates:** ESLint 10 (blocked upstream — no Next lint stack runs
-   on it, D-018); the `postcss` 8.4.31 moderate (clears on the next upstream Next
-   bump); the attack/zt/tech-debt assessment mint routes still share CSF's old
-   unbounded-version pattern (Sprint 2 T7 guarded CSF only); the Auth.js v5
-   Credentials→OIDC/Keycloak SSO cutover (the seam exists, stays dorment);
-   `azure_openai`/`bedrock`/`local` LLM adapters (loud not-implemented until a
-   deployment needs one); an e2e that eyeballs the release notification in MailHog
-   (SMOKE §29). The Sprint-5 `reqSeq` stale-fetch sweep is now COMPLETE (Sprint 7
-   T4).
+6. **Post-Sprint-8 candidates:** ESLint 10 (blocked upstream, no Next lint stack
+   runs on it, D-018); the `postcss` 8.4.31 moderate (clears on the next upstream
+   Next bump); the Auth.js v5 Credentials-to-OIDC / Keycloak SSO cutover (the seam
+   exists, stays dormant); `azure_openai`/`bedrock`/`local` LLM adapters (loud
+   not-implemented until a deployment needs one); a tech-debt "replace/re-extract
+   draft" UI affordance (the intentional-re-extraction shape, now that the route
+   is idempotent). **Done in Sprint 8:** the tech-debt extract mint route now
+   reuses an open draft (T1, `4396f60`), so all four assessment services share the
+   idempotent pattern; the release-notification MailHog e2e (T2) and the MFA /
+   verify-page browser specs (T3 through T5) landed. The Sprint-5 `reqSeq`
+   stale-fetch sweep completed in Sprint 7 T4.
 
 ## Significant decisions
 

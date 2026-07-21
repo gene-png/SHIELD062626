@@ -1,10 +1,11 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-16 (Sprint 7 merged as PR #36; Sprint 8 planned and
-staged via PR #37). This file describes the project as of the branch it sits
-on and is updated ONLY as part of a PR. Durable facts and environment gotchas
-live in `CLAUDE.md`; personal in-flight status lives in `context/<name>.md`;
-per-sprint detail lives in `SPRINT_<n>.md`._
+_Last updated: 2026-07-21 (Sprint 8 "prove it in the browser" complete on
+`feat/browser-proof-sprint-8`, target `v3.4.1`, PR to open; Sprint 7 merged as
+PR #36). This file describes the project as of the branch it sits on and is
+updated ONLY as part of a PR. Durable facts and environment gotchas live in
+`CLAUDE.md`; personal in-flight status lives in `context/<name>.md`; per-sprint
+detail lives in `SPRINT_<n>.md`._
 
 ## Current state
 
@@ -65,15 +66,39 @@ per-sprint detail lives in `SPRINT_<n>.md`._
 No new migrations this sprint. New DECISIONS: **D-029** (Vertex AI via ADC as the
 GCP live path) + **D-030** (client release notification, best-effort notify).
 
-- **Sprint 8 "prove it in the browser" PLANNED & STAGED** (PR #37): `SPRINT_8.md`
-  + queue `.claude/sprint-queue.sprint-8.json`, branch-to-be
-  `feat/browser-proof-sprint-8`, target `v3.4.1`. Converts human-eyeball
-  SMOKE debt into committed specs (release-notify §29, verify/forgot/reset
-  pages, MFA TOTP + recovery codes, `/admin/health`, `/documents` empty state)
-  and pays the last mint-route debt (tech-debt extract draft-guard). Plan
+- **Sprint 8 "prove it in the browser" COMPLETE on `feat/browser-proof-sprint-8`**
+  (target `v3.4.1`, PR to open): eight tasks (T0 through T7) that convert
+  human-eyeball SMOKE debt into committed Playwright specs and pay the last
+  mint-route debt. The release notification is now eyeballed in MailHog (§29,
+  s22), the verify/forgot/reset pages and the MFA enrollment / TOTP / recovery-code
+  UI are browser-driven (s23, s24), `/admin/health` and the `/documents` empty
+  state have specs (s25, s17), and a double-POST to the tech-debt extract route
+  reuses the open draft instead of burning a second LLM call (T1). The sprint's
+  headline was an out-of-plan product fix: **MFA sign-in never revealed the TOTP
+  field in the browser** because `SignInForm` sent `totp: undefined`, which
+  next-auth coerced through `URLSearchParams` into the string `"undefined"`,
+  defeating the backend `!totp` guard (fixed in `f10b803`; the new T4 browser spec
+  caught what the Sprint-7 vitest could not). No migrations, no new DECISIONS.
+  Version is tag/CHANGELOG level only; package manifests untouched. Plan was
   reviewed read-only by OpenAI Codex pre-merge (findings table in PR #37).
-  **Not yet launched — the dev at the keyboard starts `/loop-sprint-cron`,
-  never an agent** (see `ONBOARDING.md` §5 for the launch checklist).
+
+### Sprint 8 task → commit
+
+| Task | What shipped | Commit |
+| --- | --- | --- |
+| T0 | Shared MailHog reader helper (`e2e/helpers/mailhog.ts`): `fetchLatestMessage` / `extractToken` / `subjectOf`, polls by recipient plus subject; s21 consumes it with zero behavior change | `3b7bfb7` |
+| T1 | Tech-debt extract draft-exists guard: a second POST while a draft is open returns it idempotent-200 before the LLM call (no re-extract, consultant edits survive), matching CSF/attack/zt; `test_extract_versions_subsequent_lists` re-contracted to the APPROVED/RELEASED boundary | `4396f60` (+ e2e realign `b4fe0ba`) |
+| T2 | `s22-release-notify.spec.ts`: isolated tenant + unique-email client, release a CSF deliverable, assert the notification in MailHog by recipient + subject + `/documents` link (SMOKE §29) | `d023226` |
+| T3 | `s23-auth-pages.spec.ts`: browser-drive verify-email / forgot-password / reset-password pages end to end, then sign in with the new password | `442fca5` |
+| T4 | `s24-mfa.spec.ts` part A: enroll on `/account` with a generated TOTP (otpauth dep), assert shown-once recovery codes, sign in through the UI TOTP step. **Surfaced the MFA sign-in browser bug** | `f70a8cc` (fix `f10b803`) |
+| T5 | `s24-mfa.spec.ts` part B: redeem a recovery code at sign-in, prove it single-use on reuse. T4+T5 retire the manual MFA walkthrough | `1e782de` |
+| T6 | `s25-admin-health.spec.ts` asserts the all-green `/admin/health` matrix on the live stack; `s17-documents.spec.ts` gains a `/documents` empty-state assertion in a fresh throwaway tenant | `57277ea` |
+| T7 | Wrap-up: SMOKE annotations, CHANGELOG `[3.4.1]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh | (this commit) |
+
+No new migrations and no new DECISIONS this sprint: T1 applies the existing
+CSF/attack/zt idempotency pattern, and MFA (D-027), email verify/reset (D-028),
+and the release notification (D-030) all shipped earlier and were only proven in
+the browser here.
 
 ## Machine-local facts (this box)
 
@@ -116,16 +141,17 @@ GCP live path) + **D-030** (client release notification, best-effort notify).
   opt-in `@pytest.mark.live` specs were run for real against Vertex (ADC-only)
   across all five purposes; still self-skip keyless so CI/loop stay green without
   credentials. Re-verify with a keyed/ADC run.
-- **SMOKE_TEST §29 (release notification):** no e2e eyeballs the notification in
-  MailHog — the four `test_release_notification.py` unit tests prove recipient
-  selection, body, and best-effort semantics with the sender stubbed. An e2e that
-  reads the mail out of MailHog is planned in `SPRINT_8.md` (T0/T2).
+- **SMOKE_TEST §29 (release notification), done in Sprint 8 T2:**
+  `s22-release-notify.spec.ts` now reads the notification out of MailHog for a real
+  registered client of an isolated tenant, matching on recipient, subject, and the
+  `/documents` link, on top of the four `test_release_notification.py` unit tests.
 - **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts in
   `e2e/artifacts/` (each asserted HTTP 200 by s7/s8).
-- **MFA / email web UI eyeball:** the sign-in MFA step, enrollment section, and
-  verify/forgot/reset pages have no e2e driving the UI (backend flows are
-  `pytest -m unit` proven). Committed specs are planned in `SPRINT_8.md`
-  (T3–T5); the manual walkthrough retires when they land.
+- **MFA / email web UI eyeball, done in Sprint 8 (T3 through T5):** the sign-in
+  MFA step, the enrollment section, and the verify/forgot/reset pages are now
+  browser-driven (`s24-mfa.spec.ts`, `s23-auth-pages.spec.ts`); the manual MFA
+  walkthrough is retired. Driving the UI for real surfaced the `f10b803` MFA
+  sign-in bug (the TOTP field never appeared in the browser).
 - **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` and
   `scripts/demo-reset.*` verified by hand; no automated spec drives them.
 - **ESLint 10** — deferred upstream (D-018 dated deferral): no published Next lint
@@ -143,7 +169,12 @@ GCP live path) + **D-030** (client release notification, best-effort notify).
 
 ## Test coverage status
 
-- Backend: full `pytest -m unit` green in-container. Sprint 7 added: the Vertex
+- Backend: full `pytest -m unit` green in-container. Sprint 8 T1 re-contracted
+  `test_extract_versions_subsequent_lists` to prove versioning across the
+  APPROVED/RELEASED boundary and added the tech-debt extract draft-reuse contracts
+  (idempotent-200 with the same id/version/items, exactly one LLM call, exactly one
+  `capability_list.extracted` audit row, and a different-artifact POST still
+  returning the open draft). Sprint 7 added: the Vertex
   adapter contract + shared generateContent helpers + bearer-token-never-logged
   lock + the `finishReason`/`thinkingBudget`/output-cap fixes
   (`test_llm_providers.py`); the vertex live-readiness boot preflight
@@ -151,20 +182,52 @@ GCP live path) + **D-030** (client release notification, best-effort notify).
   delivery-off / SMTP-failure-doesn't-roll-back (`test_release_notification.py`).
   Live-AI parity has committed opt-in specs (`tests/live/test_live_ai.py`,
   `@pytest.mark.live`) excluded from `-m unit` and CI — GCP-validated 2026-07-15.
-- Web unit tests: `pnpm -F web test` (vitest) 12/12 — Sprint 7 added
-  `SignInForm.test.tsx` (Auth.js v5 code-based MFA signal) beside the reqSeq guard
-  tests and `HealthMatrix.test.tsx`.
+- Web unit tests: `pnpm -F web test` (vitest) 13/13. Sprint 8 T4 added a
+  `SignInForm` guard asserting an empty-code submit omits the `totp` key (the
+  regression guard for the `f10b803` MFA fix), beside the Sprint-7
+  `SignInForm.test.tsx` (Auth.js v5 code-based MFA signal), the reqSeq guard tests,
+  and `HealthMatrix.test.tsx`.
 - Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4 / Auth.js v5. ESLint
   0 errors (1 pre-existing postcss warning).
-- e2e: full suite green across 21 spec files (host, resolves `:3001`).
-  `s21-email-verify.spec.ts` now RUNS (not skips) because Sprint 7 T3 turned
+- e2e: 25 spec files (host, resolves `:3001`). Sprint 8 added
+  `s22-release-notify`, `s23-auth-pages`, `s24-mfa`, and `s25-admin-health`, and
+  gave `s17-documents` a `/documents` empty-state test; each new spec passes
+  standalone. `s21-email-verify.spec.ts` RUNS (not skips) since Sprint 7 T3 turned
   MailHog delivery on by default. Known cold-compile flake under load documented
-  in `CLAUDE.md`.
+  in `CLAUDE.md`; the authoritative full-suite run is the quiet-box shutdown
+  checkpoint.
 - Format: repo-wide prettier `--check` clean at 3.9.5. Python ruff/black clean
   (root-config parity).
 - Audit: bandit CI-only, exit 0. Root `pnpm audit` posture: 0 high; the
   `uuid@8.3.2` moderate cleared this sprint (T5), one documented `postcss`
   moderate remains. No secret / ADC file / token committed this sprint.
+
+## Lessons learned (Sprint 8)
+
+- **A flow that unit tests call green can be broken for every real user.** MFA
+  sign-in passed `pytest -m unit` and a Sprint-7 vitest, yet the TOTP field never
+  appeared in a browser. The cause sat three layers deep: `SignInForm` sent
+  `totp: undefined`, next-auth serializes credentials through `URLSearchParams`,
+  and `URLSearchParams` stringifies `undefined` to `"undefined"`, so the backend
+  `!totp` guard saw a truthy value and verified a bogus code. The vitest could not
+  catch it because it mocks `signIn()` and never runs the real serialization. Only
+  a spec driving the actual browser through the real client library exposed it.
+  That is the thesis of this sprint, proven the hard way.
+- **Send the key only when you have a value.** The fix was one line,
+  `...(totp ? { totp } : {})` in place of always passing `totp`. A default of
+  `undefined` is not the absence of a field once it crosses a string-serializing
+  boundary; the silent coercion made a broken auth path look like a routine
+  bad-password rejection.
+- **Idempotency belongs before the expensive side effect, not at the write.** The
+  tech-debt extract guard had to sit before `extract_capabilities()`, not at the
+  version-mint site, or a double-click would still fire the LLM call it was meant
+  to prevent. Guarding at the cheapest correct point is the difference between a
+  fix and a half-fix (Codex flagged exactly this in the plan review).
+- **On an overload-prone box, the per-spec standalone run is the flake arbiter.**
+  Full-suite e2e here repeatedly failed on cold-compile sign-in timeouts under
+  load while every spec passed alone. A spec that dies at `auth.ts` sign-in under
+  load is a documented load flake, never a logic bug; the authoritative full run
+  is the quiet-box shutdown checkpoint.
 
 ## Lessons learned (Sprint 7)
 

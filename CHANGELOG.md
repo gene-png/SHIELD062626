@@ -7,6 +7,85 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.4.1] · Sprint 8 · Prove it in the browser (eyeball-debt burn-down) · 2026-07-21
+
+Branch `feat/browser-proof-sprint-8`. Eight tasks (T0 through T7). The sprint
+converts human-eyeball SMOKE debt into committed Playwright specs and pays the
+last mint-route debt. It is a patch release: regression and browser proof plus
+one backward-compatible idempotency fix, no new user-facing surface. Version is
+tag and CHANGELOG level only; package manifests are untouched.
+
+The sprint's most consequential outcome was an out-of-plan product bug fix, and
+it is the reason the browser proof mattered:
+
+- **Fixed: MFA sign-in never revealed the TOTP field in the browser (`f10b803`).**
+  The web `SignInForm` sent `totp: undefined` into `signIn()`. next-auth
+  serializes credentials through `URLSearchParams`, which coerced that
+  `undefined` to the literal string `"undefined"`, defeating the `!totp` guard in
+  `authorize()`. The MFA branch then verified a bogus code, returned a generic
+  `credentials` failure instead of `mfa_required`, and the second-step code field
+  never appeared. The fix sends `totp` only when it is present
+  (`...(totp ? { totp } : {})`); the backend and `@auth/core` were correct all
+  along. The new T4 browser spec surfaced it. The Sprint-7 vitest had missed it
+  because that test mocks `signIn()`. A vitest guard now asserts an empty-code
+  submit omits the `totp` key. This was a launch-blocker for MFA (D-027) and the
+  clearest payoff of the whole sprint: a flow that unit tests called green was
+  broken for every real user.
+- **Shared MailHog reader helper (T0, `3b7bfb7`):** extracted the inline MailHog
+  reader from `s21-email-verify.spec.ts` into `e2e/helpers/mailhog.ts`
+  (`MAILHOG_API`, `fetchLatestMessage`, `extractToken`, `subjectOf`), and upgraded
+  the search to poll by recipient plus expected subject so registration mail no
+  longer wins a first-message race. s21 consumes the helper with zero behavior
+  change.
+- **Tech-debt extract draft-exists guard (T1, `4396f60`; e2e follow-up
+  `b4fe0ba`):** a second POST to the tech-debt extract route while a draft is open
+  now returns that draft with an idempotent 200 _before_ `extract_capabilities()`
+  runs, so a double-click fires no second LLM call, writes no second audit row,
+  and preserves consultant edits. This ports the CSF/attack/zt pattern to the last
+  route that still minted unbounded versions on every POST.
+  `test_extract_versions_subsequent_lists` was deliberately re-contracted to prove
+  versioning across the APPROVED/RELEASED boundary instead. The e2e follow-up
+  realigned `s4-techdebt.spec.ts` to the new contract (it now approves any open
+  draft before upload so extract mints a fresh draft). No new D-number: this
+  applies an existing pattern.
+- **Release notification visible in MailHog (T2, `d023226`):**
+  `s22-release-notify.spec.ts` creates an isolated tenant and a unique-email
+  client user, finalizes and releases a CSF deliverable, then asserts via the T0
+  helper that the notification lands in MailHog for that client with the release
+  subject and the `/documents` link. It proves recipient selection for real, which
+  the four stubbed-sender unit tests could not (SMOKE §29).
+- **Verify / forgot / reset pages driven in the browser (T3, `442fca5`):**
+  `s23-auth-pages.spec.ts` registers a unique-email user, pulls the verification
+  token from MailHog, confirms the address on `/verify-email`, requests a reset on
+  `/forgot-password`, completes it on `/reset-password`, and signs in with the new
+  password. s21 stays as the API-path proof; s23 proves the pages.
+- **MFA enrollment + TOTP sign-in (T4, `f70a8cc`):** `s24-mfa.spec.ts` part A adds
+  an `otpauth` TOTP generator to the e2e harness, enrolls a fresh user on
+  `/account` with a generated code, asserts the recovery codes are shown once, and
+  signs in through the UI TOTP second step. This is the spec that surfaced the
+  `f10b803` MFA bug.
+- **Recovery-code sign-in, single-use (T5, `1e782de`):** `s24-mfa.spec.ts` part B,
+  a self-contained test with its own fresh user, redeems one recovery code at the
+  sign-in TOTP step, then proves the same code is rejected on reuse. Together T4
+  and T5 retire the manual MFA walkthrough.
+- **Admin-health matrix + `/documents` empty state (T6, `57277ea`):**
+  `s25-admin-health.spec.ts` signs in as admin and asserts the all-green
+  `/admin/health` operator matrix against the live dev stack;
+  `s17-documents.spec.ts` gained an empty-state assertion in a fresh per-run
+  throwaway tenant, proving the no-dead-ends state (SMOKE §17) that the persistent
+  s17 tenant can never show because it always carries a released row.
+- **Wrap-up (T7, this commit):** SMOKE_TEST boxes checked only with their proving
+  spec filename (§29 release-notify via s22, verify/forgot/reset pages via s23,
+  MFA UI via s24, `/admin/health` via s25, `/documents` empty state via s17); this
+  CHANGELOG `[3.4.1]` entry; BUILD_REPORT synced to HEAD; the `CONTEXT.md`
+  snapshot; and `context/dave.md` refreshed. Unit-proven backend-invariant boxes
+  (§16 release deny paths, §20 preview internals, §21 audit filters) and the
+  end-of-file sign-off boxes stay unchecked: nothing this sprint proves them in a
+  browser.
+
+No new migrations. No new DECISIONS. e2e spec files grew from 21 to 25 (s22, s23,
+s24, s25 added; s17 gained the empty-state test).
+
 ## [3.4.0] — Sprint 7 · GCP live path + close the client loop — 2026-07-16
 
 Branch `feat/gcp-vertex-sprint-7`. Seven tasks (T0–T6). The sprint proves the
