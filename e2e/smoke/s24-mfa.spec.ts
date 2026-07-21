@@ -72,6 +72,33 @@ async function signOutHeader(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Drive the /sign-in password step for an already-MFA-enrolled user until the
+ * authenticator field (#totp) is revealed. Only email+password are submitted
+ * here, so this is safe to retry through the pre-hydration native-submit race:
+ * a correct password re-signals mfa_required (options.ts:162) and re-shows the
+ * field, and crucially NO second factor is consumed on this step. Once #totp is
+ * visible the client bundle has hydrated (the field appears only after a client
+ * signIn returned code === "mfa_required"), so the caller's single code submit
+ * that follows lands on the React handler rather than a native GET submit.
+ */
+async function revealTotpStep(page: Page, email: string): Promise<void> {
+  await expect(async () => {
+    if (
+      !(await page
+        .locator("#totp")
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await settleForHydration(page);
+      await page.locator('input[type="email"]').fill(email);
+      await page.locator('input[type="password"]').fill(PASSWORD);
+      await page.getByRole("button", { name: "Sign in" }).click();
+      await expect(page.locator("#totp")).toBeVisible({ timeout: 15000 });
+    }
+  }).toPass({ timeout: 60000 });
+}
+
 test("account MFA enrollment + authenticator sign-in, driven in the browser", async ({
   page,
   request,
@@ -186,4 +213,126 @@ test("account MFA enrollment + authenticator sign-in, driven in the browser", as
   await expect(
     page.getByRole("button", { name: "Sign out" }).first(),
   ).toBeVisible({ timeout: 20000 });
+});
+
+/**
+ * Sprint 8 T5 (SMOKE MFA eyeball -> spec-backed), part B: recovery-code sign-in
+ * and its single-use guarantee, driven end-to-end in the browser.
+ *
+ * A separate, self-contained test with its OWN fresh user (no cross-test state
+ * with part A) — enrollment/TOTP and recovery-code redemption are distinct
+ * failure seams, split deliberately so each stays independently green (Codex
+ * review finding 6). Enroll on /account (same UI flow as part A), capture the
+ * recovery codes shown once, then: (1) sign in with ONE recovery code typed into
+ * the same authenticator field (SignInForm.tsx:110-121, placeholder "6-digit
+ * code or recovery code") and assert the authenticated landing; (2) sign out and
+ * submit the SAME code again — the backend consumes recovery codes single-use
+ * (auth.py mfa_verify_login, used_at stamp), so it must be rejected and the
+ * sign-in must not complete.
+ */
+test("recovery-code sign-in succeeds once, then is rejected on reuse", async ({
+  page,
+  request,
+}) => {
+  // Fresh, isolated user — no shared state with part A.
+  const email = uniqueEmail("atlas.example");
+  const reg = await request.post("/api/proxy/auth/register", {
+    data: { email, password: PASSWORD, display_name: "MFA Recoverer" },
+  });
+  expect(reg.status(), await reg.text()).toBe(201);
+
+  await signIn(page, email, PASSWORD);
+  await page.goto("/account");
+
+  // Enroll via the same account-page UI flow as part A (retry through the
+  // pre-hydration click race — the setup key appears only once enroll fires).
+  await expect(async () => {
+    if (!(await page.getByText("Setup key", { exact: true }).isVisible())) {
+      await settleForHydration(page);
+      await page
+        .getByRole("button", { name: "Enable two-factor authentication" })
+        .click();
+      await expect(page.getByText("Setup key", { exact: true })).toBeVisible({
+        timeout: 8000,
+      });
+    }
+  }).toPass({ timeout: 45000 });
+
+  const secret = (
+    await page
+      .getByText("Setup key", { exact: true })
+      .locator("xpath=following-sibling::code")
+      .innerText()
+  ).trim();
+  expect(secret, "setup key rendered").not.toBe("");
+
+  const totp = new OTPAuth.TOTP({
+    issuer: "SHIELD by Kentro",
+    label: email,
+    algorithm: "SHA1",
+    digits: 6,
+    period: 30,
+    secret: OTPAuth.Secret.fromBase32(secret),
+  });
+
+  // Confirm enrollment with a generated code (fresh per retry, self-healing at
+  // window edges).
+  await expect(async () => {
+    const code = await freshTotp(totp);
+    await page.locator("#mfa-code").fill(code);
+    await page.getByRole("button", { name: "Confirm" }).click();
+    await expect(
+      page.getByText("Two-factor authentication is now enabled."),
+    ).toBeVisible({ timeout: 8000 });
+  }).toPass({ timeout: 40000 });
+
+  // Capture all 10 recovery codes — shown exactly once, each an <li> in the
+  // "save these now" alert (MfaEnrollment.tsx:179).
+  const recoveryAlert = page
+    .getByRole("alert")
+    .filter({ hasText: "recovery codes" });
+  await expect(recoveryAlert).toBeVisible();
+  const codeItems = recoveryAlert.locator("li");
+  await expect(codeItems).toHaveCount(10);
+  const recoveryCodes = (await codeItems.allInnerTexts()).map((t) => t.trim());
+  for (const rc of recoveryCodes) {
+    expect(rc).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+  }
+  const recoveryCode = recoveryCodes[0];
+
+  // --- First sign-in: redeem ONE recovery code in the authenticator field. ---
+  await signOutHeader(page);
+  await page.goto("/sign-in");
+  await revealTotpStep(page, email);
+
+  // Submit the recovery code EXACTLY ONCE. Recovery codes are single-use, so a
+  // retry-with-refill would consume its own code and then reject the retry; the
+  // field only appears after a client signIn, so the form is hydrated and one
+  // submit lands on the handler.
+  await page.locator("#totp").fill(recoveryCode);
+  await page.getByRole("button", { name: "Verify code" }).click();
+  await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"), {
+    timeout: 30000,
+  });
+
+  // Authenticated landing: the header sign-out control renders.
+  await expect(
+    page.getByRole("button", { name: "Sign out" }).first(),
+  ).toBeVisible({ timeout: 20000 });
+
+  // --- Second sign-in: the SAME code is now consumed -> must be rejected. ---
+  await signOutHeader(page);
+  await page.goto("/sign-in");
+  await revealTotpStep(page, email);
+
+  await page.locator("#totp").fill(recoveryCode);
+  await page.getByRole("button", { name: "Verify code" }).click();
+
+  // Single-use enforced: the backend 401s (mfa_invalid_code), SignInForm surfaces
+  // the code-step error and keeps the field shown, and we never leave /sign-in.
+  await expect(
+    page.getByText("That code is incorrect or has expired. Try again."),
+  ).toBeVisible({ timeout: 15000 });
+  expect(new URL(page.url()).pathname).toContain("/sign-in");
+  await expect(page.locator("#totp")).toBeVisible();
 });
