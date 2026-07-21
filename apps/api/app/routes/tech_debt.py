@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,7 @@ from app.audit import audit
 from app.db.session import get_db
 from app.deliverable_release import release_deliverable
 from app.dependencies import current_client, current_user, require_role
+from app.logging import get_logger
 from app.models._common import utcnow
 from app.models.artifact import Artifact, ArtifactOrigin
 from app.models.capability import CapabilityItem, CapabilityList, CapabilityListStatus
@@ -68,6 +69,8 @@ from app.tenant import (
 router = APIRouter(prefix="/tech-debt", tags=["tech-debt"])
 
 _admin_required = Depends(require_role(UserRole.ADMIN))
+
+_log = get_logger(__name__)
 
 
 # Module-level slot for tests + production. Tests inject a FixtureProvider-
@@ -150,6 +153,7 @@ def _serialize_list_with_items(db: Session, cap_list: CapabilityList) -> Capabil
 def extract_capability_list(
     service_id: uuid.UUID,
     body: ExtractRequest,
+    response: Response,
     user: Annotated[User, _admin_required],
     client: Annotated[Client, Depends(current_client)],
     db: Annotated[Session, Depends(get_db)],
@@ -164,6 +168,29 @@ def extract_capability_list(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=(f"Inventory MIME {artifact.mime_type!r} is not supported. " "Use CSV or XLSX."),
         )
+
+    # Draft-exists guard (Sprint 8 T1, ported from CSF / ATT&CK / Zero Trust):
+    # this route used to mint a new version and fire a fresh LLM extraction on
+    # EVERY call, so a double-click on "extract" produced unbounded v2, v3, v4…
+    # drafts and burned an AI call per click. The guard sits AFTER service/
+    # artifact validation but BEFORE extract_capabilities() so a second POST
+    # while a draft is open does NOT invoke the LLM. If an unsubmitted draft is
+    # already open, return it idempotently (HTTP 200) untouched — NO
+    # re-extraction, NO clear-and-repopulate, so consultant edits/locks on the
+    # open draft survive. A new version is only cut once the prior list has
+    # moved on (approved/released). A POST with a different artifact_id while a
+    # draft is open still returns that open draft (documented contract; an
+    # explicit replace/re-extract affordance is a future candidate).
+    existing = _latest_list_or_none(db, svc.id)
+    if existing is not None and existing.status == CapabilityListStatus.DRAFT:
+        _log.info(
+            "techdebt_reused_open_draft",
+            list_id=str(existing.id),
+            version=existing.version,
+            service_id=str(svc.id),
+        )
+        response.status_code = status.HTTP_200_OK
+        return _serialize_list_with_items(db, existing)
 
     try:
         result = extract_capabilities(

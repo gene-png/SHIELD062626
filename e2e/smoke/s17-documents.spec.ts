@@ -93,6 +93,58 @@ async function ensureDocsTenant(
 }
 
 test.describe("s17 /documents — released deliverables for the client", () => {
+  test("empty state renders before any release (no dead ends, §12)", async ({
+    page,
+    request,
+  }) => {
+    test.slow();
+    // SMOKE_TEST.md:228 (no-dead-ends rule): a client with no released
+    // deliverables must see onward guidance, not a bare blank. Released
+    // deliverables are per-TENANT and the shared "Documents QA" tenant
+    // accumulates a released row on every prior run (the next test releases v1),
+    // so the empty state can only be proven in a tenant that has never released
+    // anything. Create a throwaway tenant with its own approved domain and
+    // register a fresh client into it: its /documents is empty by construction.
+    const token = await adminApiToken(request);
+    const auth = { Authorization: `Bearer ${token}` };
+    const stamp = Date.now();
+    const emptyDomain = `docs-empty-${stamp}.example`;
+    const created = await request.post(`${API_BASE}/admin/clients`, {
+      headers: auth,
+      data: { legal_name: `Documents Empty QA ${stamp}` },
+    });
+    expect(
+      created.ok(),
+      `create empty tenant (${created.status()})`,
+    ).toBeTruthy();
+    const emptyTenant = (await created.json()) as ClientRow;
+    const approved = await request.post(
+      `${API_BASE}/admin/clients/${emptyTenant.id}/domains`,
+      { headers: auth, data: { domain: emptyDomain } },
+    );
+    expect(
+      approved.status() === 201 || approved.status() === 409,
+      `approve ${emptyDomain}: ${approved.status()}`,
+    ).toBeTruthy();
+
+    // A real client of the empty tenant self-registers (auto signed-in) and
+    // opens /documents — no deliverable has ever been released here.
+    await register(page, "Ellie Empty", uniqueEmail(emptyDomain), PASSWORD);
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible({
+      timeout: 20000,
+    });
+    await page.goto("/documents");
+
+    // The no-dead-ends empty state renders (DocumentsList EmptyState), not a
+    // bare blank, with its onward-guidance copy.
+    await expect(
+      page.getByRole("heading", { name: "No documents yet" }),
+    ).toBeVisible({ timeout: 20000 });
+    await expect(
+      page.getByText(/When your SHIELD analyst releases a report/),
+    ).toBeVisible();
+  });
+
   test("client sees released deliverables + downloads; unreleased stays hidden", async ({
     page,
     request,

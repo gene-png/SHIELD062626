@@ -225,7 +225,7 @@ below are e2e-proven.
 
 - [x] Client nav gains a **Documents** entry; the page lists released deliverables (service label, title, **Final** badge). (s17-documents.spec.ts)
 - [x] Per-format **download link** streams 200 with a §15.5 filename. (s17-documents.spec.ts — PDF download 200, `application/pdf`, §15.5 content-disposition)
-- [ ] Empty state renders per the no-dead-ends rule when a client has no released deliverables (§12). (built; not asserted by a dedicated spec — the s17 tenant always has a released row)
+- [x] Empty state renders per the no-dead-ends rule when a client has no released deliverables (§12). (s17-documents.spec.ts, Sprint 8 T6: asserted in a fresh per-run throwaway tenant that never releases a deliverable, so the "No documents yet" state is proven by construction; the persistent s17 tenant always carries a released row, so this uses its own tenant.)
 
 ## 18. Client `/home` dashboard + value-loop card (Sprint 5, §6.4 / §2.5 — T3/T4)
 
@@ -276,14 +276,15 @@ minio, keycloak-dormant, LLM readiness); `/health` liveness stays cheap. The
 - [x] Any down **required** dependency flips `ready=false` and **names the offender**; keycloak is marked dormant/not-required and the fixture-mode LLM check is informational-only. (test_readiness.py — `test_ready_flips_false_and_names_offender_when_redis_down`, `test_ready_flips_false_when_minio_down`, `test_ready_marks_keycloak_dormant_and_not_required`, `test_ready_llm_fixture_mode_ok_and_informational`, `test_ready_stays_true_when_only_informational_check_off`)
 - [x] `/ready` redacts per-dependency `detail` for **anonymous** callers (LB/k8s still get statuses + offender names) and returns full operator detail to **authenticated** callers. (test_readiness.py — `test_ready_redacts_detail_for_anonymous_callers`, `test_ready_full_detail_for_authenticated_caller`; T10 hardening)
 - [x] The `/admin/health` operator view renders every dependency row, an all-green overall badge, and a **degraded** badge naming the offender when a required dep is down. (HealthMatrix.test.tsx — vitest, in the `pnpm -F web test` gate)
-- [ ] Eyeball `/admin/health` in a browser against the running stack (all-green when healthy). (human runtime check — no e2e spec drives the operator page)
+- [x] Eyeball `/admin/health` in a browser against the running stack (all-green when healthy). (s25-admin-health.spec.ts, Sprint 8 T6: admin signs in, drives `/admin/health` against the live dev stack, and asserts the all-green overall status badge plus every dependency row.)
 
 ## 24. Real TOTP MFA (Sprint 6, T4 / D-027)
 
 Real RFC 6238 TOTP on the custom-JWT stack: enroll → confirm (recovery codes
 shown once) → login challenge. The D-020 boot-refusal on
 `SHIELD_AUTH_REQUIRE_MFA` is gone; the flag now GATES enforcement. Backend flow
-is `pytest -m unit` proven; the web enrollment/sign-in UI has no e2e yet.
+is `pytest -m unit` proven; the web enrollment/sign-in UI is now e2e-driven
+(`s24-mfa.spec.ts`, Sprint 8 T4/T5).
 
 - [x] Enroll → verify → login-with-TOTP happy path returns the real access/refresh pair. (test_mfa_routes.py — `test_full_enroll_then_login_with_totp`)
 - [x] Wrong/expired TOTP rejected; verify-before-enroll and enroll-without-auth rejected; a pending token authorizes nothing but `verify-login` (an access token is refused as pending). (test_mfa_routes.py — `test_verify_rejects_wrong_code`, `test_verify_login_rejects_wrong_code`, `test_verify_before_enroll_is_rejected`, `test_enroll_requires_authentication`, `test_verify_login_rejects_access_token_as_pending`; test_totp.py — `test_verify_totp_accepts_current_and_rejects_wrong`, `test_verify_totp_tolerates_one_step_skew_but_not_two`)
@@ -291,7 +292,7 @@ is `pytest -m unit` proven; the web enrollment/sign-in UI has no e2e yet.
 - [x] A non-enrolled user gets a normal session with no challenge (back-compat). (test_mfa_routes.py — `test_login_without_mfa_returns_pair_no_challenge`)
 - [x] Wrong second-factor guesses feed the **account-lockout** counter at both verify-login and enroll-confirm (T10 hardening). (test_mfa_routes.py — `test_verify_login_failures_feed_account_lockout`, `test_enroll_verify_failures_feed_account_lockout`)
 - [x] TOTP matches the RFC 6238 test vectors; the at-rest secret encrypt/decrypt round-trips and a bad ciphertext raises loudly. (test_totp.py — `test_totp_matches_rfc6238_vector`, `test_secret_encrypt_roundtrip`, `test_decrypt_bad_ciphertext_raises_loudly`, `test_recovery_codes_generate_and_hash_verify`, `test_provisioning_uri_shape`)
-- [ ] Eyeball the web sign-in MFA step + the account-page enrollment section (QR/secret, recovery-code display) in a browser. (human runtime check — no e2e spec drives the MFA UI)
+- [x] Eyeball the web sign-in MFA step + the account-page enrollment section (QR/secret, recovery-code display) in a browser. (s24-mfa.spec.ts, Sprint 8 T4/T5: part A enrolls on `/account` with a generated TOTP and asserts the shown-once recovery codes, then signs in through the UI TOTP step; part B redeems a recovery code and proves it single-use. This spec surfaced the MFA sign-in browser bug fixed in `f10b803`.)
 
 ## 25. Email verification + password reset (Sprint 6, T5 / D-028)
 
@@ -305,7 +306,7 @@ token/flow logic is `pytest -m unit` proven with delivery stubbed.
 - [x] `/auth/reset-password` changes the password, is **single-use**, and enforces the weak-password policy. (test_email_verification.py — `test_reset_password_changes_password`, `test_reset_password_token_single_use`, `test_reset_password_rejects_bad_token`, `test_reset_password_enforces_policy`)
 - [x] With `SHIELD_AUTH_REQUIRE_EMAIL_VERIFY=on`, an unverified user is blocked at login (typed `email_not_verified`) then allowed once verified. (test_email_verification.py — `test_login_blocked_when_require_email_verify_and_unverified`)
 - [x] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. (s21-email-verify.spec.ts — 2 tests) **Now RUNS (not skips) in dev + CI as of Sprint 7 T3 (`d95f5c7`):** `SHIELD_EMAIL_DELIVERY_ENABLED` defaults to `true` in `docker-compose.yml` (SMTP → the `mailhog` service), so both tests execute the real token flow through the wire on every run; T3's full-suite pass confirmed both green. (`SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` deliberately stays `false` — flipping it breaks every e2e sign-in.)
-- [ ] Eyeball the web verify-email / forgot-password / reset-password pages in a browser. (human runtime check — no non-opt-in e2e drives the pages)
+- [x] Browser-drive the verify-email / forgot-password / reset-password **pages**: register, confirm the address from the emailed token on `/verify-email`, then request a reset on `/forgot-password`, complete it on `/reset-password`, and sign in with the **new** password. (s23-auth-pages.spec.ts, 2 tests.) Opt-in like s21 (SKIPS with delivery off; RUNS in dev/CI where delivery is on since Sprint 7 T3); both tests green standalone and in the full suite (Sprint 8 T3).
 
 ## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8)
 
@@ -341,14 +342,14 @@ On deliverable release the shared `release_deliverable` helper (behind all four
 services + the risk register) emails the tenant's active client-role users when
 `SHIELD_EMAIL_DELIVERY_ENABLED` is on — best-effort, with the release as the
 source of truth. The logic is `pytest -m unit` proven with the sender stubbed;
-there is **no** e2e that eyeballs the notification in MailHog (the T2 commit added
-only unit coverage), so that stays a human/opt-in check.
+`s22-release-notify.spec.ts` (Sprint 8 T2) now also eyeballs the notification in
+MailHog end-to-end for a real registered client of an isolated tenant.
 
 - [x] Release with delivery on emails **exactly** the tenant's active client-role users; cross-tenant users and admins are never notified. (test_release_notification.py — `test_release_notifies_active_client_users_of_tenant_only`)
 - [x] The notification body carries the **service**, deliverable **title/version**, and the `{WEB_BASE_URL}/documents` link. (test_release_notification.py — `test_notification_body_carries_service_title_version_and_documents_link`)
 - [x] Delivery **off** → the release proceeds exactly as v3.3.0 with a loud skip log; **nothing** is sent. (test_release_notification.py — `test_delivery_off_sends_nothing_but_still_releases`)
 - [x] An SMTP failure is logged **loudly** and the release is **not** rolled back (release is the source of truth). (test_release_notification.py — `test_smtp_failure_does_not_roll_back_release`)
-- [ ] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`). (no committed e2e drives this; human/opt-in check — the four unit tests above prove recipient selection, body, and best-effort semantics with the sender stubbed)
+- [x] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`) for the tenant's registered client, with the release subject + `/documents` link. (s22-release-notify.spec.ts — self-skips when delivery is off, mirroring s21)
 
 ---
 

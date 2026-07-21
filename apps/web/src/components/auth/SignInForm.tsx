@@ -26,7 +26,13 @@ export function SignInForm(): JSX.Element {
       const result = await signIn("credentials", {
         email,
         password,
-        totp: totp || undefined,
+        // Only send `totp` when the user actually entered one. next-auth's
+        // client serializes the body with `new URLSearchParams({...})`, which
+        // coerces `undefined` to the string "undefined" — a truthy value that
+        // defeats authorize's `if (!totp)` guard, so the MFA-required branch
+        // would verify a bogus code instead of prompting and the authenticator
+        // field would never appear (Sprint 8 T4).
+        ...(totp ? { totp } : {}),
         redirect: false,
       });
       if (result?.code === "mfa_required") {
