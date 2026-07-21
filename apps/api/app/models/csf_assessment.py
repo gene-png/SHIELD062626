@@ -53,6 +53,9 @@ class CsfAssessmentStatus(enum.StrEnum):
     SUBMITTED = "submitted"
     APPROVED = "approved"
     RELEASED = "released"
+    # Admin soft-delete of an unapproved draft (Sprint 9, D-031). No migration:
+    # native_enum=False String(16), no CHECK constraint (see migration 0009).
+    DISCARDED = "discarded"
 
 
 class CsfAssessment(UUIDPKMixin, TimestampMixin, Base):

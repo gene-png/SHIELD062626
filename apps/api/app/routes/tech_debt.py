@@ -17,7 +17,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.ai.llm import LLMClient
@@ -119,12 +119,33 @@ def create_service(
 
 
 def _latest_list_or_none(db: Session, service_id: uuid.UUID) -> CapabilityList | None:
+    # D-031: a DISCARDED list is retired from every "latest" consumer (GET
+    # latest, the draft-reuse guard, deliverable finalize). The next-version
+    # mint deliberately does NOT use this helper - see _max_list_version.
     return db.execute(
         select(CapabilityList)
-        .where(CapabilityList.service_id == service_id)
+        .where(
+            CapabilityList.service_id == service_id,
+            CapabilityList.status != CapabilityListStatus.DISCARDED,
+        )
         .order_by(CapabilityList.version.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+def _max_list_version(db: Session, service_id: uuid.UUID) -> int:
+    """Highest version across ALL lists, discarded included (D-031 version trap).
+
+    The (service_id, version) unique constraint counts discarded rows, so the
+    next mint must step past the true max - not past the latest non-discarded
+    version, which would collide when a non-v1 draft was discarded.
+    """
+    return (
+        db.execute(
+            select(func.max(CapabilityList.version)).where(CapabilityList.service_id == service_id)
+        ).scalar()
+        or 0
+    )
 
 
 def _serialize_list_with_items(db: Session, cap_list: CapabilityList) -> CapabilityListResponse:
@@ -218,9 +239,9 @@ def extract_capability_list(
             detail=f"AI extraction failed to parse: {exc}",
         ) from exc
 
-    # Determine next version.
-    last = _latest_list_or_none(db, svc.id)
-    next_version = (last.version + 1) if last else 1
+    # Determine next version off the true max (discarded rows still hold their
+    # version under the unique constraint - D-031 version trap).
+    next_version = _max_list_version(db, svc.id) + 1
     cap_list = CapabilityList(service_id=svc.id, version=next_version)
     db.add(cap_list)
     db.flush()
@@ -316,10 +337,19 @@ def patch_capability_item(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Capability item not found.",
             )
-    if cap_list is not None and cap_list.status == CapabilityListStatus.RELEASED:
+    # A released OR discarded parent is not editable (D-031: a stale tab must
+    # not write into a list the admin already discarded).
+    if cap_list is not None and cap_list.status in (
+        CapabilityListStatus.RELEASED,
+        CapabilityListStatus.DISCARDED,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This capability list has been released and is locked.",
+            detail=(
+                "This capability list has been released and is locked."
+                if cap_list.status == CapabilityListStatus.RELEASED
+                else "This capability list has been discarded."
+            ),
         )
 
     data = body.model_dump(exclude_unset=True)
@@ -393,6 +423,91 @@ def approve_capability_list(
         target_id=cap_list.id,
         actor_user_id=user.id,
         details={"service_id": str(cap_list.service_id), "version": cap_list.version},
+    )
+    db.commit()
+    db.refresh(cap_list)
+    return _serialize_list_with_items(db, cap_list)
+
+
+@router.post(
+    "/capability-lists/{list_id}/discard",
+    response_model=CapabilityListResponse,
+    summary="Discard a draft capability list (admin, D-031)",
+)
+def discard_capability_list(
+    list_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CapabilityListResponse:
+    """Soft-delete an unapproved draft. Only a DRAFT is discardable; re-discard
+    is idempotent (no second audit row); approved/released -> typed 409. The
+    write is a conditional UPDATE ... WHERE status='draft' so two racing
+    transactions cannot both observe DRAFT and proceed (D-031 concurrency
+    contract). Uploaded intake artifacts survive - re-extraction is the point."""
+    cap_list = db.get(CapabilityList, list_id)
+    if cap_list is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Capability list not found."
+        )
+    svc = db.get(Service, cap_list.service_id)
+    if svc is None or svc.client_id != client.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Capability list not found."
+        )
+    if cap_list.status == CapabilityListStatus.DISCARDED:
+        return _serialize_list_with_items(db, cap_list)  # idempotent, no audit
+    if cap_list.status != CapabilityListStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "not_discardable",
+                "message": "Only a draft capability list can be discarded.",
+            },
+        )
+    item_count = db.execute(
+        select(func.count())
+        .select_from(CapabilityItem)
+        .where(CapabilityItem.capability_list_id == cap_list.id)
+    ).scalar_one()
+    result = db.execute(
+        update(CapabilityList)
+        .where(
+            CapabilityList.id == cap_list.id,
+            CapabilityList.status == CapabilityListStatus.DRAFT,
+        )
+        .values(status=CapabilityListStatus.DISCARDED)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.refresh(cap_list)
+        if cap_list.status == CapabilityListStatus.DISCARDED:
+            return _serialize_list_with_items(db, cap_list)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "not_discardable",
+                "message": "Only a draft capability list can be discarded.",
+            },
+        )
+    audit(
+        db,
+        action="capability_list.discarded",
+        target_type="capability_list",
+        target_id=cap_list.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(cap_list.service_id),
+            "version": cap_list.version,
+            "item_count": item_count,
+        },
+    )
+    _log.info(
+        "techdebt_discarded_draft",
+        list_id=str(cap_list.id),
+        version=cap_list.version,
+        service_id=str(cap_list.service_id),
+        item_count=item_count,
     )
     db.commit()
     db.refresh(cap_list)

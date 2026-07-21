@@ -663,3 +663,63 @@ effect — that would be the worse lie.
 **Ref:** Master Spec §12; SPRINT_7.md T2; `app/deliverable_release.py`,
 `app/email/sender.py`, `tests/unit/test_release_notification.py`; DECISIONS
 D-025, D-028.
+
+## D-031 — Draft discard is an admin-only soft-delete state transition
+
+**Decision (Sprint 9 T0).** Each of the four assessment services gains a
+`POST .../{id}/discard` route beside its existing `/approve` sibling (all four
+admin-only via `_admin_required`). A new `DISCARDED` value joins each status
+enum. The columns are already `native_enum=False` `String(16)` with no CHECK
+constraint (verified against migration 0009), so this is code-only with no
+migration.
+
+**State machine.** Only a `DRAFT` is discardable: it flips to `DISCARDED` and
+writes exactly one audit row (`capability_list.discarded`,
+`csf.assessment.discarded`, `attack.assessment.discarded`,
+`zt.assessment.discarded`). A second discard on an already-discarded resource
+returns an idempotent 200 with no second audit row. A `SUBMITTED` CSF or ZT
+assessment, or any `APPROVED`/`RELEASED` resource, returns a typed 409
+`{reason: "not_discardable"}` (the D-016 envelope): once a client formally
+submits, or an admin approves, destruction is off the table. A client-role POST
+is a 403; an unknown or cross-tenant id is a 404. Client-touched CSF/ZT drafts
+stay discardable, and the audit details carry the answered-row count so the web
+confirm dialog (T1) can warn about client-entered data.
+
+**The version trap.** A discarded row keeps its version under the
+`(service_id, version)` unique constraint, so the two "latest" reads split. The
+per-service `_latest_*` helpers now exclude `DISCARDED` (covering GET latest,
+the draft-reuse guard, and every downstream consumer), but the next-version mint
+switches to a dedicated `select(func.max(version))` that counts discarded rows.
+Without that split, discarding a v2 draft over an approved v1 would mint v2
+again and raise an `IntegrityError` on the first re-extract.
+
+**Hidden "latest" consumers.** The Risk Register has its own generic `_latest`
+feeding the gate and finding-gather; it grew an `active_only` flag so a
+discarded highest-version assessment no longer unlocks the gate or supplies
+findings (RiskRegister itself has no discard state, so those callers leave the
+flag off). The client engagement cards (`intake._latest_assessment_status`) now
+report the latest non-discarded status, reading `None` for a discarded-only
+service rather than the word "discarded".
+
+**Concurrency contract.** The discard write is a conditional
+`UPDATE ... WHERE status = 'draft'`; the rows-affected count drives the
+200/idempotent/409 branch, so two transactions cannot both observe `DRAFT` and
+proceed. Every child mutation (the per-row PATCH routes) and each `run-ai` guard
+rejects a parent that is not in its editable state, so a stale-tab answer edit
+or an AI run racing a discard loses loudly with a typed 409 instead of writing
+into a discarded parent. An AI run that already loaded a `DRAFT` parent re-reads
+its status before committing its suggestions.
+
+**Rationale.** A consultant who extracts or opens the wrong draft had no way to
+retract it: the draft-reuse guard would hand the same stale draft back forever.
+Discard is a soft delete (the row and its audit trail survive) rather than a
+hard `DELETE`, which keeps the append-only audit history intact and leaves
+un-discard as a future affordance. Uploaded intake artifacts survive a
+tech-debt discard on purpose: re-extracting from the same document is the whole
+point of the escape hatch.
+
+**Ref:** Master Spec §11, §15; SPRINT_9.md T0; `app/models/capability.py`,
+`app/models/csf_assessment.py`, `app/models/attack_assessment.py`,
+`app/models/zt_assessment.py`, `app/routes/tech_debt.py`, `app/routes/csf.py`,
+`app/routes/attack.py`, `app/routes/zt.py`, `app/routes/risk.py`,
+`app/routes/intake.py`, `tests/unit/test_discard_draft.py`; DECISIONS D-016.

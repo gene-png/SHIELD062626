@@ -297,18 +297,29 @@ _ZT_KINDS = (ServiceKind.ZERO_TRUST_CISA, ServiceKind.ZERO_TRUST_DOD)
 
 
 def _latest_assessment_status(db: Session, svc: Service) -> str | None:
-    """Self-assessment lifecycle status for a CSF/ZT engagement, else None."""
+    """Self-assessment lifecycle status for a CSF/ZT engagement, else None.
+
+    Reports the latest NON-discarded assessment (D-031): a discarded draft is
+    retired from the engagement card, and a discarded-only service reads as
+    having no active assessment (None), never "discarded".
+    """
     if svc.kind == ServiceKind.NIST_CSF:
         row = db.execute(
             select(CsfAssessment.status)
-            .where(CsfAssessment.service_id == svc.id)
+            .where(
+                CsfAssessment.service_id == svc.id,
+                CsfAssessment.status != "discarded",
+            )
             .order_by(CsfAssessment.version.desc())
             .limit(1)
         ).scalar_one_or_none()
     elif svc.kind in _ZT_KINDS:
         row = db.execute(
             select(ZtAssessment.status)
-            .where(ZtAssessment.service_id == svc.id)
+            .where(
+                ZtAssessment.service_id == svc.id,
+                ZtAssessment.status != "discarded",
+            )
             .order_by(ZtAssessment.version.desc())
             .limit(1)
         ).scalar_one_or_none()
