@@ -51,5 +51,10 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-only-replace}
       API_BASE_URL: http://api:8000
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://keycloak:8080/realms/shield}
+      # Aligned with the base compose web env (Sprint 9 T5, Codex finding): this
+      # override independently sets the web Keycloak vars, so without these three
+      # the demo overlay would silently undo the split-horizon issuer flip.
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8080/realms/shield}
+      KEYCLOAK_INTERNAL_ISSUER: ${KEYCLOAK_INTERNAL_ISSUER:-http://keycloak:8080/realms/shield}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-shield-web}
+      SHIELD_AUTH_OIDC_ENABLED: ${SHIELD_AUTH_OIDC_ENABLED:-false}

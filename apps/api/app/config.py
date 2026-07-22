@@ -98,7 +98,12 @@ class Settings(BaseSettings):
     # verifies a Keycloak ACCESS token against `keycloak_jwks_url` (network only —
     # never compared to `iss`), pinning `iss` to `keycloak_issuer`, `aud` to
     # `keycloak_audience`, and `azp` to `keycloak_client_id`.
-    keycloak_issuer: str = "http://keycloak:8080/realms/shield"
+    # Split-horizon (Sprint 9 T5): `keycloak_issuer` is the CANONICAL
+    # browser-facing issuer pinned as `iss` (matches KC_HOSTNAME); the token the
+    # exchange verifies carries this value no matter which interface minted it.
+    # `keycloak_jwks_url` is the CONTAINER-reachable fetch endpoint the verifier
+    # hits for signing keys — a deliberately different horizon.
+    keycloak_issuer: str = "http://localhost:8080/realms/shield"
     keycloak_audience: str = "shield-api"
     keycloak_client_id: str = "shield-web"
     keycloak_jwks_url: str = "http://keycloak:8080/realms/shield/protocol/openid-connect/certs"
