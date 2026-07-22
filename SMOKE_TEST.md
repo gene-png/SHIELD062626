@@ -377,6 +377,33 @@ longer pollutes version history.
 
 ---
 
+## 32. Hybrid Keycloak OIDC sign-in (Sprint 9, T4–T7, D-032)
+
+A real Keycloak (OIDC) sign-in now sits beside the credentials form, gated
+behind `SHIELD_AUTH_OIDC_ENABLED` (default off). A Keycloak token is never
+accepted as an API bearer. The browser round trip ends at `POST
+/auth/oidc/exchange`, which verifies the token against the realm JWKS and mints
+a native SHIELD pair only for an already-existing local account. There is no
+JIT provisioning. `s26-oidc-login.spec.ts` drives both paths through the real
+Keycloak login form and self-skips unless `E2E_OIDC=1`, so the default suite is
+untouched.
+
+- [x] Opt-in and dormant by default: with the flag off, `s26-oidc-login.spec.ts` reports **two skipped** tests and the `keycloak` provider is **absent** from `/api/auth/providers`, so the default suite count is unchanged. (s26-oidc-login.spec.ts)
+- [x] Backend exchange contract: a Keycloak-shaped access token is accepted only when its RS256 signature, issuer, audience, and `azp` all check out **and** a matching active local account exists; every other case returns a typed dict-detail failure and **no** account is provisioned (no JIT). (test_oidc_exchange.py)
+- [x] **Positive path** — `admin@kentro.example` (in Keycloak AND in the SHIELD DB) signs in through the real Keycloak form (`#username` / `#password`), lands authenticated, and the admin management list renders, proving the exchanged SHIELD bearer token authenticates a real API call end to end. (s26-oidc-login.spec.ts)
+- [x] **Negative path** — `nolocal@atlas.example` (in Keycloak, NOT in the SHIELD DB) authenticates against Keycloak, the exchange refuses it (`oidc_no_local_account`), and `SessionExpiryGuard` signs the session out to `/sign-in?reason=oidc_exchange_failed` with the loud banner. (s26-oidc-login.spec.ts)
+- [x] **Flag-off restoration** — after the flag is removed and `api`+`web` are recreated, `keycloak` reports `dormant` on `/ready`, the provider is gone, and the credentials suite signs in green. (s25-admin-health.spec.ts asserts keycloak dormant; s0/s2 credentials sign-in)
+
+**Operator note (flip and restore).** The flag must never be committed on.
+
+1. Add `SHIELD_AUTH_OIDC_ENABLED=true` to the repo-root `.env`.
+2. `docker compose up -d --force-recreate api web` (web reads the flag at provider registration, api at boot readiness).
+3. Only if `infra/keycloak/shield-realm.json` changed since it was last imported, wipe the keycloak volume so the new realm re-imports: `docker compose stop keycloak && docker volume rm shield-v2_keycloak-data && docker compose up -d keycloak`.
+4. `E2E_OIDC=1 npx playwright test smoke/s26-oidc-login.spec.ts`.
+5. Restore: remove the flag line, `docker compose up -d --force-recreate api web`, then re-run the default suite to confirm the credentials path still signs in.
+
+---
+
 ## Sign-off
 
 - [ ] All core flows pass
