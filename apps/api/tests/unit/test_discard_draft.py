@@ -364,6 +364,30 @@ def test_techdebt_reextract_after_discard_reuses_artifact_fires_llm_once(app_cli
     assert calls["n"] == 2
 
 
+@pytest.mark.unit
+def test_techdebt_child_mutation_after_discard_409(app_client) -> None:
+    """A stale-tab item edit into a discarded list loses loudly (D-031).
+
+    The four-service parity for attack/csf/zt; tech-debt's editable child is a
+    capability item, patched by row id through its own route.
+    """
+    c, _TS, provider = app_client
+    bearer = _admin(c)
+    svc_id, list_id, _art = _td_extract(c, bearer, provider)
+    latest = c.get(f"/tech-debt/services/{svc_id}/capability-lists/latest", headers=_hdr(bearer))
+    item_id = latest.json()["items"][0]["id"]
+
+    d = c.post(f"/tech-debt/capability-lists/{list_id}/discard", headers=_hdr(bearer))
+    assert d.status_code == 200, d.text
+
+    stale = c.patch(
+        f"/tech-debt/capability-items/{item_id}",
+        headers=_hdr(bearer),
+        json={"notes": "stale edit"},
+    )
+    assert stale.status_code == 409, stale.text
+
+
 # ===========================================================================
 # Attack discard
 # ===========================================================================
@@ -469,6 +493,18 @@ def test_csf_discard_draft_200_audit_has_answered_count(app_client) -> None:
 
 
 @pytest.mark.unit
+def test_csf_rediscard_idempotent(app_client) -> None:
+    c, TestSession, _p = app_client
+    bearer = _admin(c)
+    _svc, a = _csf_assessment(c, bearer)
+    c.post(f"/csf/assessments/{a['id']}/discard", headers=_hdr(bearer))
+    r = c.post(f"/csf/assessments/{a['id']}/discard", headers=_hdr(bearer))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "discarded"
+    assert _audit_count(TestSession, "csf.assessment.discarded") == 1
+
+
+@pytest.mark.unit
 def test_csf_discard_submitted_409_not_discardable(app_client) -> None:
     c, _TS, _p = app_client
     bearer = _admin(c)
@@ -543,6 +579,18 @@ def test_zt_discard_draft_200_one_audit(app_client) -> None:
     c, TestSession, _p = app_client
     bearer = _admin(c)
     _svc, a = _zt_assessment(c, bearer)
+    r = c.post(f"/zt/assessments/{a['id']}/discard", headers=_hdr(bearer))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "discarded"
+    assert _audit_count(TestSession, "zt.assessment.discarded") == 1
+
+
+@pytest.mark.unit
+def test_zt_rediscard_idempotent(app_client) -> None:
+    c, TestSession, _p = app_client
+    bearer = _admin(c)
+    _svc, a = _zt_assessment(c, bearer)
+    c.post(f"/zt/assessments/{a['id']}/discard", headers=_hdr(bearer))
     r = c.post(f"/zt/assessments/{a['id']}/discard", headers=_hdr(bearer))
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "discarded"

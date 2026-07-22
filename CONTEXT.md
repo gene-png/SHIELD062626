@@ -136,7 +136,7 @@ the browser here.
 | T7 | Opt-in `s26-oidc-login.spec.ts` (positive + negative through the real Keycloak form, self-skips unless `E2E_OIDC=1`); SMOKE §32 | `1e3e64e` |
 | T8 | Demo-reset `--demo`/`-Demo` mode (sh/ps1 parity) + fail-loud web-wait; opt-in `e2e/demo/demo-journey.spec.ts`; SMOKE §26; D-033 | `8b5e68a` |
 | T9 | CI `demo` job on its own isolated runner (compose-version floor, `demo-reset --demo`, `SHIELD_DEMO_SMOKE=1` playwright, always-run diagnostics + artifact upload); SMOKE §27 | `00d970e` |
-| T10 | Wrap-up: SMOKE final pass (§10/§19/§26/§27/§31/§32), CHANGELOG `[3.5.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh, full gates + full e2e | this commit |
+| T10 | Wrap-up: SMOKE final pass (§10/§19/§26/§27/§31/§32), CHANGELOG `[3.5.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh, full gates + full e2e | `ee8bf23` |
 
 One migration this sprint: **0032** (`users.keycloak_sub` String(64) nullable
 unique, additive/SQLite-safe, C0). New DECISIONS: **D-031** (draft discard as an
@@ -246,7 +246,9 @@ is opt-in-gated).
   `test_discard_draft.py` (the four-service discard contract: draft-only 200 +
   single audit row, idempotent re-discard, 409 on SUBMITTED/APPROVED/RELEASED, 403
   client, 404 cross-tenant, the version-trap regression, the hidden latest-consumers
-  in `risk.py`/`intake.py`, and the discard-then-stale-write concurrency contracts);
+  in `risk.py`/`intake.py`, and the discard-then-stale-write concurrency contracts —
+  the end-of-sprint audit pass rounded the file out to full four-service symmetry:
+  tech-debt child-mutation-after-discard 409, plus csf/zt idempotent re-discard);
   `test_oidc_exchange.py` (an in-test RSA keypair signs Keycloak-shaped tokens, a
   monkeypatched `_fetch_jwks` returns the matching JWKS, and the full rejection
   matrix plus TOFU sub-binding is exercised); the export-content tests (T2, real
@@ -255,10 +257,12 @@ is opt-in-gated).
   release-notification suites and the opt-in `tests/live/test_live_ai.py`
   (`@pytest.mark.live`, excluded from `-m unit`, GCP-validated 2026-07-15) are
   unchanged.
-- Web unit tests: `pnpm -F web test` (vitest) 36/36 across 10 files. Sprint 9 T1
+- Web unit tests: `pnpm -F web test` (vitest) 37/37 across 10 files. Sprint 9 T1
   added `DiscardDraftButton.test.tsx` (renders only for a draft, opens the Modal,
-  confirm invokes the callback, cancel/ESC/backdrop are no-ops) and a `CsfWorkspace`
-  test; T6 added `oidc.test.ts` (isOidcEnabled truth table + rewrite/passthrough),
+  confirm invokes the callback, cancel/ESC/backdrop are no-ops) and `CsfWorkspace`
+  discard tests (the answered-count warning line, plus the end-of-sprint audit pass's
+  onDiscard main-path test: confirm → `discardAssessment` → guarded refetch clears the
+  workspace to the empty state); T6 added `oidc.test.ts` (isOidcEnabled truth table + rewrite/passthrough),
   `KeycloakSignInButton.test.tsx`, and `SessionExpiryGuard.test.tsx` (signs out on
   `OIDC_EXCHANGE_ERROR`). The Sprint-8 `SignInForm` omit-totp guard and the reqSeq
   guards remain.

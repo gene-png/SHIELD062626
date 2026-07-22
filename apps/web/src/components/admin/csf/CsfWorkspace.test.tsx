@@ -53,6 +53,7 @@ const fetchLatestAssessment = vi.mocked(csfClient.fetchLatestAssessment);
 const fetchScore = vi.mocked(csfClient.fetchScore);
 const fetchGapAnalysis = vi.mocked(csfClient.fetchGapAnalysis);
 const createAssessment = vi.mocked(csfClient.createAssessment);
+const discardAssessment = vi.mocked(csfClient.discardAssessment);
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -196,6 +197,52 @@ describe("CsfWorkspace discard affordance", () => {
       within(dialog).getByText(
         "2 answers, including client-entered data, will be discarded.",
       ),
+    ).toBeInTheDocument();
+  });
+
+  it("confirming the discard clears the workspace back to the empty state", async () => {
+    fetchCatalog.mockResolvedValue(CATALOG);
+    fetchInterviewQuestionnaire.mockResolvedValue(null);
+    // Mount loads the draft; the post-discard refetch resolves null (GET
+    // latest 404 → empty state, Start live again).
+    fetchLatestAssessment
+      .mockResolvedValueOnce(draftWithAnswers())
+      .mockResolvedValue(null);
+    fetchScore.mockResolvedValue(SCORE);
+    fetchGapAnalysis.mockResolvedValue(GAP);
+    discardAssessment.mockResolvedValue({
+      ...draftWithAnswers(),
+      status: "discarded",
+    } as unknown as CsfAssessment);
+
+    const { container } = render(
+      <CsfWorkspace serviceId="svc-1" serviceTitle="Atlas CSF" />,
+    );
+
+    await screen.findByText("Draft v1");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+    });
+    const dialog = container.querySelector("dialog") as HTMLDialogElement;
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Yes, discard" }),
+      );
+    });
+
+    // The workspace called discard for the loaded draft, then the guarded
+    // refetch returned null and the empty state is shown again — the draft (and
+    // with it the Discard affordance) is gone, Start is live.
+    expect(discardAssessment).toHaveBeenCalledWith("assess-2");
+    expect(
+      await screen.findByText("No CSF assessment yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Discard draft" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start assessment" }),
     ).toBeInTheDocument();
   });
 });
