@@ -322,13 +322,15 @@ produces a coherent, downloadable Atlas story (before T2 seeded downloads 410'd)
 - [x] The seeded Atlas **Risk Register** renders on `/admin/risk-register` with **code-derived tiers** (every entry's tier equals `tierFor(likelihood, impact)` — never hard-coded) and its XLSX/PDF/Word exports download 200 with §15.5 filenames. (s8-risk-register.spec.ts — "seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)")
 - [x] `scripts/demo-reset.(sh|ps1) --demo`: `down -v` → `up -d --build` (production web image) → wait `/ready` full-matrix → seed → **fail-loud** web-wait (a stalled web build now exits non-zero and dumps `docker compose logs web`, closing the old silent-success gap). The post-reset journey is asserted by a committed spec: `/ready` all-green, `/sign-in` serves 200 with the strict CSP (prod-build proof), admin and client both sign in through the standalone build, the client `/home` shows the released-report hero, and a seeded `/documents` deliverable downloads with non-zero bytes. (`e2e/demo/demo-journey.spec.ts` — 4 tests; self-skips unless `SHIELD_DEMO_SMOKE=1`, run right after `demo-reset.sh --demo`. Sprint 9 T8, D-033. Plain no-flag invocation still targets the base compose.)
 
-## 27. Hosted-demo compose (Sprint 6, T9)
+## 27. Hosted-demo compose + CI demo job (Sprint 6 T9; Sprint 9 T9)
 
 `docker-compose.demo.yml` is a thin override running web as a **production**
 Next standalone build (not `next dev`), fixture-by-default with live only when a
-key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave).
+key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave). Sprint 9
+T9 adds a CI `demo` job that runs the whole bring-up on every PR to `main`.
 
-- [ ] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (manual runtime check — verified end-to-end in T9; no automated spec drives the prod-image bring-up)
+- [ ] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (manual runtime check — verified end-to-end in Sprint 6 T9; now also driven by the demo-journey spec + CI demo job below)
+- [ ] The CI `demo` job (`.github/workflows/ci.yml`) logs `docker compose version` and hard-fails below 2.24, runs `bash scripts/demo-reset.sh --demo` (builds `shield-web:demo`, seeds inside the script), then `SHIELD_DEMO_SMOKE=1 npx playwright test demo/` (e2e/demo/demo-journey.spec.ts) green, with always-run compose-ps/logs diagnostics + `if: always()` artifact upload. (demo job — pending first PR run: this repo's CI triggers only on push/PR to `main`, so the green run is proven on the dev's sprint-PR open, cited then per the honesty convention)
 
 ## 28. Security hardening on the new auth surfaces (Sprint 6, T10)
 
