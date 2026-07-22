@@ -20,10 +20,11 @@ import { atlasServiceId } from "../helpers/ids";
  * instead of minting a fresh version — matching CSF / ATT&CK / Zero Trust. This
  * spec edits a row on the draft it extracts, so on the shared seeded DB a plain
  * re-run would hand back that already-curated draft and the "AI 60%" row would be
- * gone. The spec therefore APPROVES any open draft first (moving it out of DRAFT),
- * so the upload's extraction cuts a genuinely fresh four-row draft and the
- * "AI 60%" row stays deterministic across re-runs — the s5-attack.spec.ts
- * openFreshDraft pattern applied to tech-debt.
+ * gone. The spec therefore DISCARDS any open draft first (Sprint 9 T0 / D-031 —
+ * the discard affordance retires the old approve-first dance), so the upload's
+ * extraction cuts a genuinely fresh four-row draft and the "AI 60%" row stays
+ * deterministic across re-runs — the s5-attack.spec.ts openFreshDraft pattern
+ * applied to tech-debt.
  */
 
 // A tiny inventory. The fixture extractor reads the redacted rows and stamps a
@@ -55,23 +56,24 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
     page.getByRole("heading", { name: "Tech Debt Review" }),
   ).toBeVisible({ timeout: 30000 });
 
-  // Approve any open draft first. Sprint 8 T1 (tech_debt.py:184) added a
+  // Discard any open draft first. Sprint 8 T1 (tech_debt.py:184) added a
   // draft-exists guard: a POST to /extract while a DRAFT is open REUSES that
   // draft (idempotent 200) instead of minting a new version, so a plain upload
   // would hand back a previous run's already-curated draft and the "AI 60%" row
-  // would be gone. Approving moves the open DRAFT out of DRAFT (ignored when
-  // nothing is open — seeded latest is RELEASED), so the upload below cuts a
-  // genuinely fresh v+1 draft — the s5-attack.spec.ts openFreshDraft pattern.
+  // would be gone. Discarding throws the open DRAFT away (Sprint 9 T0 / D-031;
+  // _latest_ skips DISCARDED, so GET latest falls back to the seeded RELEASED
+  // version and the upload below cuts a genuinely fresh draft) — this retires
+  // the old approve-first dance.
   const prior = await page.request.get(
     `/api/proxy/tech-debt/services/${techDebtServiceId}/capability-lists/latest`,
   );
   if (prior.ok()) {
     const p = (await prior.json()) as { id: string; status: string };
     if (p.status === "draft") {
-      const approved = await page.request.post(
-        `/api/proxy/tech-debt/capability-lists/${p.id}/approve`,
+      const discarded = await page.request.post(
+        `/api/proxy/tech-debt/capability-lists/${p.id}/discard`,
       );
-      expect(approved.ok()).toBeTruthy();
+      expect(discarded.ok()).toBeTruthy();
     }
   }
 
@@ -133,4 +135,105 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
     timeout: 15000,
   });
   await expect(page.getByText("Human-curated").first()).toBeVisible();
+});
+
+test("Discard draft throws the open draft away and re-enables a fresh extraction (SMOKE §31)", async ({
+  page,
+}) => {
+  // The browser proof for SMOKE §31 (Sprint 9 T1/T3): the discard affordance
+  // driven through the app's first destructive-confirm Modal. Tech-debt is the
+  // service that proves "fresh mint follows" through the UI — its upload card is
+  // always present, so after discard a re-upload extracts a brand-new draft.
+  test.slow();
+  await signIn(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+  const techDebtServiceId = await atlasServiceId(page, "tech_debt");
+  await page.goto(`/admin/services/${techDebtServiceId}/tech-debt`);
+  await expect(
+    page.getByRole("heading", { name: "Tech Debt Review" }),
+  ).toBeVisible({ timeout: 30000 });
+
+  // Discard any stale open draft, then upload to mint a fresh draft we can throw
+  // away through the UI below.
+  const prior = await page.request.get(
+    `/api/proxy/tech-debt/services/${techDebtServiceId}/capability-lists/latest`,
+  );
+  if (prior.ok()) {
+    const p = (await prior.json()) as { id: string; status: string };
+    if (p.status === "draft") {
+      const discarded = await page.request.post(
+        `/api/proxy/tech-debt/capability-lists/${p.id}/discard`,
+      );
+      expect(discarded.ok()).toBeTruthy();
+    }
+  }
+
+  const firstExtract = page.waitForResponse(
+    (r) =>
+      r.url().includes("/capability-lists/extract") &&
+      r.request().method() === "POST",
+    { timeout: 120000 },
+  );
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "inventory.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(INVENTORY_CSV),
+    });
+  await firstExtract;
+  await expect(page.getByText(/Draft v\d+/)).toBeVisible({ timeout: 30000 });
+
+  // Cancel is a no-op: open the Modal, dismiss it, the draft survives intact.
+  await page.getByRole("button", { name: "Discard draft" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Discard this draft?" }),
+  ).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByText(/Draft v\d+/)).toBeVisible();
+
+  // Confirm the discard: the draft is thrown away.
+  const discardDone = page.waitForResponse(
+    (r) =>
+      r.url().includes("/capability-lists/") &&
+      r.url().includes("/discard") &&
+      r.request().method() === "POST" &&
+      r.ok(),
+    { timeout: 60000 },
+  );
+  await page.getByRole("button", { name: "Discard draft" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Discard this draft?" }),
+  ).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: "Yes, discard" }).click();
+  await discardDone;
+
+  // The draft is gone: its Draft pill and the Discard affordance both disappear
+  // (the list falls back to the prior approved/released version, read-only), and
+  // the always-present upload card keeps a fresh extraction live.
+  await expect(page.getByText(/Draft v\d+/)).toHaveCount(0, { timeout: 30000 });
+  await expect(page.getByRole("button", { name: "Discard draft" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("heading", { name: "Upload inventory and extract" }),
+  ).toBeVisible();
+
+  // A fresh mint follows: re-uploading extracts a brand-new draft.
+  const secondExtract = page.waitForResponse(
+    (r) =>
+      r.url().includes("/capability-lists/extract") &&
+      r.request().method() === "POST",
+    { timeout: 120000 },
+  );
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "inventory.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(INVENTORY_CSV),
+    });
+  await secondExtract;
+  await expect(page.getByText(/Draft v\d+/)).toBeVisible({ timeout: 30000 });
 });

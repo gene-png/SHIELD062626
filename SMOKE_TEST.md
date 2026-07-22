@@ -357,6 +357,26 @@ MailHog end-to-end for a real registered client of an isolated tenant.
 
 ---
 
+## 31. Discard draft affordance (Sprint 9, T0 / T1 / T3 — D-031)
+
+Every service now lets the consultant throw away an in-progress DRAFT instead of
+approving a throwaway version to get it out of the way. The backend adds a
+draft-only `POST .../discard` per service (`DISCARDED` status, D-031), the web
+adds the app's first destructive-confirm dialog (the shared `DiscardDraftButton`
++ design-system Modal), and the three e2e preambles that used to
+approve-away an open draft now discard it — a semantically honest reset that no
+longer pollutes version history.
+
+- [x] Each service exposes a **draft-only** `POST .../discard` that returns the record to `status='discarded'`, writes **exactly one** audit row (`capability_list.discarded` / `{csf,attack,zt}.assessment.discarded`), and is **idempotent** on re-discard (no second audit row). (test_discard_draft.py)
+- [x] A **SUBMITTED** (CSF/ZT), **APPROVED**, or **RELEASED** record is not discardable → typed **409** `{reason:'not_discardable'}`; a **client** role → 403; an unknown / cross-tenant id → 404. (test_discard_draft.py)
+- [x] After discard the **version trap** is closed: a discarded non-v1 draft leaves `_latest_` returning the prior approved/released version (or 404), and the next extract/create mints a **fresh** version with no `IntegrityError` (mint reads `max(version)`, unfiltered). (test_discard_draft.py — `test_techdebt_latest_404_when_only_draft_discarded` + the v3-after-discard cases)
+- [x] Every **hidden latest-consumer** skips a discarded row — risk synthesis and the intake engagement cards read "latest non-discarded", and a child mutation / AI run into a discarded parent loses loudly (typed 409). (test_discard_draft.py)
+- [x] The shared **`DiscardDraftButton`** renders **only** for a DRAFT, opens the design-system Modal stating what will be destroyed, and calls `onConfirm` **only** on an explicit confirm — cancel / ESC / backdrop are no-ops. (DiscardDraftButton.test.tsx)
+- [x] **Browser proof** — with a draft open, clicking **Discard draft** → cancel is a no-op → confirming in the Modal throws the draft away and the tech-debt workspace re-enables a fresh extraction (a re-upload mints a brand-new draft). (s4-techdebt.spec.ts)
+- [x] The three specs that used to **approve-away** an open draft now **discard** it instead, with post-preamble behaviour byte-identical (the `changed>0` / "AI 60%" / stale-nudge assertions are untouched). (s4-techdebt.spec.ts, s5-attack.spec.ts, s11-staleness.spec.ts)
+
+---
+
 ## Sign-off
 
 - [ ] All core flows pass
