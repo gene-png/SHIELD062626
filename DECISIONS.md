@@ -723,3 +723,70 @@ point of the escape hatch.
 `app/models/zt_assessment.py`, `app/routes/tech_debt.py`, `app/routes/csf.py`,
 `app/routes/attack.py`, `app/routes/zt.py`, `app/routes/risk.py`,
 `app/routes/intake.py`, `tests/unit/test_discard_draft.py`; DECISIONS D-016.
+
+## D-032 — Hybrid Keycloak SSO: a flag-gated token exchange, never a bearer
+
+**Decision (Sprint 9 T4).** `POST /auth/oidc/exchange` is the single door for a
+Keycloak identity. Keycloak owns the browser login and MFA; the web app hands the
+API the resulting Keycloak ACCESS token, the API verifies it once and mints a
+plain D-020 HS256 pair in its place. A Keycloak token is never accepted as an API
+bearer — the existing `verify_token` path is unchanged, and the exchange output is
+an ordinary SHIELD pair that flows through refresh/expiry/lockout untouched. The
+whole feature is behind `SHIELD_AUTH_OIDC_ENABLED`, default OFF; with the flag off
+the route returns a typed 403 `oidc_disabled` and no Keycloak network is touched.
+
+**Boot preflight, no boot-time network.** `Settings.oidc_readiness()` mirrors
+`live_llm_readiness()`: a config-shape check (non-empty http(s) `keycloak_issuer`
+and `keycloak_jwks_url`, non-empty `keycloak_audience` and `keycloak_client_id`)
+wired into `assert_safe_for_runtime`, so the flag on with an incoherent config
+fails loudly at startup. It makes NO network call — the api has no
+`depends_on: keycloak` and must not crash-loop on a cold `compose up` (the D-026
+precedent). A real Keycloak outage surfaces as a runtime 503, not a boot failure.
+
+**Verification (`app/security/oidc.py`).** RS256 only — the algorithms list is
+the alg-confusion guard, so an HS256 token (even one signed with the app's own
+secret) is rejected. `iss` is pinned to `keycloak_issuer`, `aud` to
+`keycloak_audience`, and `exp`/`iat`/`sub` are required. JWKS keys are cached
+process-wide (300s TTL, `threading.Lock`); a token bearing an unknown `kid`
+forces exactly one refetch to pick up a Keycloak key rotation, then rejects —
+never an unbounded loop. The raw fetch is isolated in `_fetch_jwks` so unit tests
+monkeypatch it and touch no network; `python-jose[cryptography]` and `httpx`
+already ship, so no new dependency.
+
+**azp, not just aud (Codex finding).** `aud` names the resource server
+(`shield-api`), so a correctly signed token minted to a _different_ Keycloak
+client would still satisfy the audience check. The exchange additionally requires
+`azp == keycloak_client_id`, rejecting a token that was not issued to our web
+client with a 401 `oidc_token_invalid`.
+
+**Local account authority.** Match is by normalized verified email against an
+EXISTING local user — no JIT provisioning (`oidc_no_local_account` 403 for an
+unknown identity). The minted pair's role comes from `user.role`, so a token
+claiming `roles: ["admin"]` for a client-role user still mints CLIENT tokens. The
+Keycloak subject is TOFU-bound: `users.keycloak_sub` (migration 0032, nullable
+and UNIQUE, additive C0) is stamped on first exchange and a later exchange whose
+`sub`
+differs is rejected 403 `oidc_sub_mismatch`. The exchange bypasses local TOTP MFA
+(Keycloak owns MFA on this path), does NOT consult the local password lockout
+(Keycloak's `bruteForceProtected` owns SSO lockout — honoring the local lock would
+let a password-endpoint attacker DoS SSO users), and does NOT stamp local
+`email_verified_at`. It DOES reuse the shared `_register_successful_login` +
+`_issue_pair` bookkeeping, so lockout counters clear and `last_login_at` stamps
+exactly as on the credentials path.
+
+**Failure matrix (all typed dict-detail, D-016).** 403 `oidc_disabled` /
+401 `oidc_token_invalid` (bad signature/iss/aud/expiry/azp/unknown-kid) /
+503 `oidc_jwks_unavailable` (names the URL + flag) / 401 `oidc_claims_missing` /
+403 `oidc_email_unverified` / 403 `oidc_no_local_account` / 403
+`oidc_user_inactive` / 403 `oidc_sub_mismatch`.
+
+**Rationale.** SHIELD's custom-JWT stack is the source of truth for authz and
+session lifetime; federating the login without ceding either means verifying the
+IdP token at one auditable boundary and re-minting locally, rather than trusting a
+foreign bearer across the app. Flag-gating keeps every existing credentials e2e
+green and the feature dormant until a deployment turns it on.
+
+**Ref:** Master Spec §4.5; SPRINT_9.md T4; `app/config.py`, `app/security/oidc.py`,
+`app/routes/oidc.py`, `app/main.py`, `app/schemas/auth.py`, `app/models/user.py`,
+`alembic/versions/0032_user_keycloak_sub.py`, `tests/unit/test_oidc_exchange.py`,
+`tests/unit/test_config.py`; DECISIONS D-016, D-020, D-026.

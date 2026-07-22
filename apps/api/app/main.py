@@ -28,6 +28,7 @@ from app.routes import (
     intake,
     messages,
     notifications,
+    oidc,
     risk,
     tech_debt,
     zt,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(oidc.router)
     app.include_router(intake.router)
     app.include_router(artifacts.router)
     app.include_router(admin.router)

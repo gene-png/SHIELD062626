@@ -30,7 +30,10 @@ class UserRole(enum.StrEnum):
 
 class User(UUIDPKMixin, TimestampMixin, Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("keycloak_sub", name="uq_users_keycloak_sub"),
+    )
 
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -68,3 +71,11 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     # matches and is rejected. Nullable/additive (C0): pre-migration rows and
     # any user who has not yet logged in simply have no active refresh token.
     active_refresh_jti: Mapped[str | None] = mapped_column(String(36))
+
+    # Keycloak subject (TOFU-bound) for the hybrid OIDC exchange (Sprint 9 T4,
+    # D-032). NULL until this user first completes POST /auth/oidc/exchange, at
+    # which point the token's `sub` is stamped here; a later exchange whose sub
+    # differs is rejected 403. Nullable + UNIQUE (multiple NULLs are legal in PG
+    # and SQLite); additive (C0): pre-migration rows and pure-credentials users
+    # simply carry no subject.
+    keycloak_sub: Mapped[str | None] = mapped_column(String(64))
