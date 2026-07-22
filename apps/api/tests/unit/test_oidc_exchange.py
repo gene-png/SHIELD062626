@@ -9,8 +9,11 @@ TDD-first: every contract below is authored before the route/verifier exist and
 must fail loudly until T4 lands. An in-test RSA keypair signs Keycloak-shaped
 tokens; the module-level ``_fetch_jwks`` is monkeypatched to return the matching
 JWKS so no network is touched. iss/aud/azp are signed to the config defaults
-(``http://keycloak:8080/realms/shield`` / ``shield-api`` / ``shield-web``) so the
-happy path matches without overriding settings.
+(``http://localhost:8080/realms/shield`` / ``shield-api`` / ``shield-web``) so the
+happy path matches without overriding settings. The issuer is the ONE canonical
+value the dual-horizon Keycloak pins for browser and containers alike (Sprint 9
+T5, ``KC_HOSTNAME`` + backchannel-dynamic), which is what a real Keycloak token
+carries regardless of the interface that served it.
 """
 
 from __future__ import annotations
@@ -38,7 +41,7 @@ from app.models.user import User, UserRole
 from app.security.jwt import verify_token
 
 # --- Config defaults the tokens are signed against -----------------------------
-_ISS = "http://keycloak:8080/realms/shield"
+_ISS = "http://localhost:8080/realms/shield"
 _AUD = "shield-api"
 _AZP = "shield-web"
 _KID = "test-key-1"

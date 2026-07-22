@@ -329,7 +329,7 @@ Next standalone build (not `next dev`), fixture-by-default with live only when a
 key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave). Sprint 9
 T9 adds a CI `demo` job that runs the whole bring-up on every PR to `main`.
 
-- [ ] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (manual runtime check — verified end-to-end in Sprint 6 T9; now also driven by the demo-journey spec + CI demo job below)
+- [x] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (e2e/demo/demo-journey.spec.ts — the spec runs against exactly this prod-build stack after `demo-reset.sh --demo`, asserting `/ready` full-matrix green and `/sign-in` 200 with the strict CSP; first eyeballed end-to-end in Sprint 6 T9)
 - [ ] The CI `demo` job (`.github/workflows/ci.yml`) logs `docker compose version` and hard-fails below 2.24, runs `bash scripts/demo-reset.sh --demo` (builds `shield-web:demo`, seeds inside the script), then `SHIELD_DEMO_SMOKE=1 npx playwright test demo/` (e2e/demo/demo-journey.spec.ts) green, with always-run compose-ps/logs diagnostics + `if: always()` artifact upload. (demo job — pending first PR run: this repo's CI triggers only on push/PR to `main`, so the green run is proven on the dev's sprint-PR open, cited then per the honesty convention)
 
 ## 28. Security hardening on the new auth surfaces (Sprint 6, T10)
