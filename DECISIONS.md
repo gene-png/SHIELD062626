@@ -790,3 +790,38 @@ green and the feature dormant until a deployment turns it on.
 `app/routes/oidc.py`, `app/main.py`, `app/schemas/auth.py`, `app/models/user.py`,
 `alembic/versions/0032_user_keycloak_sub.py`, `tests/unit/test_oidc_exchange.py`,
 `tests/unit/test_config.py`; DECISIONS D-016, D-020, D-026.
+
+## D-033 — Destructive-by-design automation is opt-in-gated
+
+**Decision (Sprint 9 T8).** The demo-reset scripts and the demo-journey e2e spec
+automate a workflow that destroys local state (`docker compose down -v` wipes the
+Postgres, MinIO, Redis, and Keycloak volumes). Nothing about that automation may
+fire implicitly. Three rules hold it in place:
+
+1. **Reset specs self-skip by default.** `e2e/demo/demo-journey.spec.ts` lives
+   under the `testDir: "."` root, so the default `npx playwright test` run
+   discovers it. A module-scope `test.skip(process.env.SHIELD_DEMO_SMOKE !== "1")`
+   guard makes every test in the file skip unless the operator opts in, so the
+   default suite's pass count is unchanged and the spec never runs against a
+   stack it did not just reset (a half-reset or dev-mode stack would report
+   misleading results).
+2. **Destructive scripts never run implicitly.** `scripts/demo-reset.sh` /
+   `.ps1` are invoked by hand. A new `--demo` / `-Demo` flag overlays
+   `docker-compose.demo.yml` (the production web image) on every compose call;
+   the plain invocation drives the base compose only. The flag changes which
+   stack is reset, never whether a reset happens.
+3. **CI isolation is the only unattended venue.** The reset runs unattended only
+   on an isolated CI runner (T9), where `down -v` cannot touch a developer's
+   volumes or a shared host.
+
+**Fail loud, not silent (Codex finding).** The old web-readiness poll gave up
+after 120 seconds and printed the success banner anyway, so a failed production
+build read as a clean reset until Playwright died with an opaque error later. The
+poll now exits non-zero on timeout and dumps `docker compose logs web` on the way
+out, in both the sh and ps1 scripts. The web port is resolved from `WEB_PORT`
+(env, then the repo-root `.env`, then 3000) so the wait probes the port the stack
+actually publishes on.
+
+**Ref:** SPRINT_9.md T8; `scripts/demo-reset.sh`, `scripts/demo-reset.ps1`,
+`e2e/demo/demo-journey.spec.ts`, `docker-compose.demo.yml`, `README.md`,
+`SMOKE_TEST.md`; DECISIONS D-016.
