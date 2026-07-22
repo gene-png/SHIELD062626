@@ -118,6 +118,25 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build
 docker compose exec -T api python scripts/seed_demo.py   # coherent Atlas demo
 ```
 
+To reset the hosted-demo stack from scratch in one command, pass `--demo` (sh)
+or `-Demo` (ps1) to the reset script. The flag overlays
+`docker-compose.demo.yml` on every compose call, so the same `down -v` → build →
+`/ready` poll → seed → web-wait sequence runs against the production web image
+instead of `next dev`. Plain invocation still drives the base compose only.
+
+```bash
+# macOS / Linux / Git Bash
+bash scripts/demo-reset.sh --demo
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File scripts/demo-reset.ps1 -Demo
+```
+
+The demo-journey e2e spec (`e2e/demo/demo-journey.spec.ts`) asserts the
+post-reset story against this stack; it self-skips unless `SHIELD_DEMO_SMOKE=1`,
+so run it right after the reset with
+`SHIELD_DEMO_SMOKE=1 npx playwright test demo/`.
+
 - **Fixture by default:** the api's `SHIELD_LLM_MODE` stays `fixture`, so the
   demo is fully offline. Live AI engages only when you put `ANTHROPIC_API_KEY`
   in a root `.env` **and** set `SHIELD_LLM_MODE=live`; the boot preflight then

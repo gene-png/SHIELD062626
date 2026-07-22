@@ -146,6 +146,15 @@ export async function approveAssessment(
   );
 }
 
+export async function discardAssessment(
+  assessmentId: string,
+): Promise<ZtAssessment> {
+  return jsonRequest<ZtAssessment>(
+    `/api/proxy/zt/assessments/${assessmentId}/discard`,
+    { method: "POST" },
+  );
+}
+
 export async function fetchScore(
   serviceId: string,
 ): Promise<ZtScoreSummary | null> {

@@ -81,6 +81,8 @@ def test_ready_reports_full_dependency_matrix(ready_client: TestClient) -> None:
 
 @pytest.mark.unit
 def test_ready_marks_keycloak_dormant_and_not_required(ready_client: TestClient) -> None:
+    # Default dev/e2e stack keeps SHIELD_AUTH_OIDC_ENABLED off (D-032), so the
+    # keycloak probe reports `dormant` and never gates readiness.
     checks = ready_client.get("/ready").json()["checks"]
     assert checks["keycloak"]["status"] == "dormant"
     assert checks["keycloak"]["required"] is False
@@ -219,3 +221,74 @@ def test_probe_redis_reports_down_on_unreachable_server() -> None:
     assert result.status == "down"
     assert result.required is True
     assert result.detail
+
+
+# -- keycloak probe: flag-gated dual-horizon behavior (Sprint 9 T5, D-032) -----
+
+
+@pytest.mark.unit
+def test_probe_keycloak_dormant_when_flag_off() -> None:
+    # OIDC flag off (the dev/e2e default): no network, `dormant`, and the detail
+    # NAMES the flag so an operator knows exactly what to flip.
+    from app.config import Settings
+    from app.routes.health import _probe_keycloak
+
+    result = _probe_keycloak(Settings(shield_auth_oidc_enabled=False))
+    assert result.status == "dormant"
+    assert result.required is False
+    assert "SHIELD_AUTH_OIDC_ENABLED" in result.detail
+
+
+@pytest.mark.unit
+def test_probe_keycloak_ok_when_flag_on_and_jwks_reachable(monkeypatch) -> None:
+    # Flag on + a reachable JWKS endpoint -> `ok`, still informational.
+    import app.routes.health as health_mod
+    from app.config import Settings
+
+    class _Resp:
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(health_mod.httpx, "get", lambda url, timeout: _Resp())
+    result = health_mod._probe_keycloak(Settings(shield_auth_oidc_enabled=True))
+    assert result.status == "ok"
+    assert result.required is False
+
+
+@pytest.mark.unit
+def test_probe_keycloak_down_when_flag_on_and_jwks_unreachable(monkeypatch) -> None:
+    # Flag on but the fetch raises -> `down`, but NEVER required: a Keycloak
+    # outage must not flip readiness (credentials login keeps the app usable).
+    import app.routes.health as health_mod
+    from app.config import Settings
+
+    def _boom(url, timeout):  # noqa: ANN001, ANN202
+        raise health_mod.httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(health_mod.httpx, "get", _boom)
+    result = health_mod._probe_keycloak(Settings(shield_auth_oidc_enabled=True))
+    assert result.status == "down"
+    assert result.required is False
+    assert result.detail
+
+
+@pytest.mark.unit
+def test_ready_stays_true_when_keycloak_down_with_flag_on(
+    ready_client: TestClient, monkeypatch
+) -> None:
+    # The load-bearing contract: even a DOWN keycloak (flag on) leaves overall
+    # readiness true and does not name keycloak as an offender.
+    import app.routes.health as health_mod
+
+    monkeypatch.setattr(
+        health_mod,
+        "_probe_keycloak",
+        lambda settings: health_mod.DependencyStatus(
+            status="down", required=False, detail="ConnectError: connection refused"
+        ),
+    )
+    body = ready_client.get("/ready").json()
+    assert body["ready"] is True
+    assert body["status"] == "ok"
+    assert body["checks"]["keycloak"]["status"] == "down"
+    assert "keycloak" not in body["offenders"]

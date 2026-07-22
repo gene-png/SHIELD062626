@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.ai.diff import diff_keyed_rows
@@ -173,12 +173,28 @@ def _serialize_assessment(db: Session, a: ZtAssessment) -> ZtAssessmentResponse:
 
 
 def _latest_assessment(db: Session, service_id: uuid.UUID) -> ZtAssessment | None:
+    # D-031: a DISCARDED assessment is retired from every "latest" consumer.
+    # The next-version mint uses _max_assessment_version, not this helper.
     return db.execute(
         select(ZtAssessment)
-        .where(ZtAssessment.service_id == service_id)
+        .where(
+            ZtAssessment.service_id == service_id,
+            ZtAssessment.status != ZtAssessmentStatus.DISCARDED,
+        )
         .order_by(ZtAssessment.version.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+def _max_assessment_version(db: Session, service_id: uuid.UUID) -> int:
+    """Highest version across ALL assessments, discarded included (D-031 version
+    trap): the (service_id, version) unique constraint counts discarded rows."""
+    return (
+        db.execute(
+            select(func.max(ZtAssessment.version)).where(ZtAssessment.service_id == service_id)
+        ).scalar()
+        or 0
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +501,25 @@ def run_ai(
     narratives = data.get("pillar_narratives")
     narratives = narratives if isinstance(narratives, dict) else {}
 
+    # D-031 concurrency: a discard racing this run must win. Re-read the parent
+    # status before committing so suggestions never land in a discarded (or
+    # newly locked) assessment.
+    current_status = db.execute(
+        select(ZtAssessment.status).where(ZtAssessment.id == a.id)
+    ).scalar_one()
+    if current_status in (
+        ZtAssessmentStatus.DISCARDED,
+        ZtAssessmentStatus.APPROVED,
+        ZtAssessmentStatus.RELEASED,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "assessment_not_editable",
+                "message": "This assessment was discarded or locked during the run.",
+            },
+        )
+
     a.documents_stale = True  # Work Order C3
     audit(
         db,
@@ -552,7 +587,7 @@ def create_assessment(
         )
         response.status_code = status.HTTP_200_OK
         return _serialize_assessment(db, prior)
-    version = (prior.version + 1) if prior else 1
+    version = _max_assessment_version(db, svc.id) + 1
     assessment = ZtAssessment(
         service_id=svc.id,
         client_id=client.id,
@@ -646,6 +681,7 @@ def patch_answer(
     if a is None or a.status in (
         ZtAssessmentStatus.APPROVED,
         ZtAssessmentStatus.RELEASED,
+        ZtAssessmentStatus.DISCARDED,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -861,6 +897,92 @@ def approve_assessment(
         target_id=a.id,
         actor_user_id=user.id,
         details={"version": a.version, "framework": a.framework.value},
+    )
+    db.commit()
+    db.refresh(a)
+    return _serialize_assessment(db, a)
+
+
+@router.post(
+    "/assessments/{assessment_id}/discard",
+    response_model=ZtAssessmentResponse,
+    summary="Discard a draft Zero Trust assessment (admin, D-031)",
+)
+def discard_assessment(
+    assessment_id: uuid.UUID,
+    user: Annotated[User, _admin_required],
+    client: Annotated[Client, Depends(current_client)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ZtAssessmentResponse:
+    """Soft-delete an unapproved draft. DRAFT -> discarded (one audit row);
+    re-discard is idempotent; SUBMITTED/APPROVED/RELEASED -> typed 409. A
+    client-touched draft is still discardable (the UI warns with the answered
+    count). Conditional UPDATE ... WHERE status='draft' for the concurrency
+    contract (D-031)."""
+    a = require_zt_assessment_in_tenant(db, assessment_id, client.id)
+    if a.status == ZtAssessmentStatus.DISCARDED:
+        return _serialize_assessment(db, a)  # idempotent, no audit
+    if a.status != ZtAssessmentStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "not_discardable",
+                "message": "Only a draft assessment can be discarded.",
+            },
+        )
+    answer_count = db.execute(
+        select(func.count()).select_from(ZtAnswer).where(ZtAnswer.assessment_id == a.id)
+    ).scalar_one()
+    answered_count = db.execute(
+        select(func.count())
+        .select_from(ZtAnswer)
+        .where(
+            ZtAnswer.assessment_id == a.id,
+            or_(
+                ZtAnswer.maturity_stage.is_not(None),
+                ZtAnswer.target_stage.is_not(None),
+                ZtAnswer.notes.is_not(None),
+                ZtAnswer.evidence_artifact_id.is_not(None),
+            ),
+        )
+    ).scalar_one()
+    result = db.execute(
+        update(ZtAssessment)
+        .where(ZtAssessment.id == a.id, ZtAssessment.status == ZtAssessmentStatus.DRAFT)
+        .values(status=ZtAssessmentStatus.DISCARDED)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.refresh(a)
+        if a.status == ZtAssessmentStatus.DISCARDED:
+            return _serialize_assessment(db, a)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "not_discardable",
+                "message": "Only a draft assessment can be discarded.",
+            },
+        )
+    audit(
+        db,
+        action="zt.assessment.discarded",
+        target_type="zt_assessment",
+        target_id=a.id,
+        actor_user_id=user.id,
+        details={
+            "service_id": str(a.service_id),
+            "version": a.version,
+            "framework": a.framework.value,
+            "answer_count": answer_count,
+            "answered_count": answered_count,
+        },
+    )
+    _log.info(
+        "zt_assessment_discarded",
+        assessment_id=str(a.id),
+        version=a.version,
+        service_id=str(a.service_id),
+        answered_count=answered_count,
     )
     db.commit()
     db.refresh(a)

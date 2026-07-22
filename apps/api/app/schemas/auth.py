@@ -134,3 +134,19 @@ class RegisterResponse(BaseModel):
     user: UserResponse
     tokens: TokenPairResponse
     is_primary_poc: bool
+
+
+class OidcExchangeRequest(BaseModel):
+    """The Keycloak ACCESS token (it carries aud=shield-api via the realm's
+    audience mapper). Exchanged for a plain SHIELD pair (Sprint 9 T4, D-032)."""
+
+    keycloak_access_token: str = Field(min_length=1)
+
+
+class OidcExchangeResponse(BaseModel):
+    """Result of a successful hybrid OIDC exchange: the matched local user plus a
+    freshly minted SHIELD D-020 pair. Mirrors RegisterResponse minus the
+    registration-only is_primary_poc flag (no /auth/me follow-up needed)."""
+
+    user: UserResponse
+    tokens: TokenPairResponse

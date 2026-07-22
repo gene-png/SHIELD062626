@@ -112,6 +112,15 @@ export async function approveCapabilityList(
   );
 }
 
+export async function discardCapabilityList(
+  listId: string,
+): Promise<CapabilityList> {
+  return jsonRequest<CapabilityList>(
+    `/api/proxy/tech-debt/capability-lists/${listId}/discard`,
+    { method: "POST" },
+  );
+}
+
 export async function fetchConsolidationPlan(
   serviceId: string,
 ): Promise<ConsolidationPlanSummary | null> {

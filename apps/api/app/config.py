@@ -94,10 +94,19 @@ class Settings(BaseSettings):
     )
     s3_kms_key_id: str = "dev-stub-key"
 
-    # OIDC (Keycloak)
-    keycloak_issuer: str = "http://keycloak:8080/realms/shield"
+    # OIDC (Keycloak) — hybrid SSO exchange (Sprint 9 T4, D-032). The exchange
+    # verifies a Keycloak ACCESS token against `keycloak_jwks_url` (network only —
+    # never compared to `iss`), pinning `iss` to `keycloak_issuer`, `aud` to
+    # `keycloak_audience`, and `azp` to `keycloak_client_id`.
+    # Split-horizon (Sprint 9 T5): `keycloak_issuer` is the CANONICAL
+    # browser-facing issuer pinned as `iss` (matches KC_HOSTNAME); the token the
+    # exchange verifies carries this value no matter which interface minted it.
+    # `keycloak_jwks_url` is the CONTAINER-reachable fetch endpoint the verifier
+    # hits for signing keys — a deliberately different horizon.
+    keycloak_issuer: str = "http://localhost:8080/realms/shield"
     keycloak_audience: str = "shield-api"
     keycloak_client_id: str = "shield-web"
+    keycloak_jwks_url: str = "http://keycloak:8080/realms/shield/protocol/openid-connect/certs"
 
     # LLM (Master Spec §4.4 - never hardcoded)
     shield_llm_provider: LLMProvider = "anthropic"
@@ -115,6 +124,12 @@ class Settings(BaseSettings):
     shield_auth_require_mfa: bool = False
     shield_auth_require_email_verify: bool = False
     shield_email_delivery_enabled: bool = False
+    # Hybrid Keycloak SSO (Sprint 9 T4, D-032). Default OFF: the credentials
+    # stack is untouched and NO Keycloak network is touched. Flipping it on
+    # registers POST /auth/oidc/exchange as a live door and requires a coherent
+    # Keycloak config (checked at boot by oidc_readiness). Keycloak tokens are
+    # NEVER accepted as API bearers — the exchange mints a plain D-020 pair.
+    shield_auth_oidc_enabled: bool = False
 
     # Redaction (Master Spec §12)
     shield_redaction_mode: RedactionMode = "strict"
@@ -226,6 +241,42 @@ class Settings(BaseSettings):
             return False, "Live mode is on but SHIELD_LLM_MODEL is empty."
         return True, f"Live AI configured ({provider}/{self.shield_llm_model})."
 
+    def oidc_readiness(self) -> tuple[bool, str]:
+        """Whether the hybrid OIDC exchange is coherently configured (D-032).
+
+        Returns ``(ready, human_detail)`` and NEVER raises — the single source of
+        truth shared by the boot preflight (which wraps a false result in a loud
+        ``RuntimeError``) and T5's ``/ready`` keycloak probe. This is a
+        config-SHAPE check only: like ``live_llm_readiness`` it makes NO network
+        call (the api has no ``depends_on: keycloak`` and must not crash-loop on a
+        cold ``compose up`` — a Keycloak outage surfaces as a runtime 503, not a
+        boot failure). ``keycloak_jwks_url`` is the fetch endpoint; ``iss``/``aud``
+        are the pinned claim values.
+        """
+        issuer = self.keycloak_issuer.strip()
+        if not issuer:
+            return False, "OIDC is enabled but KEYCLOAK_ISSUER is empty."
+        if not (issuer.startswith("http://") or issuer.startswith("https://")):
+            return (
+                False,
+                f"OIDC is enabled but KEYCLOAK_ISSUER={self.keycloak_issuer!r} is not an "
+                "http(s) URL.",
+            )
+        jwks_url = self.keycloak_jwks_url.strip()
+        if not jwks_url:
+            return False, "OIDC is enabled but KEYCLOAK_JWKS_URL is empty."
+        if not (jwks_url.startswith("http://") or jwks_url.startswith("https://")):
+            return (
+                False,
+                f"OIDC is enabled but KEYCLOAK_JWKS_URL={self.keycloak_jwks_url!r} is not an "
+                "http(s) URL.",
+            )
+        if not self.keycloak_audience.strip():
+            return False, "OIDC is enabled but KEYCLOAK_AUDIENCE is empty."
+        if not self.keycloak_client_id.strip():
+            return False, "OIDC is enabled but KEYCLOAK_CLIENT_ID is empty."
+        return True, f"Hybrid OIDC configured (issuer {issuer})."
+
     def assert_safe_for_runtime(self) -> None:
         """Reject obviously unsafe configurations at startup."""
         if self.is_production() and self.shield_redaction_mode == "off":
@@ -255,6 +306,14 @@ class Settings(BaseSettings):
             ready, detail = self.live_llm_readiness()
             if not ready:
                 raise RuntimeError(f"SHIELD_LLM_MODE=live is not runnable: {detail}")
+        # Hybrid OIDC boot preflight (D-032), mirroring the live-AI gate: refuse
+        # to start with the flag on but an incoherent Keycloak config, rather than
+        # 500/503 on the first exchange. Config-shape only, no network (the api
+        # has no depends_on: keycloak). Flag off is a full no-op.
+        if self.shield_auth_oidc_enabled:
+            ready, detail = self.oidc_readiness()
+            if not ready:
+                raise RuntimeError(f"SHIELD_AUTH_OIDC_ENABLED=true is not runnable: {detail}")
 
 
 @lru_cache(maxsize=1)

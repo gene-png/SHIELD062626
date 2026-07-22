@@ -68,6 +68,12 @@ dev = [
     "black==26.5.1",
     "mypy>=1.11",
     "bandit[toml]>=1.7",
+    # Test-only: parse rendered PDF bytes back to text so the export-content
+    # tests assert real content (client name / title / a known row value), not
+    # just the %PDF- magic. Imported ONLY in tests/unit/*, never in app/.
+    # Rebuild the api image after adding this — a plain restart does not install
+    # it (the Sprint 7 google-auth lesson).
+    "pypdf>=5",
 ]
 
 [build-system]

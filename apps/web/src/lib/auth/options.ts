@@ -13,13 +13,15 @@
  * same `aud=shield-api` claim - no schema migration required.
  */
 
-import NextAuth, { CredentialsSignin } from "next-auth";
+import NextAuth, { CredentialsSignin, customFetch } from "next-auth";
 import type { NextAuthConfig, User } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
+import Keycloak from "next-auth/providers/keycloak";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
+import { OIDC_EXCHANGE_ERROR, REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
+import { isOidcEnabled, keycloakFetch } from "@/lib/auth/oidc";
 
 interface LoginResponse {
   access_token: string | null;
@@ -119,6 +121,44 @@ interface MeResponse {
   display_name: string | null;
 }
 
+/**
+ * Shape of a successful POST /auth/oidc/exchange (backend OidcExchangeResponse,
+ * D-032): the matched local user plus a freshly minted SHIELD pair. Only the
+ * fields the jwt callback seeds are typed here — the pair mirrors the
+ * credentials LoginResponse so downstream expiry/refresh logic is identical.
+ */
+interface OidcExchangeResponse {
+  user: { role: "admin" | "client" };
+  tokens: {
+    access_token: string;
+    refresh_token: string;
+    access_expires_at: string;
+  };
+}
+
+/**
+ * The Keycloak (OIDC) provider — registered ONLY when the flag is on. A public
+ * client: no secret, PKCE + state, `token_endpoint_auth_method: "none"`. The
+ * `customFetch` rewrites Auth.js's server-side discovery fetch from the public
+ * (browser-facing localhost) issuer to the container-reachable internal host;
+ * after discovery, Keycloak's backchannel-dynamic config already returns
+ * internal token/JWKS URLs (Sprint 9 T5), so it is a passthrough thereafter.
+ *
+ * If a future next-auth beta rejects the secret-less client, the pre-approved
+ * fallback (D-032 / SPRINT_9 T6) flips the realm client to confidential and
+ * plumbs KEYCLOAK_CLIENT_SECRET here — a dev-realm-only secret, documented as
+ * such. This build ships the secret-less client (verified against beta.31).
+ */
+function keycloakProvider(): ReturnType<typeof Keycloak> {
+  return Keycloak({
+    clientId: process.env.KEYCLOAK_CLIENT_ID,
+    issuer: process.env.KEYCLOAK_ISSUER,
+    checks: ["pkce", "state"],
+    client: { token_endpoint_auth_method: "none" },
+    [customFetch]: keycloakFetch,
+  });
+}
+
 export const authConfig: NextAuthConfig = {
   session: { strategy: "jwt", maxAge: 60 * 60 * 24 },
   pages: { signIn: "/sign-in" },
@@ -203,9 +243,56 @@ export const authConfig: NextAuthConfig = {
         }
       },
     }),
+    // Flag OFF (default): the Keycloak provider does NOT exist — zero discovery /
+    // JWKS network requests, every credential surface unchanged. `options.ts` is
+    // load-bearing for all ~24 credential e2e specs, so the seam is gated here at
+    // provider-registration time, not with runtime branching in the flow.
+    ...(isOidcEnabled() ? [keycloakProvider()] : []),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, account, user }) {
+      // Keycloak (OIDC) initial sign-in — ordered BEFORE the credentials
+      // `if (user)` seed because an OIDC sign-in ALSO carries a profile `user`.
+      // Trade the Keycloak access token for a SHIELD pair via the backend
+      // exchange (D-032); the seeded shape is IDENTICAL to the credentials path,
+      // so downstream expiry/refresh/session logic is untouched. On refusal we
+      // stamp OIDC_EXCHANGE_ERROR (never seed tokens), which SessionExpiryGuard
+      // turns into a loud /sign-in?reason=oidc_exchange_failed redirect.
+      if (account?.provider === "keycloak") {
+        if (!account.access_token) {
+          console.error("[auth.oidc] keycloak sign-in carried no access_token");
+          token.error = OIDC_EXCHANGE_ERROR;
+          return token;
+        }
+        try {
+          const exchanged = await apiFetch<OidcExchangeResponse>(
+            "/auth/oidc/exchange",
+            {
+              method: "POST",
+              body: { keycloak_access_token: account.access_token },
+              // Not tenant-scoped; don't leak a cookie-derived X-Client-Id.
+              clientId: "",
+            },
+          );
+          token.role = exchanged.user.role;
+          token.accessToken = exchanged.tokens.access_token;
+          token.refreshToken = exchanged.tokens.refresh_token;
+          token.accessExpiresAt = exchanged.tokens.access_expires_at;
+          token.error = undefined;
+          console.info(
+            `[auth.oidc] exchange succeeded role=${exchanged.user.role}`,
+          );
+          return token;
+        } catch (err) {
+          const reason =
+            err instanceof ApiError ? reasonOf(err.payload) : undefined;
+          console.error(
+            `[auth.oidc] exchange rejected reason=${reason ?? "unknown"}`,
+          );
+          token.error = OIDC_EXCHANGE_ERROR;
+          return token;
+        }
+      }
       // Initial sign-in: seed the token from the authorized user.
       if (user) {
         token.role = user.role;
@@ -213,6 +300,16 @@ export const authConfig: NextAuthConfig = {
         token.refreshToken = user.refreshToken;
         token.accessExpiresAt = user.accessExpiresAt;
         token.error = undefined;
+        return token;
+      }
+      // A rejected OIDC exchange is TERMINAL: it seeded no access/refresh token,
+      // so the refresh path below would clobber the reason to a generic
+      // RefreshAccessTokenError on the very next jwt invocation (the client's
+      // /api/auth/session fetch) and SessionExpiryGuard would never route the
+      // user to the loud oidc_exchange_failed banner. Preserve it so the guard
+      // fires. (Found by the T6 browser spike — a unit mock can't see this
+      // multi-invocation sequence.)
+      if (token.error === OIDC_EXCHANGE_ERROR) {
         return token;
       }
       // Subsequent calls: keep the access token alive while it's still valid,

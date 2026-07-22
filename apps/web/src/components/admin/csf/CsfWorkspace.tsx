@@ -14,6 +14,7 @@ import {
   approveAssessment,
   createAssessment,
   CsfProxyError,
+  discardAssessment,
   fetchCatalog,
   fetchGapAnalysis,
   fetchInterviewQuestionnaire,
@@ -35,6 +36,7 @@ import type {
 
 import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
 
 import { CsfDeliverableCard } from "./CsfDeliverableCard";
 import { CsfGapList } from "./CsfGapList";
@@ -81,7 +83,9 @@ export function CsfWorkspace({
     null,
   );
   const [loadError, setLoadError] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState<"create" | "approve" | null>(null);
+  const [busy, setBusy] = React.useState<
+    "create" | "approve" | "discard" | null
+  >(null);
   const [targetTier, setTargetTier] = React.useState(3);
   const [interviewByCode, setInterviewByCode] = React.useState<
     Record<string, CsfInterviewQuestion[]>
@@ -243,6 +247,35 @@ export function CsfWorkspace({
     }
   }
 
+  async function onDiscard(): Promise<void> {
+    if (!assessment) return;
+    setBusy("discard");
+    const seq = ++assessmentSeq.current;
+    try {
+      await discardAssessment(assessment.id);
+      // Refetch latest, guarded: any in-flight load holding the pre-discard
+      // draft is discarded on arrival. 404 → null (empty state, Start live
+      // again) or the prior approved version.
+      const a = await fetchLatestAssessment(serviceId);
+      if (seq === assessmentSeq.current) {
+        setAssessment(a);
+        if (a) {
+          const t = normalizeTarget(a.client_target_tier);
+          setTargetTier(t);
+          await refreshScoreAndGap(t);
+        } else {
+          setScore(null);
+          setGap(null);
+          setDeliverable(null);
+        }
+      }
+    } catch (err) {
+      setLoadError(describeError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onChangeTargetTier(next: number): Promise<void> {
     setTargetTier(next);
     if (assessment) {
@@ -253,6 +286,17 @@ export function CsfWorkspace({
 
   const readOnly =
     assessment?.status === "approved" || assessment?.status === "released";
+
+  const answeredCount =
+    assessment?.answers.filter(
+      (a) =>
+        a.maturity_tier !== null ||
+        a.notes !== null ||
+        a.evidence_artifact_id !== null,
+    ).length ?? 0;
+  const discardSummary = `${answeredCount} answer${
+    answeredCount === 1 ? "" : "s"
+  }, including client-entered data, will be discarded.`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -327,6 +371,14 @@ export function CsfWorkspace({
               {busy === "create" ? "Creating…" : "Start assessment"}
             </button>
           )}
+          {assessment ? (
+            <DiscardDraftButton
+              status={assessment.status}
+              destructionSummary={discardSummary}
+              onConfirm={onDiscard}
+              disabled={busy !== null}
+            />
+          ) : null}
         </div>
       </header>
 

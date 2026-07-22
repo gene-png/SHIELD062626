@@ -663,3 +663,165 @@ effect — that would be the worse lie.
 **Ref:** Master Spec §12; SPRINT_7.md T2; `app/deliverable_release.py`,
 `app/email/sender.py`, `tests/unit/test_release_notification.py`; DECISIONS
 D-025, D-028.
+
+## D-031 — Draft discard is an admin-only soft-delete state transition
+
+**Decision (Sprint 9 T0).** Each of the four assessment services gains a
+`POST .../{id}/discard` route beside its existing `/approve` sibling (all four
+admin-only via `_admin_required`). A new `DISCARDED` value joins each status
+enum. The columns are already `native_enum=False` `String(16)` with no CHECK
+constraint (verified against migration 0009), so this is code-only with no
+migration.
+
+**State machine.** Only a `DRAFT` is discardable: it flips to `DISCARDED` and
+writes exactly one audit row (`capability_list.discarded`,
+`csf.assessment.discarded`, `attack.assessment.discarded`,
+`zt.assessment.discarded`). A second discard on an already-discarded resource
+returns an idempotent 200 with no second audit row. A `SUBMITTED` CSF or ZT
+assessment, or any `APPROVED`/`RELEASED` resource, returns a typed 409
+`{reason: "not_discardable"}` (the D-016 envelope): once a client formally
+submits, or an admin approves, destruction is off the table. A client-role POST
+is a 403; an unknown or cross-tenant id is a 404. Client-touched CSF/ZT drafts
+stay discardable, and the audit details carry the answered-row count so the web
+confirm dialog (T1) can warn about client-entered data.
+
+**The version trap.** A discarded row keeps its version under the
+`(service_id, version)` unique constraint, so the two "latest" reads split. The
+per-service `_latest_*` helpers now exclude `DISCARDED` (covering GET latest,
+the draft-reuse guard, and every downstream consumer), but the next-version mint
+switches to a dedicated `select(func.max(version))` that counts discarded rows.
+Without that split, discarding a v2 draft over an approved v1 would mint v2
+again and raise an `IntegrityError` on the first re-extract.
+
+**Hidden "latest" consumers.** The Risk Register has its own generic `_latest`
+feeding the gate and finding-gather; it grew an `active_only` flag so a
+discarded highest-version assessment no longer unlocks the gate or supplies
+findings (RiskRegister itself has no discard state, so those callers leave the
+flag off). The client engagement cards (`intake._latest_assessment_status`) now
+report the latest non-discarded status, reading `None` for a discarded-only
+service rather than the word "discarded".
+
+**Concurrency contract.** The discard write is a conditional
+`UPDATE ... WHERE status = 'draft'`; the rows-affected count drives the
+200/idempotent/409 branch, so two transactions cannot both observe `DRAFT` and
+proceed. Every child mutation (the per-row PATCH routes) and each `run-ai` guard
+rejects a parent that is not in its editable state, so a stale-tab answer edit
+or an AI run racing a discard loses loudly with a typed 409 instead of writing
+into a discarded parent. An AI run that already loaded a `DRAFT` parent re-reads
+its status before committing its suggestions.
+
+**Rationale.** A consultant who extracts or opens the wrong draft had no way to
+retract it: the draft-reuse guard would hand the same stale draft back forever.
+Discard is a soft delete (the row and its audit trail survive) rather than a
+hard `DELETE`, which keeps the append-only audit history intact and leaves
+un-discard as a future affordance. Uploaded intake artifacts survive a
+tech-debt discard on purpose: re-extracting from the same document is the whole
+point of the escape hatch.
+
+**Ref:** Master Spec §11, §15; SPRINT_9.md T0; `app/models/capability.py`,
+`app/models/csf_assessment.py`, `app/models/attack_assessment.py`,
+`app/models/zt_assessment.py`, `app/routes/tech_debt.py`, `app/routes/csf.py`,
+`app/routes/attack.py`, `app/routes/zt.py`, `app/routes/risk.py`,
+`app/routes/intake.py`, `tests/unit/test_discard_draft.py`; DECISIONS D-016.
+
+## D-032 — Hybrid Keycloak SSO: a flag-gated token exchange, never a bearer
+
+**Decision (Sprint 9 T4).** `POST /auth/oidc/exchange` is the single door for a
+Keycloak identity. Keycloak owns the browser login and MFA; the web app hands the
+API the resulting Keycloak ACCESS token, the API verifies it once and mints a
+plain D-020 HS256 pair in its place. A Keycloak token is never accepted as an API
+bearer — the existing `verify_token` path is unchanged, and the exchange output is
+an ordinary SHIELD pair that flows through refresh/expiry/lockout untouched. The
+whole feature is behind `SHIELD_AUTH_OIDC_ENABLED`, default OFF; with the flag off
+the route returns a typed 403 `oidc_disabled` and no Keycloak network is touched.
+
+**Boot preflight, no boot-time network.** `Settings.oidc_readiness()` mirrors
+`live_llm_readiness()`: a config-shape check (non-empty http(s) `keycloak_issuer`
+and `keycloak_jwks_url`, non-empty `keycloak_audience` and `keycloak_client_id`)
+wired into `assert_safe_for_runtime`, so the flag on with an incoherent config
+fails loudly at startup. It makes NO network call — the api has no
+`depends_on: keycloak` and must not crash-loop on a cold `compose up` (the D-026
+precedent). A real Keycloak outage surfaces as a runtime 503, not a boot failure.
+
+**Verification (`app/security/oidc.py`).** RS256 only — the algorithms list is
+the alg-confusion guard, so an HS256 token (even one signed with the app's own
+secret) is rejected. `iss` is pinned to `keycloak_issuer`, `aud` to
+`keycloak_audience`, and `exp`/`iat`/`sub` are required. JWKS keys are cached
+process-wide (300s TTL, `threading.Lock`); a token bearing an unknown `kid`
+forces exactly one refetch to pick up a Keycloak key rotation, then rejects —
+never an unbounded loop. The raw fetch is isolated in `_fetch_jwks` so unit tests
+monkeypatch it and touch no network; `python-jose[cryptography]` and `httpx`
+already ship, so no new dependency.
+
+**azp, not just aud (Codex finding).** `aud` names the resource server
+(`shield-api`), so a correctly signed token minted to a _different_ Keycloak
+client would still satisfy the audience check. The exchange additionally requires
+`azp == keycloak_client_id`, rejecting a token that was not issued to our web
+client with a 401 `oidc_token_invalid`.
+
+**Local account authority.** Match is by normalized verified email against an
+EXISTING local user — no JIT provisioning (`oidc_no_local_account` 403 for an
+unknown identity). The minted pair's role comes from `user.role`, so a token
+claiming `roles: ["admin"]` for a client-role user still mints CLIENT tokens. The
+Keycloak subject is TOFU-bound: `users.keycloak_sub` (migration 0032, nullable
+and UNIQUE, additive C0) is stamped on first exchange and a later exchange whose
+`sub`
+differs is rejected 403 `oidc_sub_mismatch`. The exchange bypasses local TOTP MFA
+(Keycloak owns MFA on this path), does NOT consult the local password lockout
+(Keycloak's `bruteForceProtected` owns SSO lockout — honoring the local lock would
+let a password-endpoint attacker DoS SSO users), and does NOT stamp local
+`email_verified_at`. It DOES reuse the shared `_register_successful_login` +
+`_issue_pair` bookkeeping, so lockout counters clear and `last_login_at` stamps
+exactly as on the credentials path.
+
+**Failure matrix (all typed dict-detail, D-016).** 403 `oidc_disabled` /
+401 `oidc_token_invalid` (bad signature/iss/aud/expiry/azp/unknown-kid) /
+503 `oidc_jwks_unavailable` (names the URL + flag) / 401 `oidc_claims_missing` /
+403 `oidc_email_unverified` / 403 `oidc_no_local_account` / 403
+`oidc_user_inactive` / 403 `oidc_sub_mismatch`.
+
+**Rationale.** SHIELD's custom-JWT stack is the source of truth for authz and
+session lifetime; federating the login without ceding either means verifying the
+IdP token at one auditable boundary and re-minting locally, rather than trusting a
+foreign bearer across the app. Flag-gating keeps every existing credentials e2e
+green and the feature dormant until a deployment turns it on.
+
+**Ref:** Master Spec §4.5; SPRINT_9.md T4; `app/config.py`, `app/security/oidc.py`,
+`app/routes/oidc.py`, `app/main.py`, `app/schemas/auth.py`, `app/models/user.py`,
+`alembic/versions/0032_user_keycloak_sub.py`, `tests/unit/test_oidc_exchange.py`,
+`tests/unit/test_config.py`; DECISIONS D-016, D-020, D-026.
+
+## D-033 — Destructive-by-design automation is opt-in-gated
+
+**Decision (Sprint 9 T8).** The demo-reset scripts and the demo-journey e2e spec
+automate a workflow that destroys local state (`docker compose down -v` wipes the
+Postgres, MinIO, Redis, and Keycloak volumes). Nothing about that automation may
+fire implicitly. Three rules hold it in place:
+
+1. **Reset specs self-skip by default.** `e2e/demo/demo-journey.spec.ts` lives
+   under the `testDir: "."` root, so the default `npx playwright test` run
+   discovers it. A module-scope `test.skip(process.env.SHIELD_DEMO_SMOKE !== "1")`
+   guard makes every test in the file skip unless the operator opts in, so the
+   default suite's pass count is unchanged and the spec never runs against a
+   stack it did not just reset (a half-reset or dev-mode stack would report
+   misleading results).
+2. **Destructive scripts never run implicitly.** `scripts/demo-reset.sh` /
+   `.ps1` are invoked by hand. A new `--demo` / `-Demo` flag overlays
+   `docker-compose.demo.yml` (the production web image) on every compose call;
+   the plain invocation drives the base compose only. The flag changes which
+   stack is reset, never whether a reset happens.
+3. **CI isolation is the only unattended venue.** The reset runs unattended only
+   on an isolated CI runner (T9), where `down -v` cannot touch a developer's
+   volumes or a shared host.
+
+**Fail loud, not silent (Codex finding).** The old web-readiness poll gave up
+after 120 seconds and printed the success banner anyway, so a failed production
+build read as a clean reset until Playwright died with an opaque error later. The
+poll now exits non-zero on timeout and dumps `docker compose logs web` on the way
+out, in both the sh and ps1 scripts. The web port is resolved from `WEB_PORT`
+(env, then the repo-root `.env`, then 3000) so the wait probes the port the stack
+actually publishes on.
+
+**Ref:** SPRINT_9.md T8; `scripts/demo-reset.sh`, `scripts/demo-reset.ps1`,
+`e2e/demo/demo-journey.spec.ts`, `docker-compose.demo.yml`, `README.md`,
+`SMOKE_TEST.md`; DECISIONS D-016.

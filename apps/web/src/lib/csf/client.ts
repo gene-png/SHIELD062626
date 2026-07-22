@@ -162,6 +162,15 @@ export async function approveAssessment(
   );
 }
 
+export async function discardAssessment(
+  assessmentId: string,
+): Promise<CsfAssessment> {
+  return jsonRequest<CsfAssessment>(
+    `/api/proxy/csf/assessments/${assessmentId}/discard`,
+    { method: "POST" },
+  );
+}
+
 export async function fetchScore(
   serviceId: string,
 ): Promise<CsfScoreSummary | null> {

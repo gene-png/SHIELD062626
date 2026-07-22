@@ -50,19 +50,20 @@ async function openFreshDraft(page: Page): Promise<void> {
     page.getByRole("heading", { name: "MITRE ATT&CK Coverage" }),
   ).toBeVisible({ timeout: 30000 });
 
-  // Close any open draft first, then mint. SPRINT_3 T1 added a draft-exists
+  // Discard any open draft first, then mint. SPRINT_3 T1 added a draft-exists
   // guard: POST now REUSES an open draft instead of minting a new version, so a
   // plain POST would hand back a previous run's already-AI-drafted draft and
   // Run AI would diff to zero changes (the changed>0 assertions below need a
-  // clean grid). Approving moves any open DRAFT out of DRAFT (ignored when
-  // nothing is open), so the following POST cuts a genuinely fresh v+1.
+  // clean grid). Discarding throws any open DRAFT away (Sprint 9 T0 / D-031;
+  // ignored when nothing is open), so the following POST cuts a genuinely fresh
+  // draft — this retires the old approve-first dance.
   const prior = await page.request.get(
     `/api/proxy/attack/services/${attackServiceId}/assessments/latest`,
   );
   if (prior.ok()) {
     const p = (await prior.json()) as { id: string; status: string };
     if (p.status === "draft") {
-      await page.request.post(`/api/proxy/attack/assessments/${p.id}/approve`);
+      await page.request.post(`/api/proxy/attack/assessments/${p.id}/discard`);
     }
   }
   const created = await page.request.post(

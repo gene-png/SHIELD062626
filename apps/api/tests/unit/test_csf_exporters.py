@@ -105,6 +105,23 @@ def test_pdf_render_produces_valid_pdf(context_with_full_tier3) -> None:
     assert len(raw) > 2000
 
 
+def _pdf_text(raw: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.unit
+def test_pdf_render_carries_title_client_and_a_known_value(context_with_full_tier3) -> None:
+    # SMOKE §10: upgrade from %PDF- magic to real content — title, client, and
+    # one known computed value (all-tier-3 rolls up to "Repeatable").
+    text = _pdf_text(render_pdf(context_with_full_tier3))
+    assert "NIST CSF 2.0 Assessment" in text  # service title
+    assert "Atlas Defense Solutions" in text  # client name
+    assert "Repeatable" in text  # overall maturity label (tier 3)
+
+
 @pytest.mark.unit
 def test_pdf_handles_empty_gap_list() -> None:
     a, answers = _build_inputs(answers_tier=4)  # everyone Adaptive

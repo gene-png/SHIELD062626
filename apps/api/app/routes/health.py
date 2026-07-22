@@ -18,6 +18,7 @@ can simulate a down dependency by monkeypatching it.
 
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -114,15 +115,34 @@ def _probe_minio(settings: Settings) -> DependencyStatus:  # noqa: ARG001 - kept
         return DependencyStatus(status="down", required=True, detail=f"{type(exc).__name__}: {exc}")
 
 
-def _probe_keycloak(settings: Settings) -> DependencyStatus:  # noqa: ARG001 - kept uniform
-    # OIDC via Keycloak is composed but dormant in v1 (auth is custom HS256
-    # JWT). Report it so an operator knows it exists, but it never gates
-    # readiness — the app does not depend on it to serve.
-    return DependencyStatus(
-        status="dormant",
-        required=False,
-        detail="Keycloak OIDC is dormant in v1 (custom JWT auth); not probed.",
-    )
+_KEYCLOAK_PROBE_TIMEOUT_SECONDS = 2.0
+
+
+def _probe_keycloak(settings: Settings) -> DependencyStatus:
+    # Hybrid OIDC via Keycloak is flag-gated (D-032, SHIELD_AUTH_OIDC_ENABLED).
+    # OFF (the dev/e2e default) -> `dormant`, no network, exactly as v1 — but the
+    # detail now NAMES the flag so an operator knows what to flip. ON -> a REAL
+    # probe of the JWKS endpoint (httpx GET, 2s timeout) reporting `ok`/`down`.
+    # Either way `required=False`: credentials login keeps the app serviceable
+    # during a Keycloak outage, so OIDC must NEVER gate LB readiness.
+    if not settings.shield_auth_oidc_enabled:
+        return DependencyStatus(
+            status="dormant",
+            required=False,
+            detail="Keycloak OIDC is dormant (SHIELD_AUTH_OIDC_ENABLED is off); not probed.",
+        )
+    try:
+        resp = httpx.get(settings.keycloak_jwks_url, timeout=_KEYCLOAK_PROBE_TIMEOUT_SECONDS)
+        resp.raise_for_status()
+        return DependencyStatus(
+            status="ok",
+            required=False,
+            detail=f"JWKS reachable at {settings.keycloak_jwks_url}",
+        )
+    except Exception as exc:  # noqa: BLE001 - readiness reports, never raises
+        return DependencyStatus(
+            status="down", required=False, detail=f"{type(exc).__name__}: {exc}"
+        )
 
 
 def _probe_llm(settings: Settings) -> DependencyStatus:

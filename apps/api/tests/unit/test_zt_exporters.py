@@ -114,6 +114,24 @@ def test_cisa_pdf_renders() -> None:
     assert len(raw) > 2000
 
 
+def _pdf_text(raw: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.unit
+def test_cisa_pdf_carries_title_client_framework_and_a_known_pillar() -> None:
+    # SMOKE §10: upgrade from %PDF- magic to real content — title, client,
+    # framework label, and one known per-pillar rollup row.
+    text = _pdf_text(render_pdf(_ctx(ZtFrameworkCode.CISA_ZTMM_2_0)))
+    assert "Zero Trust Assessment" in text  # service title
+    assert "Atlas Defense Solutions" in text  # client name
+    assert "CISA ZTMM 2.0" in text  # framework label
+    assert "Identity" in text  # a known CISA pillar rollup row
+
+
 @pytest.mark.unit
 def test_dod_pdf_renders() -> None:
     raw = render_pdf(_ctx(ZtFrameworkCode.DOD_ZTRA))

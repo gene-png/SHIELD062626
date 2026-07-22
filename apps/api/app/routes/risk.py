@@ -62,19 +62,23 @@ def _llm_dep() -> LLMClient:
     return LLMClient.from_settings()
 
 
-def _latest(db: Session, model, client_id: uuid.UUID):
+def _latest(db: Session, model, client_id: uuid.UUID, *, active_only: bool = False):
+    """Latest row for a client by version. With active_only=True, DISCARDED
+    assessments are excluded (D-031) so a discarded highest-version assessment
+    never unlocks the Risk gate or feeds synthesis. RiskRegister has no discard
+    state, so its callers leave active_only=False."""
+    stmt = select(model).where(model.client_id == client_id)
+    if active_only:
+        stmt = stmt.where(model.status != "discarded")
     return db.execute(
-        select(model)
-        .where(model.client_id == client_id)
-        .order_by(model.version.desc(), model.created_at.desc())
-        .limit(1)
+        stmt.order_by(model.version.desc(), model.created_at.desc()).limit(1)
     ).scalar_one_or_none()
 
 
 def _gate(db: Session, client_id: uuid.UUID) -> RiskGateStatus:
-    has_attack = _latest(db, AttackAssessment, client_id) is not None
-    has_csf = _latest(db, CsfAssessment, client_id) is not None
-    has_zt = _latest(db, ZtAssessment, client_id) is not None
+    has_attack = _latest(db, AttackAssessment, client_id, active_only=True) is not None
+    has_csf = _latest(db, CsfAssessment, client_id, active_only=True) is not None
+    has_zt = _latest(db, ZtAssessment, client_id, active_only=True) is not None
     unlocked = has_attack and (has_csf or has_zt)
     missing: list[str] = []
     if not has_attack:
@@ -121,7 +125,7 @@ def _gather_findings(db: Session, client_id: uuid.UUID) -> tuple[list[dict], set
     valid_techniques: set[str] = set()
     valid_controls: set[str] = set()
 
-    attack = _latest(db, AttackAssessment, client_id)
+    attack = _latest(db, AttackAssessment, client_id, active_only=True)
     if attack is not None:
         rows = (
             db.execute(select(AttackCoverage).where(AttackCoverage.assessment_id == attack.id))
@@ -140,7 +144,7 @@ def _gather_findings(db: Session, client_id: uuid.UUID) -> tuple[list[dict], set
                     }
                 )
 
-    csf = _latest(db, CsfAssessment, client_id)
+    csf = _latest(db, CsfAssessment, client_id, active_only=True)
     if csf is not None:
         for r in (
             db.execute(select(CsfAnswer).where(CsfAnswer.assessment_id == csf.id)).scalars().all()
@@ -156,7 +160,7 @@ def _gather_findings(db: Session, client_id: uuid.UUID) -> tuple[list[dict], set
                     }
                 )
 
-    zt = _latest(db, ZtAssessment, client_id)
+    zt = _latest(db, ZtAssessment, client_id, active_only=True)
     if zt is not None:
         for r in (
             db.execute(select(ZtAnswer).where(ZtAnswer.assessment_id == zt.id)).scalars().all()

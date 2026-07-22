@@ -185,3 +185,60 @@ def test_fixture_mode_unaffected_by_llm_preflight() -> None:
 @pytest.mark.unit
 def test_default_model_is_not_the_stale_placeholder() -> None:
     assert Settings().shield_llm_model not in config._KNOWN_PLACEHOLDER_MODELS
+
+
+# --- OIDC exchange boot preflight (D-032) --------------------------------------
+
+
+@pytest.mark.unit
+def test_oidc_disabled_by_default_and_boots() -> None:
+    s = Settings()
+    assert s.shield_auth_oidc_enabled is False
+    # Flag off: the OIDC readiness gate is not consulted at all, so obviously
+    # blank Keycloak settings still boot fine.
+    s = Settings(shield_auth_oidc_enabled=False, keycloak_jwks_url="", keycloak_issuer="")
+    s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_empty_jwks_url_raises_at_boot() -> None:
+    s = Settings(shield_auth_oidc_enabled=True, keycloak_jwks_url="")
+    with pytest.raises(RuntimeError, match="KEYCLOAK_JWKS_URL"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_empty_issuer_raises_at_boot() -> None:
+    s = Settings(shield_auth_oidc_enabled=True, keycloak_issuer="")
+    with pytest.raises(RuntimeError, match="KEYCLOAK_ISSUER"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_non_http_issuer_raises_at_boot() -> None:
+    s = Settings(shield_auth_oidc_enabled=True, keycloak_issuer="keycloak/realms/shield")
+    with pytest.raises(RuntimeError, match="http"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_empty_audience_raises_at_boot() -> None:
+    s = Settings(shield_auth_oidc_enabled=True, keycloak_audience="")
+    with pytest.raises(RuntimeError, match="KEYCLOAK_AUDIENCE"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_empty_client_id_raises_at_boot() -> None:
+    s = Settings(shield_auth_oidc_enabled=True, keycloak_client_id="")
+    with pytest.raises(RuntimeError, match="KEYCLOAK_CLIENT_ID"):
+        s.assert_safe_for_runtime()
+
+
+@pytest.mark.unit
+def test_oidc_enabled_with_full_config_boots() -> None:
+    s = Settings(shield_auth_oidc_enabled=True)
+    s.assert_safe_for_runtime()  # defaults are all non-empty http(s) values
+    ready, detail = s.oidc_readiness()
+    assert ready is True
+    assert "shield" in detail

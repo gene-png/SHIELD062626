@@ -45,6 +45,9 @@ class CapabilityListStatus(enum.StrEnum):
     DRAFT = "draft"
     APPROVED = "approved"
     RELEASED = "released"
+    # Admin soft-delete of an unapproved draft (Sprint 9, D-031). Stored in the
+    # existing native_enum=False String(16) column - no migration (see 0009).
+    DISCARDED = "discarded"
 
 
 class CapabilityDisposition(enum.StrEnum):

@@ -1,12 +1,11 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-21 (Sprint 8 "prove it in the browser" MERGED as PR
-#42, `v3.4.1`; Sprint 9 "activate the seam" planned — see `SPRINT_9.md` and
-the staged `.claude/sprint-queue.sprint-9.json`, not yet launched). This file
-describes the project as of the branch it sits on and is
-updated ONLY as part of a PR. Durable facts and environment gotchas live in
-`CLAUDE.md`; personal in-flight status lives in `context/<name>.md`; per-sprint
-detail lives in `SPRINT_<n>.md`._
+_Last updated: 2026-07-22 (Sprint 9 "activate the seam" complete on
+`feat/sso-discard-demo-sprint-9`, targeting `v3.5.0`, PR not yet opened; Sprint 8
+"prove it in the browser" merged as PR #42, `v3.4.1`). This file describes the
+project as of the branch it sits on and is updated ONLY as part of a PR. Durable
+facts and environment gotchas live in `CLAUDE.md`; personal in-flight status
+lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
 
 ## Current state
 
@@ -101,6 +100,50 @@ CSF/attack/zt idempotency pattern, and MFA (D-027), email verify/reset (D-028),
 and the release notification (D-030) all shipped earlier and were only proven in
 the browser here.
 
+- **Sprint 9 "activate the seam" COMPLETE on its branch** (`feat/sso-discard-demo-sprint-9`,
+  targeting `v3.5.0`): eleven tasks (T0 through T10) across three themes. The
+  long-dormant Keycloak seam is now a working hybrid OIDC sign-in beside the
+  credentials form, flag-gated behind `SHIELD_AUTH_OIDC_ENABLED` and default off
+  (D-032, migration 0032 `users.keycloak_sub`). The browser round trip ends at
+  `POST /auth/oidc/exchange`, which verifies the Keycloak access token against the
+  realm JWKS (RS256-only, `iss`/`aud`/`azp` pinned) and mints a native SHIELD HS256
+  pair only for an already-active local account. A Keycloak token is never accepted
+  as an API bearer; the backend keeps minting its own JWTs (D-020 stays
+  authoritative); there is no JIT provisioning. With the flag off the provider does
+  not exist and zero Keycloak network calls happen. Every service also gained a
+  first-class draft-discard affordance (D-031): a draft-only admin `POST .../discard`,
+  the app's first destructive-confirm dialog, the version trap closed, and the
+  hidden latest-consumers (risk synthesis, engagement cards) skipping discarded
+  rows. The demo compose and the export eyeball debt are now under committed
+  automation (D-033): the five SMOKE §10 export checks are unit assertions over real
+  PDF/DOCX/XLSX bytes, and `demo-reset --demo` plus `e2e/demo/demo-journey.spec.ts`
+  and a new CI `demo` job prove the hosted-demo bring-up. Minor bump for the two new
+  flag-gated user-facing surfaces; tag/CHANGELOG level only, package manifests
+  untouched. Plan was reviewed read-only by OpenAI Codex pre-merge (verdict
+  "rework" on 12 findings, 2 blockers, all folded into the tasks).
+
+### Sprint 9 task → commit
+
+| Task | What shipped | Commit |
+| --- | --- | --- |
+| T0 | Backend draft discard ×4 + `DISCARDED` status; version trap closed (`_latest_*` skip discarded, mint reads unfiltered `max(version)`); risk synthesis + intake cards skip discarded; conditional-UPDATE concurrency contract; D-031 | `638710c` |
+| T1 | Web discard UI: 4 proxies, client fns, shared `DiscardDraftButton` + design-system Modal (first destructive-confirm dialog), `reqSeq` bump before post-discard refetch | `578a98a` |
+| T2 | Export-content unit assertions over real bytes (pypdf test dep; PDF/DOCX/XLSX readers); SMOKE §10 re-pointed + one manual aesthetics line; §19 closed | `af4dcf3` |
+| T3 | e2e: the three approve-first preambles (s4/s5/s11) now discard via proxy, post-preamble assertions byte-identical; s4 drives the UI discard once; SMOKE §31 | `56bcfce` |
+| T4 | Backend OIDC: flag + `oidc_readiness()`, JWKS verifier (RS256-only, cache/TTL/lock), `POST /auth/oidc/exchange` typed-failure matrix, TOFU sub binding, migration 0032; D-032 | `60d2abb` |
+| T5 | Infra: dual-horizon Keycloak (`KC_HOSTNAME` + backchannel-dynamic, one canonical iss), realm drift fixes, env plumbing, real flag-gated `/ready` probe | `4c9ab64` |
+| T6 | Web OIDC: conditional secret-less PKCE provider, jwt-callback exchange branch, sign-in button, `SessionExpiryGuard` failure path; flag off is a behavioral no-op | `ca0093b` |
+| T7 | Opt-in `s26-oidc-login.spec.ts` (positive + negative through the real Keycloak form, self-skips unless `E2E_OIDC=1`); SMOKE §32 | `1e3e64e` |
+| T8 | Demo-reset `--demo`/`-Demo` mode (sh/ps1 parity) + fail-loud web-wait; opt-in `e2e/demo/demo-journey.spec.ts`; SMOKE §26; D-033 | `8b5e68a` |
+| T9 | CI `demo` job on its own isolated runner (compose-version floor, `demo-reset --demo`, `SHIELD_DEMO_SMOKE=1` playwright, always-run diagnostics + artifact upload); SMOKE §27 | `00d970e` |
+| T10 | Wrap-up: SMOKE final pass (§10/§19/§26/§27/§31/§32), CHANGELOG `[3.5.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh, full gates + full e2e | `ee8bf23` |
+
+One migration this sprint: **0032** (`users.keycloak_sub` String(64) nullable
+unique, additive/SQLite-safe, C0). New DECISIONS: **D-031** (draft discard as an
+admin-only soft-delete state transition), **D-032** (hybrid Keycloak SSO as a
+flag-gated exchange, never a bearer), **D-033** (destructive-by-design automation
+is opt-in-gated).
+
 ## Machine-local facts (this box)
 
 - **Web runs on port 3001**, not 3000: root `.env` `WEB_PORT=3001` /
@@ -132,9 +175,20 @@ the browser here.
 - **Framework/module reinstall dance:** after editing any `apps/web` source,
   `docker compose up -d --force-recreate web` before any e2e (next-dev hot-reload
   does not fire through the Windows bind mount). After `apps/web/package.json`
-  changes (T5 Auth.js v5), reinstall INSIDE the web container. A NEW python module
-  under `app/` needs `docker compose restart api`; NEVER restart api while an
+  changes (Sprint 7 Auth.js v5), reinstall INSIDE the web container. A NEW python
+  module under `app/` needs `docker compose restart api`; NEVER restart api while an
   in-container pytest is running (SIGKILL 137).
+- **Hybrid OIDC flag is default OFF and must never be committed on** (Sprint 9,
+  D-032). `SHIELD_AUTH_OIDC_ENABLED=true` in the repo-root `.env` plus
+  `docker compose up -d --force-recreate api web` (web reads it at provider
+  registration, api at boot readiness) turns it on; a realm-export change since the
+  last import also needs a keycloak volume wipe
+  (`docker compose stop keycloak && docker volume rm shield-v2_keycloak-data && docker compose up -d keycloak`).
+  The `s26-oidc-login` opt-in spec runs with `E2E_OIDC=1`; always restore the flag
+  off and re-prove one credentials sign-in afterward. The realm now pins one
+  canonical issuer (`http://localhost:8080/realms/shield`) for browser and
+  containers via `KC_HOSTNAME` + backchannel-dynamic; the api fetches JWKS on the
+  `keycloak:8080` horizon.
 
 ## Deferred / needs a human
 
@@ -146,62 +200,134 @@ the browser here.
   `s22-release-notify.spec.ts` now reads the notification out of MailHog for a real
   registered client of an isolated tenant, matching on recipient, subject, and the
   `/documents` link, on top of the four `test_release_notification.py` unit tests.
-- **SMOKE_TEST §10 (eyeball exports):** human review of the generated artifacts in
-  `e2e/artifacts/` (each asserted HTTP 200 by s7/s8).
+- **SMOKE_TEST §10 (export content) closed in Sprint 9 T2:** the five eyeball
+  boxes are now unit assertions over real bytes (PDF via `pypdf.PdfReader`, DOCX via
+  `docx.Document`, XLSX via openpyxl). One explicitly-manual line remains, deferred
+  by design: visual aesthetics only (cell shading, heatmap colors, spacing,
+  page-breaks), which no test can assert.
+- **CI `demo` job green-run pending the first PR (Sprint 9 T9):** the `demo` job
+  in `.github/workflows/ci.yml` is green locally (T8's destructive proving run) and
+  YAML-validated, but this repo's CI triggers only on push/PR to `main`, so its
+  first green CI run is cited when the dev opens the sprint PR. SMOKE §27's CI-job
+  box stays annotated "pending first PR run". Same posture as the `e2e` job.
+- **`sharp <0.35.0` HIGH advisory (needs Dependabot / a human):** a new root
+  advisory (libvips CVEs), transitive via next@15's image optimizer, NOT introduced
+  by this branch and not exploitable in our use (no untrusted image processing). Not
+  fixable without a lockfile bump, which Sprint 9 deliberately did not touch.
+  Recommend a Dependabot bump or a root pnpm override on `main`.
 - **MFA / email web UI eyeball, done in Sprint 8 (T3 through T5):** the sign-in
   MFA step, the enrollment section, and the verify/forgot/reset pages are now
   browser-driven (`s24-mfa.spec.ts`, `s23-auth-pages.spec.ts`); the manual MFA
-  walkthrough is retired. Driving the UI for real surfaced the `f10b803` MFA
-  sign-in bug (the TOTP field never appeared in the browser).
-- **Hosted-demo + demo-reset (manual):** `docker-compose.demo.yml` and
-  `scripts/demo-reset.*` verified by hand; no automated spec drives them.
+  walkthrough is retired.
+- **Hosted-demo + demo-reset, automated in Sprint 9 (T8/T9):**
+  `demo-reset --demo`/`-Demo` plus the opt-in `e2e/demo/demo-journey.spec.ts` and
+  the CI `demo` job now drive the hosted-demo bring-up; the manual-only note is
+  retired (the destructive proving run is opt-in-gated per D-033).
 - **ESLint 10** — deferred upstream (D-018 dated deferral): no published Next lint
   stack runs on it today.
 - **One documented moderate audit finding** left deliberately open: `postcss`
-  8.4.31 (pinned in `next@15`; XSS-stringify path N/A at build). The `uuid@8.3.2`
-  moderate is GONE as of Sprint 7 T5 (Auth.js v5; `uuid` no longer in the
-  lockfile). The npm audit HTTP endpoint currently 410s upstream; posture verified
+  8.4.31 (pinned in `next@15`; XSS-stringify path N/A at build). Clears on the next
+  upstream Next bump. The npm audit HTTP endpoint 410s upstream; posture verified
   from the lockfile dependency graph.
-- **Needs David (cloud infra):** `infra/terraform` (cloud/account/region/network)
-  and DR runbooks are stubs; FedRAMP-authorized LLM connector; the Auth.js v5
-  Credentials→OIDC / Keycloak SSO cutover (the seam exists but stays dormant);
-  `azure_openai`/`bedrock`/`local` LLM adapters stay loud not-implemented until a
-  deployment needs one. Dave's 2026-07-13 call: local containers for now.
+- **Needs David (cloud infra + full federation):** `infra/terraform`
+  (cloud/account/region/network) and DR runbooks are stubs; FedRAMP-authorized LLM
+  connector; `azure_openai`/`bedrock`/`local` LLM adapters stay loud
+  not-implemented. The Keycloak SSO deferral is LIFTED at hybrid depth (Sprint 9
+  D-032): OIDC sign-in works flag-gated. Full token federation (the backend
+  accepting Keycloak tokens as API bearers), JIT user provisioning, migrating
+  register/MFA/email flows into Keycloak, an un-discard/recovery endpoint (DISCARDED
+  is terminal in v1; rows stay DB-recoverable), and stamping local
+  `email_verified_at` from a Keycloak claim all stay out of scope. Dave's 2026-07-13
+  call: local containers for now.
 
 ## Test coverage status
 
-- Backend: full `pytest -m unit` green in-container. Sprint 8 T1 re-contracted
-  `test_extract_versions_subsequent_lists` to prove versioning across the
-  APPROVED/RELEASED boundary and added the tech-debt extract draft-reuse contracts
-  (idempotent-200 with the same id/version/items, exactly one LLM call, exactly one
-  `capability_list.extracted` audit row, and a different-artifact POST still
-  returning the open draft). Sprint 7 added: the Vertex
-  adapter contract + shared generateContent helpers + bearer-token-never-logged
-  lock + the `finishReason`/`thinkingBudget`/output-cap fixes
-  (`test_llm_providers.py`); the vertex live-readiness boot preflight
-  (`test_config.py`); and release-notification recipient selection / body /
-  delivery-off / SMTP-failure-doesn't-roll-back (`test_release_notification.py`).
-  Live-AI parity has committed opt-in specs (`tests/live/test_live_ai.py`,
-  `@pytest.mark.live`) excluded from `-m unit` and CI — GCP-validated 2026-07-15.
-- Web unit tests: `pnpm -F web test` (vitest) 13/13. Sprint 8 T4 added a
-  `SignInForm` guard asserting an empty-code submit omits the `totp` key (the
-  regression guard for the `f10b803` MFA fix), beside the Sprint-7
-  `SignInForm.test.tsx` (Auth.js v5 code-based MFA signal), the reqSeq guard tests,
-  and `HealthMatrix.test.tsx`.
+- Backend: full `pytest -m unit` green in-container. Sprint 9 added
+  `test_discard_draft.py` (the four-service discard contract: draft-only 200 +
+  single audit row, idempotent re-discard, 409 on SUBMITTED/APPROVED/RELEASED, 403
+  client, 404 cross-tenant, the version-trap regression, the hidden latest-consumers
+  in `risk.py`/`intake.py`, and the discard-then-stale-write concurrency contracts —
+  the end-of-sprint audit pass rounded the file out to full four-service symmetry:
+  tech-debt child-mutation-after-discard 409, plus csf/zt idempotent re-discard);
+  `test_oidc_exchange.py` (an in-test RSA keypair signs Keycloak-shaped tokens, a
+  monkeypatched `_fetch_jwks` returns the matching JWKS, and the full rejection
+  matrix plus TOFU sub-binding is exercised); the export-content tests (T2, real
+  PDF/DOCX/XLSX bytes); and the readiness-probe cases (T5, flag-off dormant /
+  flag-on ok/down, `ready` never gated by keycloak). Sprint 7's Vertex adapter and
+  release-notification suites and the opt-in `tests/live/test_live_ai.py`
+  (`@pytest.mark.live`, excluded from `-m unit`, GCP-validated 2026-07-15) are
+  unchanged.
+- Web unit tests: `pnpm -F web test` (vitest) 37/37 across 10 files. Sprint 9 T1
+  added `DiscardDraftButton.test.tsx` (renders only for a draft, opens the Modal,
+  confirm invokes the callback, cancel/ESC/backdrop are no-ops) and `CsfWorkspace`
+  discard tests (the answered-count warning line, plus the end-of-sprint audit pass's
+  onDiscard main-path test: confirm → `discardAssessment` → guarded refetch clears the
+  workspace to the empty state); T6 added `oidc.test.ts` (isOidcEnabled truth table + rewrite/passthrough),
+  `KeycloakSignInButton.test.tsx`, and `SessionExpiryGuard.test.tsx` (signs out on
+  `OIDC_EXCHANGE_ERROR`). The Sprint-8 `SignInForm` omit-totp guard and the reqSeq
+  guards remain.
 - Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4 / Auth.js v5. ESLint
-  0 errors (1 pre-existing postcss warning).
-- e2e: 25 spec files (host, resolves `:3001`). Sprint 8 added
-  `s22-release-notify`, `s23-auth-pages`, `s24-mfa`, and `s25-admin-health`, and
-  gave `s17-documents` a `/documents` empty-state test; each new spec passes
-  standalone. `s21-email-verify.spec.ts` RUNS (not skips) since Sprint 7 T3 turned
-  MailHog delivery on by default. Known cold-compile flake under load documented
-  in `CLAUDE.md`; the authoritative full-suite run is the quiet-box shutdown
-  checkpoint.
+  0 errors (1 pre-existing postcss warning). In-container `pnpm -F web build` was
+  proven green in T6 (the standalone prod image the demo compose runs).
+- e2e: 27 spec files (host, resolves `:3001`). Sprint 9 added `s26-oidc-login`
+  (opt-in, self-skips unless `E2E_OIDC=1`) and `demo/demo-journey` (opt-in,
+  self-skips unless `SHIELD_DEMO_SMOKE=1`), so the default suite count is unchanged.
+  The T10 exit run was green on the flag-off dev stack: 51 passed / 6 skipped (2
+  s26 + 4 demo-journey), zero failures/flakes, across six foreground sub-9-min
+  shards. Known cold-compile flake under load documented in `CLAUDE.md`; per-spec
+  standalone is the flake arbiter.
 - Format: repo-wide prettier `--check` clean at 3.9.5. Python ruff/black clean
   (root-config parity).
-- Audit: bandit CI-only, exit 0. Root `pnpm audit` posture: 0 high; the
-  `uuid@8.3.2` moderate cleared this sprint (T5), one documented `postcss`
-  moderate remains. No secret / ADC file / token committed this sprint.
+- Audit: bandit CI-only, exit 0. Root `pnpm audit` posture: one new documented
+  `sharp <0.35.0` HIGH (libvips CVEs, transitive via next@15's image optimizer, not
+  branch-introduced, not exploitable in our use) plus the standing `postcss`
+  moderate; both blocked on a lockfile bump this sprint did not touch (Dependabot /
+  root override on `main`). The `uuid@8.3.2` moderate cleared in Sprint 7 T5. No
+  secret / token committed this sprint (the secret-less PKCE client meant the T6
+  dev-realm fallback secret was never needed).
+
+## Lessons learned (Sprint 9)
+
+- **Activating a state means auditing every reader, not just the writer.** Adding
+  `DISCARDED` was the easy part. Codex's two blockers were both hidden consumers:
+  the risk-register synthesis has its own `_latest()` that would have read a
+  discarded highest-version assessment straight into the gate, and the intake
+  engagement cards reported the raw latest version. A dormant status is only as safe
+  as the query that forgot about it. The rule that fell out: when a new row state
+  goes live, grep for every "latest" and every parent-state guard across the whole
+  codebase, not just the four route files that mint the state.
+- **The version trap is a real IntegrityError, not a hypothetical.** The
+  `_latest_*` helpers must skip `DISCARDED` (so a discarded draft is invisible to
+  consumers) while the mint's next-version computation must read `max(version)`
+  unfiltered (so it does not reuse the discarded version's number and collide on the
+  `(service_id, version)` unique constraint). Getting the second half wrong throws
+  on the first re-extract after discarding a non-v1 draft. The regression test runs
+  on an alembic-upgraded SQLite fixture precisely so the unique constraint is real,
+  not mocked away.
+- **A mocked unit test cannot prove a flag-off no-op or a beta integration.** T6's
+  hardest promise was that flag-off changes nothing, and the only honest proof is a
+  vitest trap that fails on an unexpected Keycloak fetch. The throwaway auth-code
+  spike then caught a bug no unit mock could: a rejected exchange left the token
+  without an access token, so the next `jwt` call fell into `refreshAccessToken()`
+  and clobbered `OIDC_EXCHANGE_ERROR` into `RefreshAccessTokenError`, and the guard
+  never fired. Making the error terminal in the callback fixed it. Beta-sensitive
+  seams need a real round trip before the full wiring, so the verdict lands early.
+- **Fail loudly at the wait, not at the far-downstream death.** The demo-reset web
+  poll printed its success banner even on a 120s timeout, so a stalled production
+  build looked like a clean reset until Playwright died opaquely much later. Moving
+  the failure to the wait (non-zero exit plus a `docker compose logs web` dump)
+  turns a confusing downstream symptom into an obvious local cause.
+- **Changing a shared default in one task silently breaks another task's hardcoded
+  fixture, and the final full-suite gate is where it surfaces.** T5 flipped the
+  canonical Keycloak issuer to `http://localhost:8080/realms/shield`; T4's
+  `test_oidc_exchange.py` had baked in the pre-T5 `keycloak:8080` issuer and leaned
+  on the config default, so every happy-path case started failing with an issuer
+  mismatch the catch-all message masked. The running system stayed correct
+  throughout (T7's live `s26` exchange proved it end to end); only the unit fixture
+  lagged. Fixing it was correcting a stale constant, not weakening a check. The
+  lesson: when a task changes a default other tests read implicitly, re-run the full
+  `-m unit` suite, not just the touched file, and the wrap-up exit run is the
+  backstop that catches what per-task gates missed.
 
 ## Lessons learned (Sprint 8)
 

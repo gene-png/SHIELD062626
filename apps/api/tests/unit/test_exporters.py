@@ -189,6 +189,25 @@ def test_pdf_render_produces_valid_pdf(context_with_items) -> None:
     assert len(raw) > 1500
 
 
+def _pdf_text(raw: bytes) -> str:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    return "".join(page.extract_text() for page in reader.pages)
+
+
+@pytest.mark.unit
+def test_pdf_render_carries_title_client_and_a_known_row(context_with_items) -> None:
+    # Upgrades the %PDF- magic smoke to a real content assertion (SMOKE §10):
+    # the service title, the client name, and one known capability row survive
+    # into the rendered PDF. Distinctive substrings only — reportlab text
+    # extraction is whitespace-mangled, so we never assert exact layout.
+    text = _pdf_text(render_pdf(context_with_items))
+    assert "Technical Debt Review" in text  # service title
+    assert "Atlas Defense Solutions" in text  # client name
+    assert "Wiz" in text  # a known capability row
+
+
 @pytest.mark.unit
 def test_context_estimated_savings_sums_cut_items(context_with_items) -> None:
     # Only the Lacework row is "cut" with cost=120k.

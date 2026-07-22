@@ -189,3 +189,82 @@ jobs:
             e2e/test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Hosted-demo bring-up job (Sprint 9 T9). Runs the one-command reset in its
+  # own isolated runner so its `docker compose down -v` cannot touch the e2e
+  # job's stack, builds the PRODUCTION web image (shield-web:demo) via the
+  # docker-compose.demo.yml overlay, seeds the Atlas story inside the script,
+  # and drives the opt-in demo-journey spec against the just-reset prod stack.
+  # No .env is needed — the compose defaults (web on :3000, WEB_PORT unset) are
+  # what baseUrl.ts resolves to, so the reset script and Playwright agree.
+  demo:
+    name: Demo (hosted-demo reset + journey spec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # The demo overlay's `volumes: !reset []` needs Compose >= 2.24 (the tag
+      # is a silent no-op below it, leaking the base dev bind-mounts into the
+      # prod image and breaking the standalone bundle). Log the version and FAIL
+      # LOUDLY below the floor rather than debug a mis-tagged mount later.
+      - name: Docker Compose version (require >= 2.24 for !reset)
+        run: |
+          docker compose version
+          ver="$(docker compose version --short | sed 's/^v//')"
+          major="$(echo "$ver" | cut -d. -f1)"
+          minor="$(echo "$ver" | cut -d. -f2)"
+          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 24 ]; }; then
+            echo "::error::docker compose $ver is below the 2.24 floor required for the '!reset' tag in docker-compose.demo.yml"
+            exit 1
+          fi
+          echo "docker compose $ver satisfies the >= 2.24 floor"
+
+      # One-command reset: down -v -> up -d --build (shield-web:demo) -> /ready
+      # full-matrix poll -> seed_demo.py -> fail-loud web wait. The script owns
+      # the whole bring-up; a failed prod build or a stalled web boot exits
+      # non-zero here (Sprint 9 T8 fixed the silent web wait).
+      - name: Demo reset (--demo overlay)
+        run: bash scripts/demo-reset.sh --demo
+
+      - name: Install e2e deps
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # SHIELD_DEMO_SMOKE=1 opts the demo-journey spec in (it self-skips
+      # otherwise, so it can never run against a stack it didn't just reset).
+      - name: Run demo-journey spec
+        working-directory: e2e
+        env:
+          SHIELD_DEMO_SMOKE: "1"
+        run: npx playwright test demo/
+
+      # Always-run diagnostics mirroring the e2e job's fail-loud pattern: on a
+      # red run the compose state + logs are the first thing you want, and a
+      # green run's output is cheap to skip past.
+      - name: Diagnostics (compose ps + logs)
+        if: always()
+        run: |
+          echo "==== docker compose ps ===="
+          docker compose -f docker-compose.yml -f docker-compose.demo.yml ps
+          echo "==== docker compose logs (tail) ===="
+          docker compose -f docker-compose.yml -f docker-compose.demo.yml logs --no-color --tail=200
+
+      - name: Upload Playwright report and traces
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

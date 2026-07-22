@@ -35,11 +35,6 @@
         "composite": false
       },
       {
-        "name": "reviewer",
-        "description": "Read-only auditor walking the deliverable chain.",
-        "composite": false
-      },
-      {
         "name": "client",
         "description": "Client user (engagement-side).",
         "composite": false
@@ -60,9 +55,11 @@
       "baseUrl": "/",
       "redirectUris": [
         "http://localhost:3000/api/auth/callback/keycloak",
-        "http://localhost:3000/*"
+        "http://localhost:3000/*",
+        "http://localhost:3001/api/auth/callback/keycloak",
+        "http://localhost:3001/*"
       ],
-      "webOrigins": ["http://localhost:3000"],
+      "webOrigins": ["http://localhost:3000", "http://localhost:3001"],
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
@@ -121,6 +118,38 @@
           "type": "password",
           "value": "DevAdminPass2026!",
           "temporary": true
+        }
+      ]
+    },
+    {
+      "username": "admin@kentro.example",
+      "email": "admin@kentro.example",
+      "firstName": "Kentro",
+      "lastName": "Consultant",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["admin"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "DemoPass!2026",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "nolocal@atlas.example",
+      "email": "nolocal@atlas.example",
+      "firstName": "No",
+      "lastName": "LocalAccount",
+      "emailVerified": true,
+      "enabled": true,
+      "realmRoles": ["client"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "DemoPass!2026",
+          "temporary": false
         }
       ]
     }

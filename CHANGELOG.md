@@ -7,6 +7,165 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.5.0] · Sprint 9 · Activate the seam (hybrid SSO + discard affordance + demo automation) · 2026-07-22
+
+Branch `feat/sso-discard-demo-sprint-9`. Eleven tasks (T0 through T10) across
+three themes: a hybrid Keycloak OIDC sign-in that sits beside the credentials
+form (flag-gated, default off), a first-class draft-discard affordance in all
+four services, and committed automation for the demo compose and the export
+eyeball debt. It is a minor release: two new flag-gated user-facing surfaces
+(OIDC sign-in and the discard button) with the whole existing auth and workflow
+surface untouched when the flag is off. Version is tag and CHANGELOG level only;
+package manifests are untouched. The plan was reviewed read-only by OpenAI Codex
+before merge (verdict "rework" on 12 findings, 2 blockers; all folded into the
+tasks, table in the planning PR body).
+
+The three themes:
+
+**Hybrid Keycloak OIDC, exchange-at-the-edge (D-032).** Keycloak authenticates
+the user; the backend keeps minting its own HS256 JWTs (D-020 stays
+authoritative). A Keycloak token is never accepted as an API bearer. The browser
+round trip ends at a new `POST /auth/oidc/exchange`, which verifies the access
+token against the realm JWKS and mints a native SHIELD pair only for an
+already-active local account. There is no JIT provisioning.
+
+**Draft discard across all four services (D-031).** A consultant can throw away
+an in-progress DRAFT instead of approving a throwaway version to get it out of
+the way. The three e2e specs that used to approve-away an open draft now discard
+it, so version history stays honest.
+
+**Demo and export automation (D-033).** The hosted-demo compose and reset script
+are now driven by a committed self-skipping spec and a CI job on every PR, and
+the five SMOKE §10 export eyeballs are replaced by unit assertions over real
+PDF/DOCX/XLSX bytes.
+
+- **Backend draft discard ×4 + `DISCARDED` status (T0, `638710c`):** a draft-only
+  `POST .../discard` per service (tech-debt/csf/attack/zt), admin-only, mirroring
+  each `approve` sibling. `DISCARDED` added to the four status enums (plain
+  `String(16)`, no CHECK constraint, so no migration). DRAFT returns 200 with one
+  audit row (`capability_list.discarded` / `{csf,attack,zt}.assessment.discarded`);
+  re-discard is idempotent with no second row; SUBMITTED (csf/zt), APPROVED, and
+  RELEASED refuse with a typed 409 `{reason: "not_discardable"}`; client role 403;
+  unknown or cross-tenant id 404. The version trap is closed: every `_latest_*`
+  helper now skips `DISCARDED` while the mint reads `max(version)` unfiltered, so
+  discarding a non-v1 draft and re-extracting cuts a fresh version with no
+  `IntegrityError`. The hidden latest-consumers outside the route files (the
+  risk-register synthesis `_latest()` and the intake engagement cards) skip
+  discarded rows too, and the discard write is a conditional
+  `UPDATE ... WHERE status = 'draft'` so a racing client PATCH or AI run into a
+  discarded parent loses loudly. See DECISIONS **D-031**.
+- **Web discard UI + shared confirm dialog (T1, `578a98a`):** four proxy routes,
+  `discard*()` client functions, `"discarded"` in the status unions, and the app's
+  first destructive-confirm dialog, the shared `DiscardDraftButton` over the
+  design-system `Modal`, wired into all four workspaces beside Approve/Start. It
+  renders only for a DRAFT and states what will be destroyed (tech-debt N items,
+  attack N scored techniques, csf/zt "N answers, including client-entered data").
+  The workspace loader bumps its `reqSeq` before the post-discard refetch so a
+  stale in-flight `latest` cannot resurrect the discarded draft.
+- **Export-content unit assertions + pypdf test dep (T2, `af4dcf3`):** added
+  `pypdf>=5` to the dev dependencies (test-only, never imported in `app/`) and a
+  new `test_playbook_export_content.py` that drives the five playbook renderers
+  over real bytes: PDF read back with `pypdf.PdfReader`, DOCX with
+  `docx.Document`, and the XLSX Action Plan sheet (the SMOKE §19 contract, priority
+  defaulting from `gap_priority()` with a `priority_override` winning). The
+  per-service exporter tests moved from `%PDF-` magic to title + client name + a
+  known row value; the risk register PDF/DOCX gained title + a known entry. SMOKE
+  §10 is re-pointed to the proving test filenames with one explicitly-manual
+  aesthetics line kept, and §19 is closed.
+- **e2e: retire the approve-first dance + §31 UI proof (T3, `56bcfce`):** the three
+  approve-any-open-draft preambles (`s4-techdebt`, `s5-attack`, `s11-staleness`)
+  now discard the draft through the proxy, with every post-preamble assertion
+  (`changed>0`, "AI 60%", the stale nudge) byte-identical. `s4` additionally drives
+  the UI affordance once: draft open, cancel is a no-op, confirm throws the draft
+  away and a re-upload mints a brand-new draft. New SMOKE §31.
+- **Backend OIDC exchange + JWKS verifier (T4, `60d2abb`):** `SHIELD_AUTH_OIDC_ENABLED`
+  (default False) with an `oidc_readiness()` boot preflight that mirrors
+  `live_llm_readiness()` (config-shape only, no network at boot). `app/security/oidc.py`
+  is a module-level JWKS cache (300s TTL, `threading.Lock`, 5s httpx GET, exactly one
+  forced refetch on an unknown `kid`, raw fetch isolated for monkeypatching, no new
+  dependency). `POST /auth/oidc/exchange` verifies RS256-only (alg-confusion guard)
+  with `iss`, `aud`, and `azp` all pinned, then walks a typed dict-detail failure
+  matrix (`oidc_disabled` / `oidc_token_invalid` / `oidc_jwks_unavailable` /
+  `oidc_claims_missing` / `oidc_email_unverified` / `oidc_no_local_account` /
+  `oidc_user_inactive` / `oidc_sub_mismatch`). TOFU binds `users.keycloak_sub` on
+  first exchange. Success reuses the credentials path's `_issue_pair` +
+  `_register_successful_login`, and the local DB role stays authoritative (a token
+  claiming `roles:["admin"]` for a client-role user mints CLIENT tokens). Migration
+  **0032** adds `users.keycloak_sub` (String(64), nullable, unique, `batch_alter_table`,
+  additive). See DECISIONS **D-032**.
+- **Dual-horizon Keycloak + real `/ready` probe (T5, `4c9ab64`):** the split-horizon
+  issuer fix pins one canonical `iss` (`http://localhost:8080/realms/shield`) for
+  browser and containers alike via `KC_HOSTNAME` + `KC_HOSTNAME_BACKCHANNEL_DYNAMIC`,
+  with backchannel token/JWKS endpoints staying reachable at `keycloak:8080`. The
+  `KEYCLOAK_ISSUER` default flipped in compose, the demo overlay, `.env.example`, and
+  `config.py`; api gained `KEYCLOAK_JWKS_URL`, web gained `KEYCLOAK_INTERNAL_ISSUER`.
+  The `/ready` keycloak probe is now real when the flag is on (httpx JWKS GET, ok/down)
+  and dormant when off, and never gates readiness in either state. The realm export
+  dropped the stale `reviewer` role (D-023 drift), added verified `admin@kentro.example`
+  and `nolocal@atlas.example`, and added the `:3001` redirect URIs.
+- **Web hybrid OIDC seam, flag-gated default OFF (T6, `ca0093b`):** new
+  `lib/auth/oidc.ts` (`isOidcEnabled`, `rewriteKeycloakUrl`, `keycloakFetch` for
+  container-side discovery), a conditional secret-less PKCE Keycloak provider in
+  `options.ts`, and a `jwt` callback branch that calls `/auth/oidc/exchange` and
+  seeds the token identically to the credentials path, with `OIDC_EXCHANGE_ERROR`
+  terminal so `SessionExpiryGuard` signs out to `/sign-in?reason=oidc_exchange_failed`.
+  The sign-in page conditionally renders `KeycloakSignInButton` plus the loud banner.
+  With the flag off the provider does not exist and zero Keycloak network calls
+  happen. The secret-less client works on next-auth `5.0.0-beta.31`, so the
+  pre-approved confidential-client fallback was not needed and no secret was
+  committed. A throwaway auth-code spike proved the round trip first and caught a
+  real bug the unit mock could not: a rejected exchange left the token without an
+  access token, so the next `jwt` call fell into `refreshAccessToken()` and clobbered
+  the error; the fix makes `OIDC_EXCHANGE_ERROR` return before the refresh path.
+- **Opt-in OIDC login e2e + SMOKE §32 (T7, `1e3e64e`):** `s26-oidc-login.spec.ts`
+  self-skips unless `E2E_OIDC=1`, so the default suite is unchanged. Positive path:
+  `admin@kentro.example` through the real Keycloak form lands authenticated and the
+  admin management list renders, proving the exchanged SHIELD bearer authenticates a
+  real API call end to end. Negative path: `nolocal@atlas.example` authenticates
+  against Keycloak, the exchange refuses it, and the session signs out to the loud
+  banner. Both paths were run green twice on the flag-on stack, then the flag was
+  restored off and the full suite re-proven. New SMOKE §32 with the flip/restore
+  operator note.
+- **Demo-reset `--demo` mode + opt-in demo-journey spec (T8, `8b5e68a`):**
+  `demo-reset.sh --demo` / `demo-reset.ps1 -Demo` overlay `docker-compose.demo.yml`
+  on every compose call so the reset targets the production `shield-web:demo` image;
+  plain invocation still drives the base compose. The silent web-wait is fixed to
+  fail loudly and dump `docker compose logs web` on timeout. New
+  `e2e/demo/demo-journey.spec.ts` (self-skips unless `SHIELD_DEMO_SMOKE=1`) asserts
+  the post-reset journey: `/ready` full-matrix green, `/sign-in` 200 with the strict
+  CSP (prod-build proof), admin and client sign-in, the client `/home` released-report
+  hero, and a seeded `/documents` download. The destructive proving run passed, then
+  the dev stack was restored. See DECISIONS **D-033**.
+- **CI demo job (T9, `00d970e`):** a new isolated `demo` job in
+  `.github/workflows/ci.yml` logs the compose version and hard-fails below 2.24 (the
+  `!reset` floor), runs `bash scripts/demo-reset.sh --demo`, then
+  `SHIELD_DEMO_SMOKE=1 npx playwright test demo/`, with always-run compose-ps/logs
+  diagnostics and an `if: always()` artifact upload under a unique name; 25-minute
+  timeout, triggers shared with the e2e job (push and PR to `main`). Its first green
+  run is pending the dev opening the sprint PR (CI triggers only on push/PR to
+  `main`), so SMOKE §27's CI-job box stays annotated "pending first PR run".
+- **Wrap-up (T10, this commit):** SMOKE_TEST final pass (§10 re-pointed plus one
+  manual aesthetics line, §19/§26/§27/§31 and the new OIDC §32), each box checked
+  only with its proving spec or test filename; this CHANGELOG `[3.5.0]` entry;
+  BUILD_REPORT synced to HEAD; the `CONTEXT.md` end-of-sprint snapshot; and
+  `context/dave.md` refreshed. The final exit-gate run caught one cross-task
+  regression: T5's dual-horizon flip moved the canonical issuer to
+  `http://localhost:8080/realms/shield`, but T4's `test_oidc_exchange.py` still
+  signed its happy-path tokens with the pre-T5 `http://keycloak:8080/...` issuer
+  and relied on the config default, so all 14 positive cases failed with a
+  masked-issuer mismatch. The running system was correct all along (config pins the
+  canonical issuer, and T7's live `s26` exchange accepted a real Keycloak token end
+  to end); only the unit fixture's issuer constant was stale, so it was corrected to
+  the canonical value, no assertion weakened. The full exit gate set and the full
+  e2e suite are green on the flag-off dev stack.
+
+Migration this sprint: **0032** (`users.keycloak_sub`, T4), additive and
+SQLite-safe (C0). New DECISIONS: **D-031** (draft discard as an admin-only
+soft-delete state transition), **D-032** (hybrid Keycloak SSO as a flag-gated
+token exchange, never a bearer), **D-033** (destructive-by-design automation is
+opt-in-gated). e2e spec files grew from 25 to 27 (`s26-oidc-login` and
+`demo/demo-journey` added, both self-skipping so the default suite is unchanged).
+
 ## [3.4.1] · Sprint 8 · Prove it in the browser (eyeball-debt burn-down) · 2026-07-21
 
 Branch `feat/browser-proof-sprint-8`. Eight tasks (T0 through T7). The sprint

@@ -86,7 +86,10 @@ documents, live AI). Work top-to-bottom in one sitting.
 
 ## 10. Exports & documents — eyeball each file
 
-The part only a human can do — confirm the documents actually _look_ right.
+Deliverable _content_ is now locked by `pytest -m unit` export-content tests
+(cited per box); reportlab PDFs are read back with `pypdf.PdfReader`, Word with
+`docx.Document`, and workbooks with `openpyxl`. Only the visual appearance,
+which no test can assert, stays a human check (the last box).
 
 > **Ready for review:** s7/s8 save 8 generated artifacts to `e2e/artifacts/`
 > (gitignored). As of Sprint 3 T4 every download name follows Master Spec §15.5
@@ -98,11 +101,12 @@ The part only a human can do — confirm the documents actually _look_ right.
 > with the correct content-type; **eyeballed by David 2026-07-09** against the
 > `Atlas_Defense_Solutions_*` v19 (CSF) / v22 (Risk Register) artifact set.
 
-- [x] **CSF executive briefing** PDF: cover, exec summary, scorecard with **colored maturity cells**, top gaps, next steps — spacing / page-breaks look right. (David, 2026-07-09)
-- [x] **CSF full playbook** PDF: contents, methodology, per-function tables, appendix; colors render. (David, 2026-07-09)
-- [x] Both **CSF .docx** files in Word: tables + **shaded level cells** render. (David, 2026-07-09)
-- [x] **CSF .xlsx**: Enterprise sheet + per-tier sheets + About cover. (David, 2026-07-09)
-- [x] **Risk Register** XLSX / PDF / Word: 5×5 matrix + entries + blank governance columns. (David, 2026-07-09)
+- [x] **CSF executive briefing** PDF content: client name, document title, a CSF function name, a known gap row. (test_playbook_export_content.py, `test_exec_pdf_carries_client_title_function_and_gap`)
+- [x] **CSF full playbook** PDF content: client, title, methodology, per-function detail, appendix rows. (test_playbook_export_content.py, `test_full_pdf_carries_client_title_function_and_gap`)
+- [x] Both **CSF .docx** files: title, headings, scorecard table headers, a known maturity cell value. (test_playbook_export_content.py, `test_exec_docx_heading_scorecard_and_maturity_cell`, `test_full_docx_heading_scorecard_and_maturity_cell`)
+- [x] **CSF .xlsx**: Enterprise + per-tier sheets + About cover, plus the Action Plan sheet headers and priority default-vs-override (§19). (test_csf_playbook_export.py + test_playbook_export_content.py)
+- [x] **Risk Register** PDF / Word carry the title, client, and a known entry; XLSX 5x5 matrix + entries + blank governance columns. (test_risk_register.py, `test_pdf_carries_title_client_and_a_known_entry`, `test_docx_carries_title_client_and_a_known_entry`, `test_export_renders_and_stores_three_files`)
+- [ ] **Visual appearance only** (human, optional): maturity/level cell shading, heatmap colors, spacing, and page-breaks. The tests assert values, not layout or color.
 
 ## 11. Auto-versioned docs (C3)
 
@@ -239,7 +243,7 @@ below are e2e-proven.
 ## 19. CSF POA&M / action plan (Sprint 5, step 10 — T5)
 
 - [x] The gap-analysis view renders an **action-plan editor** card per enterprise gap; Characterize (accept/mitigate/transfer/avoid) + owner **auto-save** and survive a `page.reload()`. (s7-csf-playbook.spec.ts — `gap-action-{code}` card, `selectOption("mitigate")` + owner blur each waits on the gap-actions PUT, values survive reload)
-- [ ] The playbook **XLSX** gains an **Action Plan** sheet (characterization / owner / deadline / resources / success criteria / poam_ref; priority defaults from `gap_priority()`, override wins). (`pytest -m unit` export-content test; the s7 5-file export assertion covers download presence, not the sheet's cell content — that stays a §10 human eyeball item)
+- [x] The playbook **XLSX** gains an **Action Plan** sheet (characterization / owner / deadline / resources / success criteria / poam_ref; priority defaults from `gap_priority()`, override wins). (test_playbook_export_content.py, `test_xlsx_action_plan_sheet_has_expected_headers`, `test_xlsx_action_plan_only_lists_gaps`, `test_xlsx_action_plan_priority_defaults_from_gap_priority`, `test_xlsx_action_plan_priority_override_wins`)
 
 ## 20. Redaction preview gate (Sprint 5 — T6)
 
@@ -316,15 +320,17 @@ produces a coherent, downloadable Atlas story (before T2 seeded downloads 410'd)
 
 - [x] The real seeded Atlas client (`client@atlas.example`) opens `/documents` and **downloads a seeded released deliverable → 200** with the §15.5 filename and non-zero bytes (410 before the T2 seed→storage fix). (s17-documents.spec.ts — "seeded Atlas client downloads a SEEDED released deliverable (T2 storage parity)")
 - [x] The seeded Atlas **Risk Register** renders on `/admin/risk-register` with **code-derived tiers** (every entry's tier equals `tierFor(likelihood, impact)` — never hard-coded) and its XLSX/PDF/Word exports download 200 with §15.5 filenames. (s8-risk-register.spec.ts — "seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)")
-- [ ] `scripts/demo-reset.(ps1|sh)`: `down -v` → `up -d --build` → wait `/ready` full-matrix → seed → print URLs+creds; after reset the demo journey renders on `/home` + `/documents` with downloadable reports. (manual runtime check — verified in T8; no automated spec drives the reset script)
+- [x] `scripts/demo-reset.(sh|ps1) --demo`: `down -v` → `up -d --build` (production web image) → wait `/ready` full-matrix → seed → **fail-loud** web-wait (a stalled web build now exits non-zero and dumps `docker compose logs web`, closing the old silent-success gap). The post-reset journey is asserted by a committed spec: `/ready` all-green, `/sign-in` serves 200 with the strict CSP (prod-build proof), admin and client both sign in through the standalone build, the client `/home` shows the released-report hero, and a seeded `/documents` deliverable downloads with non-zero bytes. (`e2e/demo/demo-journey.spec.ts` — 4 tests; self-skips unless `SHIELD_DEMO_SMOKE=1`, run right after `demo-reset.sh --demo`. Sprint 9 T8, D-033. Plain no-flag invocation still targets the base compose.)
 
-## 27. Hosted-demo compose (Sprint 6, T9)
+## 27. Hosted-demo compose + CI demo job (Sprint 6 T9; Sprint 9 T9)
 
 `docker-compose.demo.yml` is a thin override running web as a **production**
 Next standalone build (not `next dev`), fixture-by-default with live only when a
-key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave).
+key is supplied. Cloud/terraform is explicitly NOT touched (needs-Dave). Sprint 9
+T9 adds a CI `demo` job that runs the whole bring-up on every PR to `main`.
 
-- [ ] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (manual runtime check — verified end-to-end in T9; no automated spec drives the prod-image bring-up)
+- [x] `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` builds `shield-web:demo` and serves web (200 at `/` + `/sign-in` with CSP headers, prod build) + api (`/ready` full-matrix green) against the real services. (e2e/demo/demo-journey.spec.ts — the spec runs against exactly this prod-build stack after `demo-reset.sh --demo`, asserting `/ready` full-matrix green and `/sign-in` 200 with the strict CSP; first eyeballed end-to-end in Sprint 6 T9)
+- [x] The CI `demo` job (`.github/workflows/ci.yml`) logs `docker compose version` and hard-fails below 2.24, runs `bash scripts/demo-reset.sh --demo` (builds `shield-web:demo`, seeds inside the script), then `SHIELD_DEMO_SMOKE=1 npx playwright test demo/` (e2e/demo/demo-journey.spec.ts) green, with always-run compose-ps/logs diagnostics + `if: always()` artifact upload. (demo job — first green PR run 2026-07-22 on PR #44: CI run 29939798138, "Demo (hosted-demo reset + journey spec)" pass in 2m48s, actions/runs/29939798138/job/88990483196)
 
 ## 28. Security hardening on the new auth surfaces (Sprint 6, T10)
 
@@ -350,6 +356,53 @@ MailHog end-to-end for a real registered client of an isolated tenant.
 - [x] Delivery **off** → the release proceeds exactly as v3.3.0 with a loud skip log; **nothing** is sent. (test_release_notification.py — `test_delivery_off_sends_nothing_but_still_releases`)
 - [x] An SMTP failure is logged **loudly** and the release is **not** rolled back (release is the source of truth). (test_release_notification.py — `test_smtp_failure_does_not_roll_back_release`)
 - [x] **MailHog visible** — release a deliverable with delivery on and confirm the notification lands in MailHog (`:8025`) for the tenant's registered client, with the release subject + `/documents` link. (s22-release-notify.spec.ts — self-skips when delivery is off, mirroring s21)
+
+---
+
+## 31. Discard draft affordance (Sprint 9, T0 / T1 / T3 — D-031)
+
+Every service now lets the consultant throw away an in-progress DRAFT instead of
+approving a throwaway version to get it out of the way. The backend adds a
+draft-only `POST .../discard` per service (`DISCARDED` status, D-031), the web
+adds the app's first destructive-confirm dialog (the shared `DiscardDraftButton`
++ design-system Modal), and the three e2e preambles that used to
+approve-away an open draft now discard it — a semantically honest reset that no
+longer pollutes version history.
+
+- [x] Each service exposes a **draft-only** `POST .../discard` that returns the record to `status='discarded'`, writes **exactly one** audit row (`capability_list.discarded` / `{csf,attack,zt}.assessment.discarded`), and is **idempotent** on re-discard (no second audit row). (test_discard_draft.py)
+- [x] A **SUBMITTED** (CSF/ZT), **APPROVED**, or **RELEASED** record is not discardable → typed **409** `{reason:'not_discardable'}`; a **client** role → 403; an unknown / cross-tenant id → 404. (test_discard_draft.py)
+- [x] After discard the **version trap** is closed: a discarded non-v1 draft leaves `_latest_` returning the prior approved/released version (or 404), and the next extract/create mints a **fresh** version with no `IntegrityError` (mint reads `max(version)`, unfiltered). (test_discard_draft.py — `test_techdebt_latest_404_when_only_draft_discarded` + the v3-after-discard cases)
+- [x] Every **hidden latest-consumer** skips a discarded row — risk synthesis and the intake engagement cards read "latest non-discarded", and a child mutation / AI run into a discarded parent loses loudly (typed 409). (test_discard_draft.py)
+- [x] The shared **`DiscardDraftButton`** renders **only** for a DRAFT, opens the design-system Modal stating what will be destroyed, and calls `onConfirm` **only** on an explicit confirm — cancel / ESC / backdrop are no-ops. (DiscardDraftButton.test.tsx)
+- [x] **Browser proof** — with a draft open, clicking **Discard draft** → cancel is a no-op → confirming in the Modal throws the draft away and the tech-debt workspace re-enables a fresh extraction (a re-upload mints a brand-new draft). (s4-techdebt.spec.ts)
+- [x] The three specs that used to **approve-away** an open draft now **discard** it instead, with post-preamble behaviour byte-identical (the `changed>0` / "AI 60%" / stale-nudge assertions are untouched). (s4-techdebt.spec.ts, s5-attack.spec.ts, s11-staleness.spec.ts)
+
+---
+
+## 32. Hybrid Keycloak OIDC sign-in (Sprint 9, T4–T7, D-032)
+
+A real Keycloak (OIDC) sign-in now sits beside the credentials form, gated
+behind `SHIELD_AUTH_OIDC_ENABLED` (default off). A Keycloak token is never
+accepted as an API bearer. The browser round trip ends at `POST
+/auth/oidc/exchange`, which verifies the token against the realm JWKS and mints
+a native SHIELD pair only for an already-existing local account. There is no
+JIT provisioning. `s26-oidc-login.spec.ts` drives both paths through the real
+Keycloak login form and self-skips unless `E2E_OIDC=1`, so the default suite is
+untouched.
+
+- [x] Opt-in and dormant by default: with the flag off, `s26-oidc-login.spec.ts` reports **two skipped** tests and the `keycloak` provider is **absent** from `/api/auth/providers`, so the default suite count is unchanged. (s26-oidc-login.spec.ts)
+- [x] Backend exchange contract: a Keycloak-shaped access token is accepted only when its RS256 signature, issuer, audience, and `azp` all check out **and** a matching active local account exists; every other case returns a typed dict-detail failure and **no** account is provisioned (no JIT). (test_oidc_exchange.py)
+- [x] **Positive path** — `admin@kentro.example` (in Keycloak AND in the SHIELD DB) signs in through the real Keycloak form (`#username` / `#password`), lands authenticated, and the admin management list renders, proving the exchanged SHIELD bearer token authenticates a real API call end to end. (s26-oidc-login.spec.ts)
+- [x] **Negative path** — `nolocal@atlas.example` (in Keycloak, NOT in the SHIELD DB) authenticates against Keycloak, the exchange refuses it (`oidc_no_local_account`), and `SessionExpiryGuard` signs the session out to `/sign-in?reason=oidc_exchange_failed` with the loud banner. (s26-oidc-login.spec.ts)
+- [x] **Flag-off restoration** — after the flag is removed and `api`+`web` are recreated, `keycloak` reports `dormant` on `/ready`, the provider is gone, and the credentials suite signs in green. (s25-admin-health.spec.ts asserts keycloak dormant; s0/s2 credentials sign-in)
+
+**Operator note (flip and restore).** The flag must never be committed on.
+
+1. Add `SHIELD_AUTH_OIDC_ENABLED=true` to the repo-root `.env`.
+2. `docker compose up -d --force-recreate api web` (web reads the flag at provider registration, api at boot readiness).
+3. Only if `infra/keycloak/shield-realm.json` changed since it was last imported, wipe the keycloak volume so the new realm re-imports: `docker compose stop keycloak && docker volume rm shield-v2_keycloak-data && docker compose up -d keycloak`.
+4. `E2E_OIDC=1 npx playwright test smoke/s26-oidc-login.spec.ts`.
+5. Restore: remove the flag line, `docker compose up -d --force-recreate api web`, then re-run the default suite to confirm the credentials path still signs in.
 
 ---
 
