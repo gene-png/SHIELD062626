@@ -825,3 +825,54 @@ actually publishes on.
 **Ref:** SPRINT_9.md T8; `scripts/demo-reset.sh`, `scripts/demo-reset.ps1`,
 `e2e/demo/demo-journey.spec.ts`, `docker-compose.demo.yml`, `README.md`,
 `SMOKE_TEST.md`; DECISIONS D-016.
+
+## D-034 — Refresh rotation gains an anchored one-step reuse grace; idle expiry is typed
+
+**Decision (hotfix `fix/auth-refresh-reuse-storm`).** Strict single-jti refresh
+rotation was force-signing-out every active user roughly 15 minutes in: the
+Auth.js jwt callback runs in RSC and route-handler contexts that cannot write
+the rotated pair back to the session cookie, so parallel server-side calls (and
+every call after the cookie went stale) replayed an already-rotated refresh
+token, which the backend read as theft (`reason=refresh_reused`) and answered
+with a terminal 401 that `SessionExpiryGuard` turns into a sign-out. Three
+coordinated changes fix it without weakening the controls that matter:
+
+1. **Web chain cache (primary).** `apps/web/src/lib/auth/refresh.ts` keeps a
+   module-scoped map keyed by the cookie's refresh token: concurrent callers
+   share one in-flight rotation (single-flight), stale-cookie callers ride the
+   cached chain head with zero network, and the chain advances using the
+   head's own refresh token — the backend sees one clean sequential rotation
+   per web process. Typed terminal failures are cached ~30s; transient
+   failures are never cached; dead chains evict after 30 minutes.
+2. **Backend anchored grace (backstop).** The chain cache is process memory —
+   a web restart or deploy wipes it and the browser's stale cookie replays a
+   rotated-out token. `/auth/refresh` now redeems a replay of exactly the
+   IMMEDIATELY-PRIOR jti (`users.prev_refresh_jti`, migration 0033) within
+   `jwt_refresh_reuse_grace_seconds` (default 900) of its rotation
+   (`users.refresh_rotated_at`) for a fresh pair. The window is ANCHORED:
+   grace hits never update the anchor, so the prior token dies at
+   rotation+grace no matter how often it replays. A token two or more
+   rotations old is always rejected; the 24h forced-reauth ceiling is checked
+   first and is absolute; grace 0 restores strict rotation. New-pair over
+   idempotent-same-pair semantics because same-pair would require persisting
+   minted bearer tokens at rest.
+3. **Typed idle expiry.** An expired refresh token now raises
+   `TokenExpiredError` and answers `{reason: "refresh_expired"}` instead of a
+   generic string, and the web maps it to REAUTH_REQUIRED_ERROR — a 30-minute
+   idle session degrades to a clean `/sign-in?reason=session_expired`
+   redirect instead of silently 401ing every proxy call. The refresh TTL was
+   deliberately NOT raised to match the 24h session: 1800s is the de facto
+   Master Spec §4.5 idle-timeout control and raising it would silently delete
+   that control.
+
+**Trade-off stated plainly:** replay of the immediately-prior refresh token is
+now detected within ≤ the grace window instead of instantly. The prior token
+is still capped by its own 30-minute exp, a two-generations-old replay is
+still an instant 401, the ceiling is absolute, and
+`JWT_REFRESH_REUSE_GRACE_SECONDS=0` restores strict rotation per environment.
+
+**Ref:** Master Spec §4.5; `app/config.py`, `app/security/jwt.py`,
+`app/routes/auth.py`, `app/models/user.py`,
+`alembic/versions/0033_user_prev_refresh_jti.py`,
+`tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/refresh.ts` (+ test),
+`apps/web/src/lib/auth/options.ts`; DECISIONS D-016, D-020.
