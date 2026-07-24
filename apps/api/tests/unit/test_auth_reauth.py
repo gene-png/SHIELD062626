@@ -1,10 +1,20 @@
-"""Auth compensating-controls tests (Sprint 3 T2).
+"""Auth compensating-controls tests (Sprint 3 T2; grace semantics D-034).
 
 Covers the honest versions of the controls README/BUILD_REPORT claimed:
   (a) daily forced re-auth ceiling honored at /auth/refresh (typed 401
       reason=reauth_required past shield_forced_reauth_seconds);
-  (b) refresh-token rotation — a reused (already-rotated) refresh token is
-      rejected;
+  (b) refresh-token rotation — a token two or more rotations old is rejected;
+  (b2) one-step ANCHORED reuse grace (D-034): replaying the immediately-prior
+      refresh token within jwt_refresh_reuse_grace_seconds of its rotation
+      mints a fresh pair instead of force-ending the session — this is what
+      stops the ~15-minute sign-out storm caused by concurrent web-side
+      refreshes and post-restart stale cookies. The window is anchored at
+      rotation time (grace hits do not re-arm it), a two-generations-old
+      replay is always rejected, grace=0 restores strict rotation, and the
+      forced-reauth ceiling always wins;
+  (b3) an EXPIRED refresh token returns the typed reason=refresh_expired so
+      the web layer can route idle-timeout to a clean sign-in redirect
+      instead of silently 401ing every proxy call;
   (c) dead feature flags fail loudly at startup rather than silently doing
       nothing (the MFA / email-verify flows don't exist yet).
 """
@@ -127,22 +137,206 @@ def test_refresh_within_window_carries_auth_time_forward(app_client: TestClient)
 
 
 @pytest.mark.unit
-def test_reused_old_refresh_token_rejected(app_client: TestClient) -> None:
+def test_reused_refresh_token_two_generations_old_rejected(app_client: TestClient) -> None:
+    # RE-CONTRACTED for D-034 (hotfix fix/auth-refresh-reuse-storm). The old
+    # test pinned strict single-jti rotation: replaying the immediately-prior
+    # token was a 401. That exact strictness was force-signing-out every active
+    # user ~15 min in (concurrent web-side refreshes / post-restart stale
+    # cookies replay the prior token benignly), so D-034 deliberately relaxes
+    # it to a one-step ANCHORED grace — see the (b2) tests below. The theft
+    # boundary this test pins now sits one generation deeper: a refresh token
+    # TWO rotations old is always rejected, grace or no grace.
     body = _register(app_client)
-    original_refresh = body["tokens"]["refresh_token"]
+    gen0 = body["tokens"]["refresh_token"]
 
-    first = app_client.post("/auth/refresh", json={"refresh_token": original_refresh})
+    first = app_client.post("/auth/refresh", json={"refresh_token": gen0})
     assert first.status_code == 200, first.text
-    new_refresh = first.json()["refresh_token"]
+    gen1 = first.json()["refresh_token"]
 
-    # Reusing the now-rotated-out original refresh token is rejected loudly.
-    reused = app_client.post("/auth/refresh", json={"refresh_token": original_refresh})
+    second = app_client.post("/auth/refresh", json={"refresh_token": gen1})
+    assert second.status_code == 200, second.text
+    gen2 = second.json()["refresh_token"]
+
+    reused = app_client.post("/auth/refresh", json={"refresh_token": gen0})
     assert reused.status_code == 401, reused.text
     assert reused.json()["error"]["reason"] == "refresh_reused"
 
     # The freshly rotated token still works.
-    ok = app_client.post("/auth/refresh", json={"refresh_token": new_refresh})
+    ok = app_client.post("/auth/refresh", json={"refresh_token": gen2})
     assert ok.status_code == 200, ok.text
+
+
+# -----------------------------------------------------------------------------
+# (b2) One-step anchored reuse grace (D-034)
+# -----------------------------------------------------------------------------
+
+
+def _backdate_rotation(user_id: str, *, seconds: int) -> None:
+    """Shift the user's refresh_rotated_at into the past by `seconds`.
+
+    Direct DB poke so the anchored-window tests don't sleep. Uses its own
+    engine over the fixture's DATABASE_URL (the app holds no state between
+    requests, so a parallel session is safe here).
+    """
+    import uuid as _uuid
+
+    import sqlalchemy as sa
+
+    from app.models.user import User
+
+    engine = create_engine(os.environ["DATABASE_URL"], future=True)
+    with Session(engine) as db:
+        row = db.get(User, _uuid.UUID(user_id))
+        assert row is not None
+        assert row.refresh_rotated_at is not None, "rotation should have stamped the anchor"
+        row.refresh_rotated_at = row.refresh_rotated_at - timedelta(seconds=seconds)
+        db.execute(
+            sa.update(User)
+            .where(User.id == _uuid.UUID(user_id))
+            .values(refresh_rotated_at=row.refresh_rotated_at)
+        )
+        db.commit()
+
+
+@pytest.mark.unit
+def test_refresh_reuse_within_grace_returns_new_valid_pair(app_client: TestClient) -> None:
+    # The bug test: a benign replay of the immediately-prior refresh token
+    # (concurrent web refresh, stale post-restart cookie) must mint a fresh
+    # usable pair, not kill the session.
+    body = _register(app_client)
+    gen0 = body["tokens"]["refresh_token"]
+
+    first = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+    assert first.status_code == 200, first.text
+
+    graced = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+    assert graced.status_code == 200, graced.text
+    grace_pair = graced.json()
+
+    # The grace-minted pair is a real, continuing session: it refreshes again.
+    ok = app_client.post("/auth/refresh", json={"refresh_token": grace_pair["refresh_token"]})
+    assert ok.status_code == 200, ok.text
+
+
+@pytest.mark.unit
+def test_refresh_reuse_grace_is_anchored_not_sliding(app_client: TestClient) -> None:
+    from app.config import get_settings
+
+    body = _register(app_client)
+    user_id = body["user"]["id"]
+    gen0 = body["tokens"]["refresh_token"]
+
+    first = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+    assert first.status_code == 200, first.text
+
+    # A grace hit inside the window succeeds but must NOT re-arm the window
+    # (prev jti and the rotation anchor stay untouched).
+    graced = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+    assert graced.status_code == 200, graced.text
+
+    # Push the anchor past the grace horizon: the same prior token now dies.
+    grace = get_settings().jwt_refresh_reuse_grace_seconds
+    _backdate_rotation(user_id, seconds=grace + 60)
+
+    replay = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+    assert replay.status_code == 401, replay.text
+    assert replay.json()["error"]["reason"] == "refresh_reused"
+
+
+@pytest.mark.unit
+def test_refresh_grace_zero_restores_strict_rotation(
+    app_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("JWT_REFRESH_REUSE_GRACE_SECONDS", "0")
+    get_settings.cache_clear()
+    try:
+        body = _register(app_client)
+        gen0 = body["tokens"]["refresh_token"]
+
+        first = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+        assert first.status_code == 200, first.text
+
+        reused = app_client.post("/auth/refresh", json={"refresh_token": gen0})
+        assert reused.status_code == 401, reused.text
+        assert reused.json()["error"]["reason"] == "refresh_reused"
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+
+@pytest.mark.unit
+def test_grace_does_not_override_reauth_ceiling(app_client: TestClient) -> None:
+    # Even a token that would qualify for the reuse grace is rejected when the
+    # forced-reauth ceiling has passed — the ceiling is checked first and is
+    # absolute.
+    import uuid as _uuid
+
+    import sqlalchemy as sa
+
+    from app.config import get_settings
+    from app.models.user import User
+    from app.security.jwt import issue_token
+
+    body = _register(app_client)
+    user_id = body["user"]["id"]
+    settings = get_settings()
+
+    stale_auth_time = datetime.now(UTC) - timedelta(
+        seconds=settings.shield_forced_reauth_seconds + 3600
+    )
+    stale_token, stale_payload = issue_token(
+        subject=_uuid.UUID(user_id),
+        role="admin",
+        typ="refresh",
+        auth_time=stale_auth_time,
+    )
+
+    # Make the stale token the graceable prev: fresh anchor, matching prev jti.
+    engine = create_engine(os.environ["DATABASE_URL"], future=True)
+    with Session(engine) as db:
+        db.execute(
+            sa.update(User)
+            .where(User.id == _uuid.UUID(user_id))
+            .values(
+                prev_refresh_jti=str(stale_payload.jti),
+                refresh_rotated_at=datetime.now(UTC),
+            )
+        )
+        db.commit()
+
+    r = app_client.post("/auth/refresh", json={"refresh_token": stale_token})
+    assert r.status_code == 401, r.text
+    assert r.json()["error"]["reason"] == "reauth_required"
+
+
+# -----------------------------------------------------------------------------
+# (b3) Typed idle expiry
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_expired_refresh_returns_typed_refresh_expired(app_client: TestClient) -> None:
+    # An idle session whose refresh token has lapsed must yield a typed reason
+    # the web layer can map to a clean sign-in redirect — not the generic
+    # string detail that leaves every proxy call silently 401ing.
+    import uuid as _uuid
+
+    from app.security.jwt import issue_token
+
+    body = _register(app_client)
+    expired_exp = int((datetime.now(UTC) - timedelta(seconds=60)).timestamp())
+    expired_token, _ = issue_token(
+        subject=_uuid.UUID(body["user"]["id"]),
+        role="admin",
+        typ="refresh",
+        additional_claims={"exp": expired_exp},
+    )
+
+    r = app_client.post("/auth/refresh", json={"refresh_token": expired_token})
+    assert r.status_code == 401, r.text
+    assert r.json()["error"]["reason"] == "refresh_expired"
 
 
 # -----------------------------------------------------------------------------

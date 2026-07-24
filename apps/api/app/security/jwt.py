@@ -25,6 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 
 from app.config import get_settings
 
@@ -39,6 +40,15 @@ _VALID_TOKEN_TYPES = ("access", "refresh", "mfa_pending")
 
 class TokenError(ValueError):
     """Raised when a token is missing, malformed, expired, or doesn't verify."""
+
+
+class TokenExpiredError(TokenError):
+    """Raised when a token verifies but its exp has passed (hotfix, D-034).
+
+    Split out from TokenError so /auth/refresh can answer an idle-timeout
+    expiry with the typed reason=refresh_expired (clean sign-in redirect)
+    while malformed/forged tokens keep the generic 401.
+    """
 
 
 @dataclass(frozen=True)
@@ -128,6 +138,10 @@ def verify_token(token: str, *, expected_type: TokenType | None = None) -> Token
             issuer=ISSUER,
             options={"require": ["exp", "iat", "sub", "typ", "jti", "role"]},
         )
+    except ExpiredSignatureError as exc:
+        # Order matters: ExpiredSignatureError subclasses JWTError, and the
+        # expiry case must stay distinguishable (typed refresh_expired).
+        raise TokenExpiredError(f"Token expired: {exc}") from exc
     except JWTError as exc:
         raise TokenError(f"Token verification failed: {exc}") from exc
 

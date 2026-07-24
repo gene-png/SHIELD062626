@@ -60,7 +60,7 @@ from app.schemas.auth import (
     VerifyEmailResponse,
 )
 from app.security.email_domains import domain_of, is_generic_provider
-from app.security.jwt import TokenError, issue_token, verify_token
+from app.security.jwt import TokenError, TokenExpiredError, issue_token, verify_token
 from app.security.password import (
     PasswordPolicyError,
     hash_password,
@@ -117,6 +117,13 @@ def _issue_pair(user: User, *, auth_time: datetime | None = None) -> TokenPairRe
         subject=user.id, role=user.role.value, typ="refresh", auth_time=auth_time
     )
     user.active_refresh_jti = str(refresh_payload.jti)
+    if auth_time is None:
+        # Fresh authentication (login/register/MFA/OIDC) resets the rotation
+        # chain: no token from a prior session may ride the reuse grace (D-034)
+        # into the new one. Refresh passes auth_time forward and does its own
+        # prev/rotated_at bookkeeping at the route.
+        user.prev_refresh_jti = None
+        user.refresh_rotated_at = None
     log.info(
         "auth.tokens_issued",
         user_id=str(user.id),
@@ -503,13 +510,26 @@ def refresh(
     settings = get_settings()
     try:
         payload = verify_token(body.refresh_token, expected_type="refresh")
+    except TokenExpiredError as exc:
+        # Typed so the web layer routes an idle-timeout expiry to a clean
+        # sign-in redirect instead of silently 401ing every proxy call (D-034).
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "reason": "refresh_expired",
+                "message": "Your session expired after inactivity. Please sign in again.",
+            },
+        ) from exc
     except TokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token.",
         ) from exc
 
-    user = db.get(User, payload.sub)
+    # Row lock so two concurrent refreshes of the same user serialize instead
+    # of double-rotating (SQLAlchemy's SQLite dialect ignores FOR UPDATE, which
+    # is fine — unit tests are single-threaded; Postgres gets the real lock).
+    user = db.get(User, payload.sub, with_for_update=True)
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -537,9 +557,34 @@ def refresh(
                 },
             )
 
-    # (b) Rotation. Only the single most recently issued refresh token is valid;
-    # a replayed (already-rotated) token no longer matches and is rejected loudly.
+    # (b) Rotation. The most recently issued refresh token is the valid one; a
+    # replay of the IMMEDIATELY-PRIOR token within the anchored grace window is
+    # redeemed for a fresh pair (D-034 — concurrent web-side refreshes and
+    # post-restart stale cookies replay it benignly); anything else is rejected
+    # loudly.
     if user.active_refresh_jti != str(payload.jti):
+        grace_seconds = settings.jwt_refresh_reuse_grace_seconds
+        rotated_at = _as_aware(user.refresh_rotated_at)
+        within_grace = (
+            grace_seconds > 0
+            and user.prev_refresh_jti is not None
+            and user.prev_refresh_jti == str(payload.jti)
+            and rotated_at is not None
+            and (utcnow() - rotated_at).total_seconds() <= grace_seconds
+        )
+        if within_grace:
+            log.info(
+                "auth.refresh_grace",
+                user_id=str(user.id),
+                presented_jti=str(payload.jti),
+                rotated_at=rotated_at.isoformat() if rotated_at else None,
+            )
+            tokens = _issue_pair(user, auth_time=payload.auth_time)
+            # ANCHORED window: prev_refresh_jti / refresh_rotated_at stay
+            # untouched, so grace hits never extend the prior token's life and
+            # it dies at rotation + grace regardless of how often it replays.
+            db.commit()
+            return tokens
         log.warning(
             "auth.refresh_reused",
             user_id=str(user.id),
@@ -555,6 +600,10 @@ def refresh(
         )
 
     tokens = _issue_pair(user, auth_time=payload.auth_time)
+    # Normal rotation arms (re-arms) the one-step grace window for the token
+    # just rotated out.
+    user.prev_refresh_jti = str(payload.jti)
+    user.refresh_rotated_at = utcnow()
     db.commit()
     return tokens
 
