@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 from collections.abc import Sequence
 from dataclasses import dataclass
+from html import escape
 from typing import Any
 
 from app.risk.engine import (
@@ -232,7 +233,9 @@ def render_pdf(ctx: RiskExportContext) -> bytes:
 
     story: list = [
         Paragraph(f"Risk Register (v{ctx.version})", h1),
-        Paragraph(ctx.client_legal_name, body),
+        # Paragraph parses reportlab mini-XML: a bare "&" (e.g. an "R&D Corp"
+        # client) re-emits as an unknown entity with a synthesized semicolon.
+        Paragraph(escape(ctx.client_legal_name), body),
         Spacer(1, 0.2 * inch),
         Paragraph("Summary", h2),
     ]

@@ -180,3 +180,24 @@ def test_build_context_falls_back_to_client_when_legal_name_is_none() -> None:
         gap=gap,
     )
     assert ctx.client_legal_name == "Client"
+
+
+@pytest.mark.unit
+def test_pdf_escapes_ampersand_in_header() -> None:
+    # The header lines feed reportlab Paragraph markup: a bare "&" in the
+    # client name must be escaped so it renders literally instead of
+    # re-emitting as an unknown entity with a synthesized semicolon.
+    a, answers = _build_inputs(answers_tier=3)
+    tier_map = {ans.subcategory_code: ans.maturity_tier for ans in answers}
+    score = compute_score(tier_map)
+    gap = analyze_gaps(tier_map, target_tier=4)
+    ctx = build_context(
+        client_legal_name="Rook&Pawn Security",
+        service_title="NIST CSF 2.0",
+        assessment=a,
+        answers=answers,
+        score=score,
+        gap=gap,
+    )
+    text = _pdf_text(render_pdf(ctx))
+    assert "Rook&Pawn Security" in text

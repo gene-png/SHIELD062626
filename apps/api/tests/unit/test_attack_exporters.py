@@ -111,13 +111,32 @@ def _pdf_text(raw: bytes) -> str:
 
 @pytest.mark.unit
 def test_pdf_carries_title_client_and_a_known_tactic() -> None:
-    # SMOKE §10: upgrade from %PDF- magic to real content — the title prefix
-    # (the "&" in "ATT&CK" is reportlab-escaped, so match the stable "MITRE"),
-    # the client name, and one known per-tactic rollup row.
+    # SMOKE §10 content assertions. The old version matched only "MITRE" with a
+    # comment normalizing reportlab's "ATT&CK;" entity artifact — it encoded
+    # the very header bug the fix removes (a bare "&" fed to Paragraph markup,
+    # which reportlab re-emits as an unknown entity with a synthesized
+    # semicolon). The exact title must render, ampersand intact.
     text = _pdf_text(render_pdf(_ctx()))
-    assert "MITRE" in text  # service title prefix
+    assert "MITRE ATT&CK Coverage" in text  # exact service title
+    assert "ATT&CK;" not in text  # the entity artifact must be gone
     assert "Atlas Defense Solutions" in text  # client name
     assert "Reconnaissance" in text  # a known tactic rollup row
+
+
+@pytest.mark.unit
+def test_pdf_escapes_ampersand_in_client_name() -> None:
+    # A client whose legal name carries "&" must render literally, not as a
+    # mangled entity (same escape path as the title line).
+    a, coverage, rollup = _build_inputs()
+    ctx = build_context(
+        client_legal_name="Rook&Pawn Security",
+        service_title="MITRE ATT&CK Coverage",
+        assessment=a,
+        coverage=coverage,
+        rollup=rollup,
+    )
+    text = _pdf_text(render_pdf(ctx))
+    assert "Rook&Pawn Security" in text
 
 
 @pytest.mark.unit

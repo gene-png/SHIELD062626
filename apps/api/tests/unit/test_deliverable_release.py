@@ -404,3 +404,26 @@ def test_client_cannot_download_non_deliverable_artifact(app_client) -> None:
         headers={"Authorization": f"Bearer {bearer_client}"},
     )
     assert d.status_code == 404, d.text
+
+
+# -----------------------------------------------------------------------------
+# service_display_label (hotfix fix/export-pdf-headers)
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_every_service_kind_has_a_clean_display_label() -> None:
+    # Deliverable headers print this label as the H1 with the client name on
+    # the line beneath. It must exist for every kind and never carry the
+    # org-prefixed Service.title shape ("{org} — {label}") that produced the
+    # duplicated-org header.
+    from app.deliverable_release import service_display_label
+    from app.models.service import ServiceKind
+
+    for kind in ServiceKind:
+        label = service_display_label(kind)
+        assert label
+        assert "—" not in label
+
+    assert service_display_label(ServiceKind.ATTACK_COVERAGE) == "MITRE ATT&CK Coverage"
+    assert service_display_label(ServiceKind.TECH_DEBT) == "Technical Debt Review"

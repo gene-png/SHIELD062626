@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 from collections.abc import Iterable
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING
 
 from app.models.zt_assessment import ZtAnswer, ZtAssessment
@@ -294,8 +295,15 @@ def render_pdf(ctx: ZtDeliverableContext) -> bytes:
     body = styles["BodyText"]
 
     story: list = []
-    story.append(Paragraph(ctx.service_title, h1))
-    story.append(Paragraph(f"{ctx.client_legal_name} · {_framework_label(ctx.framework)}", body))
+    # Paragraph parses reportlab mini-XML: a bare "&" (e.g. an "R&D Corp"
+    # client) re-emits as an unknown entity with a synthesized semicolon.
+    story.append(Paragraph(escape(ctx.service_title), h1))
+    story.append(
+        Paragraph(
+            f"{escape(ctx.client_legal_name)} · {_framework_label(ctx.framework)}",
+            body,
+        )
+    )
     story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("Maturity summary", h2))

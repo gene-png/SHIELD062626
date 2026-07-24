@@ -173,3 +173,26 @@ def test_build_context_falls_back_when_client_none() -> None:
         gap=gap,
     )
     assert ctx.client_legal_name == "Client"
+
+
+@pytest.mark.unit
+def test_pdf_escapes_ampersand_in_header() -> None:
+    # The header lines feed reportlab Paragraph markup: a bare "&" in the
+    # client name (or title) must be escaped so it renders literally instead
+    # of re-emitting as an unknown entity with a synthesized semicolon.
+    framework = ZtFrameworkCode.CISA_ZTMM_2_0
+    a, answers = _build_inputs(framework, stage=3)
+    stage_map = {ans.capability_code: ans.maturity_stage for ans in answers}
+    score = compute(framework, stage_map)
+    gap = analyze_gaps(framework, stage_map, target_stage=4)
+    ctx = build_context(
+        client_legal_name="Rook&Pawn Security",
+        service_title="Zero Trust (CISA ZTMM)",
+        framework=framework,
+        assessment=a,
+        answers=answers,
+        score=score,
+        gap=gap,
+    )
+    text = _pdf_text(render_pdf(ctx))
+    assert "Rook&Pawn Security" in text

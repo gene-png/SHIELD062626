@@ -27,7 +27,8 @@ from app.tenant import require_deliverable_in_tenant
 
 _log = get_logger(__name__)
 
-# Human-readable service names for the client-facing release notification.
+# Human-readable service names for the client-facing release notification and
+# for deliverable export headers (see service_display_label below).
 _SERVICE_LABELS: dict[ServiceKind, str] = {
     ServiceKind.TECH_DEBT: "Technical Debt Review",
     ServiceKind.ZERO_TRUST_CISA: "Zero Trust (CISA ZTMM)",
@@ -35,6 +36,18 @@ _SERVICE_LABELS: dict[ServiceKind, str] = {
     ServiceKind.NIST_CSF: "NIST CSF 2.0",
     ServiceKind.ATTACK_COVERAGE: "MITRE ATT&CK Coverage",
 }
+
+
+def service_display_label(kind: ServiceKind) -> str:
+    """Canonical human-readable label for a service kind.
+
+    Deliverable exports print this as the H1 with the client name beneath —
+    never the stored `Service.title`, which is minted as "{org} — {label}" and
+    duplicated the org above its own name in every released PDF/DOCX header
+    (hotfix fix/export-pdf-headers). Falls back to the raw kind value so an
+    unmapped kind is visible rather than a KeyError.
+    """
+    return _SERVICE_LABELS.get(kind, kind.value)
 
 
 def release_deliverable(
@@ -146,7 +159,7 @@ def _notify_release(
             )
         ).scalars()
     )
-    service_label = _SERVICE_LABELS.get(svc.kind, svc.kind.value)
+    service_label = service_display_label(svc.kind)
     sent = 0
     failed = 0
     for email in recipients:

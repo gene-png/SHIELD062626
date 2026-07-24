@@ -61,7 +61,7 @@ from app.csf.playbook import (
 )
 from app.csf.scoring import compute as compute_score
 from app.db.session import get_db
-from app.deliverable_release import release_deliverable
+from app.deliverable_release import release_deliverable, service_display_label
 from app.dependencies import current_client, current_user, require_role
 from app.logging import get_logger
 from app.models._common import utcnow
@@ -1835,7 +1835,7 @@ def finalize_csf_deliverable(
 
     ctx = build_csf_context(
         client_legal_name=client_name,
-        service_title=svc.title,
+        service_title=service_display_label(svc.kind),
         assessment=assessment,
         answers=answers,
         score=score,

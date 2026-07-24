@@ -34,7 +34,7 @@ from app.ai.llm import LLMClient
 from app.ai.preview import AiPreviewPayload
 from app.audit import audit
 from app.db.session import get_db
-from app.deliverable_release import release_deliverable
+from app.deliverable_release import release_deliverable, service_display_label
 from app.dependencies import current_client, current_user, require_role
 from app.logging import get_logger
 from app.models._common import utcnow
@@ -1290,7 +1290,7 @@ def finalize_zt_deliverable(
 
     ctx = build_zt_context(
         client_legal_name=client_name,
-        service_title=svc.title,
+        service_title=service_display_label(svc.kind),
         framework=cat_fw,
         assessment=assessment,
         answers=answers,
