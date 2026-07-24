@@ -170,23 +170,36 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
         r.ok(),
       { timeout: 90000 },
     );
-    const enterpriseLoaded = page.waitForResponse(
-      (r) =>
-        r.url().includes("/enterprise-profile") &&
-        r.request().method() === "GET" &&
-        r.ok(),
-      { timeout: 90000 },
-    );
     await seedBtn.click();
     await seeded;
-    const enterprise = (await (await enterpriseLoaded).json()) as {
-      tiers_in_use: string[];
-      subcategories: unknown[];
-    };
-    // Server truth: the full CSF 2.0 catalog is 106 subcategories, seeded for
-    // all three tiers.
-    expect(enterprise.subcategories.length).toBe(106);
-    expect(enterprise.tiers_in_use.sort()).toEqual(["high", "low", "moderate"]);
+    // Assert post-seed server truth via a direct proxy fetch, not a captured
+    // page response: a waitForResponse listener installed before the click can
+    // grab a straggler PRE-seed enterprise-profile response (subcategories: 0)
+    // instead of the post-seed refetch — the same staleness class as the
+    // post-Run-AI reload trap (CLAUDE.md) — and a response captured across a
+    // reload loses its body ("No resource with given identifier found").
+    // page.request rides the browser session cookie, so the proxy call sees
+    // the signed-in admin + active client.
+    const serviceId = page.url().match(/services\/([0-9a-f-]+)\/csf/)?.[1];
+    expect(serviceId).toBeTruthy();
+    await expect(async () => {
+      const resp = await page.request.get(
+        `/api/proxy/csf/services/${serviceId}/enterprise-profile`,
+      );
+      expect(resp.ok()).toBeTruthy();
+      const enterprise = (await resp.json()) as {
+        tiers_in_use: string[];
+        subcategories: unknown[];
+      };
+      // Server truth: the full CSF 2.0 catalog is 106 subcategories, seeded
+      // for all three tiers.
+      expect(enterprise.subcategories.length).toBe(106);
+      expect(enterprise.tiers_in_use.sort()).toEqual([
+        "high",
+        "low",
+        "moderate",
+      ]);
+    }).toPass({ timeout: 60000 });
   }
   // Text spans nested <span>s, so filter on the containing element (T6 lesson).
   await expect(
