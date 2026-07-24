@@ -31,7 +31,7 @@ export function SignOutButton(): JSX.Element {
     <button
       type="button"
       onClick={() => void handleSignOut()}
-      className="rounded-md px-3 py-2 font-medium text-ink-secondary hover:text-ink-primary"
+      className="rounded-md border border-border bg-surface-card px-3 py-2 font-medium text-ink-primary hover:bg-surface-sunken"
     >
       Sign out
     </button>
