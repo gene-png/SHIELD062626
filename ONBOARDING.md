@@ -102,49 +102,48 @@ suppress bandit).
 
 ## 5. Launching a sprint loop
 
-Sprints are executed by an autonomous cron loop
-(`.claude/commands/loop-sprint-cron.md` orchestrator dispatching fresh-context
-agents per `.claude/commands/loop-sprint.md`). Each sprint ships a plan doc
-(`SPRINT_<n>.md`) and a committed staged queue
-(`.claude/sprint-queue.sprint-<n>.json`).
+Sprints are executed by an autonomous loop, the skill at
+`.claude/skills/loop-sprint-cron/SKILL.md`. It reads one plan file, the path
+named in `.claude/sprint-plan`, and runs one backlog entry per fresh subagent
+context. Each sprint still ships a narrative plan doc (`SPRINT_<n>.md`); the
+executable form of it lives in `docs/SPRINTS.md`.
 
-**The staged, ready-to-launch sprint is `SPRINT_8.md`** (queue
-`.claude/sprint-queue.sprint-8.json`, branch `feat/browser-proof-sprint-8`,
-target v3.4.1): shared MailHog e2e helper, tech-debt extract draft-guard,
-release-notification e2e, verify/forgot/reset pages e2e, MFA e2e (TOTP +
-recovery codes), admin-health + `/documents` empty state. The plan was
-reviewed by OpenAI Codex before merge (PR #37 carries the findings table).
-(Convention: the staged sprint is always the highest-numbered committed
-`SPRINT_<n>.md` / `sprint-queue.sprint-<n>.json` pair — each planning PR must
-bump this paragraph.)
+The JSON sprint queues this replaced are retired. `.claude/sprint-queue.sprint-3`
+through `-9.json` remain in the tree as history only; nothing reads them.
 
-**Launching the loop is a HUMAN action.** Agents stage the plan and queue but
-never start `/loop-sprint-cron` — you (the dev at the keyboard) do, after
-walking the checklist below.
+**The staged, ready-to-launch backlog is `docs/SPRINTS.md`**, S1 through S11,
+translated from `SPRINT_10.md` "Reports you can defend" (branch
+`feat/defensible-reports-sprint-10`, target v3.6.0): shared export style module,
+ATT&CK and CSF and ZT deliverable evidence, demo evidence depth, questionnaire
+guidance, workspace comprehension, AI transparency, e2e proofs, prose scrub,
+wrap-up. The plan was reviewed by OpenAI Codex before merge (PR #51 carries the
+findings table). Convention: the staged sprint is the backlog in
+`docs/SPRINTS.md`, and each planning PR bumps this paragraph.
 
-1. Follow the sprint doc's launch checklist (`SPRINT_8.md` → _Prerequisites_).
-2. Copy the staged queue to `.claude/sprint-queue.json` (gitignored — your
-   machine-local runtime copy).
-3. **Edit your runtime copy**: set `working_dir` to your absolute repo path
-   and `expected_gh_user` to your GitHub login. The loop halts on either
-   being wrong. Confirm the `gates` array's command strings match YOUR
-   OS/Docker/Node layout — the six gates themselves are the invariant. Known
-   trap: gate 3 (prettier) discovers Node via the **winget** package path
-   (`$LOCALAPPDATA/Microsoft/WinGet/Packages/OpenJS.NodeJS.LTS…`); if you
-   installed Node any other way (.msi, nvm), replace the `NODE_DIR` discovery
-   with your node dir — or drop it if `npx` is already on the gate shell's
-   PATH.
-4. Create the sprint branch named in the queue, from `main`.
-5. **YOU (the human) run `/loop-sprint-cron` in Claude Code** — never ask an
-   agent to start the loop (rule of the road, see `CLAUDE.md`). It fires
-   every ~10 min, one task
-   per fire, checkpoints (full suite + audit) every 4 done. Watch
-   `.claude/scheduler-debug.log`. Known babysitting duty: dispatched agents
-   sometimes park on a background monitor mid-gate — nudge them to
-   foreground-poll (the orchestrator usually does this for you).
-6. The cron is session-scoped: if you close Claude Code, re-run
-   `/loop-sprint-cron` to resume (queue state survives on disk; a `halt` in
-   the queue explains any stop).
+**Launching the loop is a HUMAN action.** Agents stage the backlog but never
+start `/loop-sprint-cron`. You, the dev at the keyboard, do that after walking
+the checklist below.
+
+1. Follow the launch checklist in `docs/SPRINTS.md` (_Loop protocol_) and the
+   rationale in `SPRINT_10.md` (_Prerequisites_).
+2. Set your identity, or the loop halts at its first push:
+   `git config --local user.email "davidcatarious@spearheadanalytica.com"` and
+   `gh auth switch --user SpearheadAnalytica`.
+3. Confirm the gate runs on your box: `bash .claude/hooks/run-gate.sh commit`.
+   It needs Docker Desktop running and the stack up (`docker compose up -d`),
+   because every step except prettier runs inside the containers. The gate
+   commands live in `.claude/profiles/shield.sh`, which is the one place to
+   change them.
+4. Create the sprint branch named in the backlog, from `main`.
+5. **YOU (the human) run `/loop-sprint-cron start --account SpearheadAnalytica`
+   in Claude Code.** Never ask an agent to start the loop (rule of the road, see
+   `CLAUDE.md`). The driver arms a watchdog cron, runs one backlog entry per
+   fresh runner, and runs a checkpoint (full gate plus security audit) every 4
+   completed entries. Known babysitting duty: dispatched agents sometimes park
+   on a background monitor mid-gate, so nudge them to foreground-poll.
+6. The loop's state of record is the checkboxes and Log in `docs/SPRINTS.md`, so
+   it survives session loss. `/loop-sprint-cron status` reports where it is, and
+   `stop` shuts the watchdog down.
 
 **Sprint 8 specific:** no cloud credentials or API keys are needed —
 everything runs against the fixture-mode dev stack + MailHog (delivery is on

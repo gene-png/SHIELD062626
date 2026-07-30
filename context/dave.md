@@ -1,26 +1,35 @@
 # Dave: current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-07-24 (product-walkthrough burn-down session: two hotfix
-PRs open, Sprint 10 planning PR in flight, Sprint 11 designed)._
+_Last updated: 2026-07-30 (ops-pipeline reconciliation: #49, #50, #51 all
+merged; PR #52 landed the shared pipeline and broke the loop launch; this
+session fixes that)._
 
 ## Branch / in flight
 
-- **PR #49 `fix/auth-refresh-reuse-storm` (open):** kills the ~15-minute
-  forced sign-out ("Intake proxy 401") found in the 2026-07-23 walkthrough.
-  Web chain-cache single-flight refresh (`apps/web/src/lib/auth/refresh.ts`),
-  backend anchored one-step reuse grace (migration 0033, D-034), typed
-  `refresh_expired` idle expiry. Proven with a 3-phase shortened-TTL browser
-  run (7 min continuous use across ~7 token boundaries, web-restart survival,
-  clean idle redirect) plus a live grace demo; all six gates green.
-- **PR #50 `fix/export-pdf-headers` (open):** the `ATT&CK;` header mangling
-  (unescaped `&` into reportlab) and the duplicated org name (H1 was the
-  org-prefixed `Service.title`) fixed across all five exporters; export routes
-  now pass `service_display_label(kind)`; sign-out button looks like a button.
-  Rides a test-only fix for a latent race in `s7-csf-playbook` (pre-seed
-  response capture) that started failing deterministically on this box.
-- **`docs/sprint-10-plan` (this branch):** Sprint 10 planning PR — SPRINT_10.md
-  + staged queue, Codex read-only review per convention.
+- **`chore/reconcile-ops-pipeline` (this branch):** makes PR #52's shared ops
+  pipeline actually work in SHIELD. #52 merged a generic multi-repo pipeline
+  that left the loop unlaunchable in four ways, all fixed here: the duplicate
+  `loop-sprint-cron` command shadowed the new skill so neither resolved;
+  `.claude/sprint-plan` pointed at the Sprint-5-era `DELIVERY_PLAN.md`;
+  `.claude/profile` named `node-pnpm`, whose gate refuses every commit because
+  pnpm is not installed on this box and which declares no Python steps at all;
+  and the identity hook blocked every `git push` and `gh` call. New
+  `docs/SPRINTS.md` carries Sprint 10 as an S1 to S11 backlog in the format the
+  skill requires. New `.claude/profiles/shield.sh` runs the real containerized
+  gates.
+- **Three hook bugs found and fixed while verifying, each with a regression
+  test** (suite is 33 green): `run-gate.sh` fed its step list on stdin, so
+  `docker compose exec -T` ate the remaining steps and the five-step gate
+  reported "passed (1 steps)"; `no-bulk-stage.sh` matched `git add .` as a
+  substring, so every dotfile path read as a bulk stage; `identity.sh` blocked
+  `gh auth switch`, the command its own refusal message tells you to run.
+
+## Merged since the last update
+
+- **#49** auth refresh reuse storm (migration 0033, D-034), **#50** export
+  header mangling, **#51** the Sprint 10 plan, **#52** the ops pipeline, plus
+  dependabot #45, #46, #48. Main CI green at `f9e40aa` across all five jobs.
 
 ## Decisions made / carried (recorded for agents)
 
@@ -43,11 +52,12 @@ PRs open, Sprint 10 planning PR in flight, Sprint 11 designed)._
 
 ## Next steps
 
-1. Merge PR #49 and PR #50 once CI is green (fresh-runner e2e + demo jobs are
-   the authoritative suite runs — this box's back-to-back e2e was flaking on
-   the documented sign-in/cold-compile pattern by end of session).
-2. Merge the Sprint 10 planning PR, then stage the queue and launch
-   `/loop-sprint-cron` myself (agents never launch it).
+1. Merge the ops-pipeline reconciliation PR once CI is green.
+2. Launch Sprint 10 myself (agents never launch it): confirm
+   `bash .claude/hooks/run-gate.sh commit` is green with the stack up, cut
+   `feat/defensible-reports-sprint-10` from `main`, then
+   `/loop-sprint-cron start --account SpearheadAnalytica`. The backlog is
+   `docs/SPRINTS.md`; `SPRINT_10.md` holds the rationale.
 3. After Sprint 10 merges: Sprint 11 planning PR (design already drafted).
 4. **`sharp <0.35.0` HIGH advisory follow-up on `main`:** Dependabot bump or a
    root pnpm override. The `postcss` moderate rides along.
@@ -55,6 +65,16 @@ PRs open, Sprint 10 planning PR in flight, Sprint 11 designed)._
 
 ## Notes for Gene
 
+- **The `.claude/` hooks are committed, so they apply to you too.** Before your
+  first push here: `git config --local user.email` must be
+  `davidcatarious@spearheadanalytica.com` and the active gh account must be
+  `SpearheadAnalytica`, or `identity.sh` refuses every `git push` and every `gh`
+  call. That mapping is Dave's account boundary and it currently has no entry for
+  a second developer; if you need to push under your own identity, say so and the
+  `case` block in `.claude/hooks/identity.sh` gets a `gene-png` mapping.
+- Gate commands now live in one place, `.claude/profiles/shield.sh`, run via
+  `bash .claude/hooks/run-gate.sh commit|push`. They need Docker Desktop running
+  and the stack up, because everything except prettier runs in the containers.
 - The 2026-07-23 product walkthrough (Dave, both roles, all four reports) is
   the source of the current roadmap; the triaged 25-item feedback inventory
   lives in the Sprint 10 planning PR body.

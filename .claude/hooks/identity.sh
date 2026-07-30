@@ -27,6 +27,14 @@ PAYLOAD="$(read_payload)"
 CMD="$(payload_command "$PAYLOAD")"
 require_parsed "$CMD"
 
+# `gh auth ...` is the remediation, so it cannot be part of what gets refused. Without this
+# carve-out the refusal is unrecoverable inside a session: the hook blocks every `gh` call,
+# and the fix it prints ("gh auth switch --user ...") is a `gh` call. Nothing under
+# `gh auth` publishes to a repo, so exempting it costs the guard nothing.
+case "$CMD" in
+  *"gh auth"*) allow ;;
+esac
+
 # Only guard the two commands that publish. Everything else passes untouched.
 case "$CMD" in
   *"git push"*|*"gh "*) ;;

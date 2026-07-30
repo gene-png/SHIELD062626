@@ -1,8 +1,12 @@
 # SHIELD Delivery Plan — post-v2 (A–F) to production
 
-_Created 2026-07-02. Owner: David Catarious. Execution: autonomous sprint loop
-(`/loop-sprint-cron` + `.claude/sprint-queue.json`), human-gated items called out
-explicitly. Sprint docs: `SPRINT_<n>.md`._
+_Created 2026-07-02. Owner: David Catarious. Sprint docs: `SPRINT_<n>.md`._
+
+> **Historical, as of 2026-07-30.** This file covers Sprints 1 to 5 and is kept
+> for that record. It is no longer the loop's plan: `.claude/sprint-plan` names
+> `docs/SPRINTS.md`, and the `.claude/sprint-queue.json` execution model
+> described below is retired. Pointing the loop back here would run a Sprint-5-era
+> backlog unattended.
 
 ## Where we are
 

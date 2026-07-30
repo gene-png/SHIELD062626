@@ -49,6 +49,13 @@ check "two named paths"             $ALLOW no-bulk-stage.sh '{"tool_input":{"com
 check "git status"                  $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"git status"}}'
 check "unrelated command"           $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"ls -la"}}'
 check "a file merely named add"     $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"cat src/git-add-helper.md"}}'
+# `git add .` was matched as a substring, so every dotfile path read as a bulk stage. In
+# this repo that is the whole ops pipeline and all of CI, and the only way past the
+# refusal was the bulk stage it exists to prevent.
+check "dotdir path"                 $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"git add .claude/profile"}}'
+check "dotfile path"                $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"git add .gitignore"}}'
+check "two dotdir paths"            $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"git add .github/workflows/ci.yml .claude/profile"}}'
+check "dot path among flags"        $ALLOW no-bulk-stage.sh '{"tool_input":{"command":"git add --verbose .env.example"}}'
 check "empty payload"               $ALLOW no-bulk-stage.sh '{}'
 check "non-Bash tool"               $ALLOW no-bulk-stage.sh '{"tool_input":{"file_path":"x.ts"}}'
 
@@ -64,6 +71,11 @@ check "Canmore email, Spearhead repo" $BLOCK identity.sh '{"tool_input":{"comman
 check "same, via gh"                  $BLOCK identity.sh '{"tool_input":{"command":"gh pr create"}}'
 git config --local user.email "dcatario@gmail.com"
 check "personal email, Spearhead repo" $BLOCK identity.sh '{"tool_input":{"command":"git push"}}'
+# The refusal has to leave a way out. It prints "gh auth switch --user ..." as the fix, and
+# with `gh auth` inside the guard that command was refused too, so a session that tripped
+# the hook could not recover inside itself. Nothing under `gh auth` publishes to a repo.
+check "gh auth switch escapes"        $ALLOW identity.sh '{"tool_input":{"command":"gh auth switch --user SpearheadAnalytica"}}'
+check "gh auth status escapes"        $ALLOW identity.sh '{"tool_input":{"command":"gh auth status"}}'
 if [ -n "$saved" ]; then git config --local user.email "$saved"; else git config --local --unset user.email; fi
 check "restored identity pushes"      $ALLOW identity.sh '{"tool_input":{"command":"git push"}}'
 
@@ -92,6 +104,29 @@ else
   fail=$((fail+1)); printf '  FAIL  %s\n' "tool path with a space"
 fi
 rm -rf "$rg_base"
+
+echo "run-gate: a step that reads stdin"
+# The step list was fed to the read loop on stdin, so the first step that read stdin ate the
+# rest of it. SHIELD's five-step commit gate ran one step, skipped four, and reported
+# "passed (1 steps)". A skipped step reported as a passed step is the exact failure the
+# missing-tool branch refuses rather than skips for. `docker compose exec -T` is the real
+# case; `cat` reproduces it in one line.
+sg_base="$(mktemp -d)"
+sg_repo="$sg_base/repo"
+mkdir -p "$sg_repo/.claude/profiles" "$sg_repo/.claude/hooks" "$sg_repo/bin"
+cp "$HOOK_DIR"/*.sh "$HOOK_DIR"/json-field.pl "$sg_repo/.claude/hooks/"
+printf 'slurptest\n' > "$sg_repo/.claude/profile"
+printf 'GATE_COMMIT="slurp=cat\nsecond=marktool"\n' > "$sg_repo/.claude/profiles/slurptest.sh"
+printf '#!/usr/bin/env bash\ntouch second-step-ran\nexit 0\n' > "$sg_repo/bin/marktool"
+chmod +x "$sg_repo/bin/marktool" "$sg_repo/.claude/hooks"/*.sh
+( cd "$sg_repo" && git init -q . >/dev/null 2>&1 \
+  && PATH="$sg_repo/bin:$PATH" bash .claude/hooks/run-gate.sh commit ) >/dev/null 2>&1
+if [ -f "$sg_repo/second-step-ran" ]; then
+  pass=$((pass+1)); printf '  ok    %s\n' "step after a stdin reader still runs"
+else
+  fail=$((fail+1)); printf '  FAIL  %s\n        the second step never ran\n' "step after a stdin reader still runs"
+fi
+rm -rf "$sg_base"
 
 echo "parser"
 check "unreadable payload refuses"  $BLOCK no-bulk-stage.sh '{"tool_input":{"command":'

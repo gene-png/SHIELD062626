@@ -43,8 +43,18 @@ Playwright e2e lives in `e2e/` (host-run). Reference spec:
 
 ## Real commands (use these, not generic equivalents)
 
-- Docker CLI is NOT on Git Bash PATH:
-  `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` first, every shell.
+**Prefer the gate runner over typing these by hand.** `bash
+.claude/hooks/run-gate.sh commit` runs format + ruff/black + tsc + eslint; `bash
+.claude/hooks/run-gate.sh push` adds vitest + pytest. Both resolve
+`.claude/profile` (`shield`) to `.claude/profiles/shield.sh`, which is the single
+place the gate commands are written down. Change a gate there, not in a doc. The
+individual commands below are what that profile runs, listed for the case where
+one step fails and you need to run it in isolation.
+
+- Docker CLI may not be on Git Bash PATH:
+  `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` first, every
+  shell. It resolves without the export on Dave's box as of 2026-07-30; the gate
+  profile depends on `docker` resolving, and refuses by name if it does not.
 - Backend unit tests: `docker compose exec -T api pytest -m unit -q`
   (~3 min alone, 13–16 min under load; run detached and poll for the exit code).
 - Web typecheck: `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`
@@ -126,7 +136,8 @@ mechanism; docs carry only what git can't show.
 | `context/dave.md`, `context/gene.md` | Personal in-flight status: branch, what's mid-stream, next steps | Owner ONLY. Read the other's for awareness; never write it |
 | `DECISIONS.md` | Append-only decision log (D-numbers) | Both — append in the PR that makes the decision |
 | `docs/architecture.md` | Structure | Updated in the PR that changes architecture |
-| `SPRINT_<n>.md` | Per-sprint plan (immutable once the sprint closes) | Sprint author |
+| `SPRINT_<n>.md` | Per-sprint plan and its rationale (immutable once the sprint closes) | Sprint author |
+| `docs/SPRINTS.md` | The executable backlog the loop runs. Named by `.claude/sprint-plan` | Sprint author, then the loop appends to its Log |
 | `SMOKE_TEST.md` | QA checklist — a box is checked ONLY if a green committed spec proves it, annotated with the spec filename | Both, honesty convention enforced |
 
 Rules of the road:
@@ -138,16 +149,48 @@ Rules of the road:
 - Conventional commits; end commit bodies with the model's co-author line.
 - To see what your collaborator is doing: `gh pr list` + their `context/*.md`
   — not their unmerged branches.
-- `.claude/sprint-queue.json` is machine-local loop runtime state (gitignored).
-  Staged sprint queues (`.claude/sprint-queue.sprint-<n>.json`) ARE committed —
-  they're the plan of record.
+- **The loop's plan of record is `docs/SPRINTS.md`**, named by `.claude/sprint-plan`
+  and resolved against the repo root. It must carry a Loop protocol (the gate
+  commands, branch, commit conventions), a Backlog of `- [ ] **S<N> · Title.**`
+  entries whose every acceptance criterion names an observable outcome and its
+  evidence, and a Log the driver appends to. `/loop-sprint-cron` refuses to run
+  against a plan missing any of the three. The JSON sprint queues it replaced are
+  retired; `.claude/sprint-queue.sprint-3..9.json` remain only as history.
 - **Sprint loops are launched by the human dev at the keyboard, never by an
-  agent.** Agents plan the sprint, stage the queue, and merge the planning PR;
-  the dev walks the launch checklist and starts `/loop-sprint-cron` themselves
-  (the cron is session-scoped and needs babysitting only a human can commit to).
+  agent.** Agents plan the sprint, stage the backlog in `docs/SPRINTS.md`, and
+  merge the planning PR; the dev walks the launch checklist and starts
+  `/loop-sprint-cron start --account SpearheadAnalytica` themselves (the cron is
+  session-scoped and needs babysitting only a human can commit to).
 - **Sprint plans get a read-only Codex review before the planning PR merges**
   (since Sprint 8): `npm i -g @openai/codex`, `codex login`, then
   `codex exec --sandbox read-only` with the draft plan + pointed questions.
   Adopted/rejected findings are tabled in the planning PR body. Codex is a
   reviewer only — it authors nothing.
 - Never commit: credentials, tokens, `.env`, `e2e/artifacts/` binaries.
+
+## The ops pipeline (`.claude/`)
+
+Installed by PR #52 and reconciled for SHIELD by PR #53. Shared across repos, so
+change the generic parts upstream and keep the SHIELD-specific parts local.
+
+- **Commands** live in `.claude/commands/`. The set is `interview`, `spec`,
+  `skeleton`, `sprint`, `tdd`, `test`, `verify`, `review`, `audit`, `debugloop`,
+  `refactor`, `smoke`, `prototype`, `pickup`, `snapshot`, `ship`. `/ship` absorbed
+  the old `/commit` and `/pr`; `/snapshot` absorbed `/context`; `/interview`
+  absorbed `/kickoff`. The old `/loop-sprint` and `/loop-sprint-cron` commands are
+  gone: the autonomous driver is now the skill at
+  `.claude/skills/loop-sprint-cron/SKILL.md`. Keeping both definitions shadowed the
+  skill so neither resolved, which is how PR #52 left the loop unlaunchable.
+- **Gates** run through `.claude/hooks/run-gate.sh <commit|push>`, which reads the
+  one word in `.claude/profile` (`shield`) and sources
+  `.claude/profiles/shield.sh`. SHIELD needs its own profile because the generic
+  ones assume a host toolchain: `pnpm` is not installed on the host, and
+  `node-pnpm` declares no Python steps at all.
+- **Identity is enforced, not suggested.** `.claude/hooks/identity.sh` refuses
+  every `git push` and every `gh` call unless `git config user.email` is
+  `davidcatarious@spearheadanalytica.com`, the account all repo history is
+  authored under. Set it per-repo (`git config --local`), because the global
+  default on Dave's box is the Kentro address and a wrong identity blocks the loop
+  at its first push.
+- `.claude/settings.json` wires the SessionStart provisioner and the three
+  PreToolUse hooks. It is committed, so it applies to both devs.

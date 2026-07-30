@@ -1,0 +1,379 @@
+# SHIELD Sprints
+
+The plan of record for the autonomous loop. `.claude/sprint-plan` names this file, and
+`/loop-sprint-cron` resolves it against the repository root. The narrative rationale for
+the current batch of work lives in `SPRINT_10.md`; this file is the executable form of it,
+and where the two disagree, this file is what runs.
+
+Durable facts, real commands, and environment gotchas are in `CLAUDE.md`. Read it first.
+
+## Loop protocol
+
+### Verification gate
+
+The gate is a precondition, never a pass. Green commands prove the commands ran. They do
+not prove the product works, and no box gets checked on gate output alone.
+
+Run it through the pipeline rather than by hand, so local and CI agree:
+
+```
+bash .claude/hooks/run-gate.sh commit    # stack, prettier, ruff+black, tsc, eslint
+bash .claude/hooks/run-gate.sh push      # the above, plus vitest and pytest -m unit
+```
+
+Those resolve `.claude/profile` (`shield`) to `.claude/profiles/shield.sh`, which is the
+single place the commands are written down. The underlying commands, for reference when a
+step fails and you need to run it in isolation:
+
+| Step      | Command                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------- |
+| format    | `npx -y prettier@3.9.5 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`                     |
+| python    | `docker compose exec -T api sh -lc "cd /app && ruff check --no-cache . && black --check ."` |
+| typecheck | `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`              |
+| lint      | `docker compose exec -T web sh -lc "cd /app && pnpm -F web lint"`                           |
+| webtest   | `docker compose exec -T web sh -lc "cd /app && pnpm -F web test"`                           |
+| apitest   | `docker compose exec -T api pytest -m unit -q`                                              |
+
+Two suites sit outside the gate on purpose, and they are named here rather than left to be
+discovered:
+
+- **e2e** is host-run (`cd e2e && npx playwright test`), takes roughly 17 minutes, needs
+  the web container force-recreated after any `apps/web` edit, and needs a seeded
+  database. CI's fresh-runner E2E job is the authoritative run. S9 and S11 require it
+  locally anyway.
+- **bandit** is CI-only (`bandit -q -c pyproject.toml -r apps/api/app`). Ruff's
+  `# noqa: S1xx` does not suppress it. A flagged string needs its own `# nosec BXXX`.
+
+### Branch and identity
+
+- Branch: `feat/defensible-reports-sprint-10`, cut from `main`. Never commit to `main`.
+- Pushes and PRs run as `SpearheadAnalytica`. Start the loop with
+  `--account SpearheadAnalytica` so the identity guard is armed rather than warned past.
+- The local git email must be `davidcatarious@spearheadanalytica.com`. The
+  `.claude/hooks/identity.sh` PreToolUse hook refuses every `git push` and every `gh`
+  call otherwise, so a wrong identity halts the loop at its first push rather than
+  producing misattributed commits.
+
+### Commit conventions
+
+Conventional commits, one per sprint task, scoped to that task's files. End every commit
+body with the co-author line naming the model that actually did the work. Touching files
+outside the current sprint's declared file set is a failure, not a bonus.
+
+### Environment facts every runner must know
+
+All `CLAUDE.md` gotchas hold. These are the ones this batch trips over:
+
+- **The fixture-cycle pin, this batch's e2e landmine.** The deterministic status, stage,
+  and score cycles in `app/ai/fixtures.py` (`_MITRE_STATUS_CYCLE`, the ZT current/target
+  arithmetic, the CSF dimension arithmetic) are byte-frozen. S5 deepens prose only. The
+  structural pins that must keep behaving identically: `s4-techdebt:115/119/134` (the
+  exact "AI 60%"), `s5-attack:119/131/194` (changed-count, tool, status), `s6-zt:186`,
+  `s7-csf-playbook:238/249` (changed fields including `what_we_found`). One literal prose
+  pin moves with the prose: `s5-attack.spec.ts:151`, updated in the same commit.
+- **New Python modules need `docker compose restart api`.** S1 adds
+  `app/export_style.py`; uvicorn `--reload` may miss new files. Never restart api
+  mid-pytest (SIGKILL 137).
+- **Migration 0034 (S4)** applies in-container before any later e2e:
+  `docker compose exec -T api alembic upgrade head`. Unit tests build their own SQLite
+  schema.
+- **Re-seed after S5** (`docker compose exec -T api python scripts/seed_demo.py`,
+  idempotent) so demo rows carry the new evidence before S9's suite.
+- **No new dependencies, compose changes, or feature flags.** pypdf, openpyxl, reportlab,
+  and python-docx are already installed. Anything needing `docker compose build` is a
+  plan violation.
+- **After any `apps/web` source edit:** `docker compose up -d --force-recreate web`
+  before e2e. S6, S7, S8 touch web, and S10 usually will.
+- **The LLM stays in fixture mode for the entire batch.** No live-AI or cloud credentials
+  are needed. Fixture is the committed default and e2e always runs fixture.
+- Playwright traps, recurring: `getByRole` name matching is substring; use `click()` plus
+  `waitForResponse` on auto-save controls; assert post-Run-AI state after `page.reload()`;
+  spec-created users need unique timestamped emails.
+
+### Cut order if the batch must shrink
+
+S10 first, folding a minimal em-dash pass into S11. Then S8's HowAiWorks disclosure,
+keeping the banner mounts, the honest fixture copy, and the risk badge. Then S4's
+migration half, keeping the `build_roadmap()` section and heatmap, with narratives staying
+run-response-only and 0034 moving to the next batch. Then S7 trimmed to the CSF stepper,
+Impact Profile explainer, and home legend. Never cut S1, S2, S3, S5, or S9.
+
+### Out of scope
+
+- **Launching the loop.** The human dev at the keyboard runs `/loop-sprint-cron start`.
+  Agents plan and stage; they never start it.
+- The per-claim evidence and substantiation model, and the client evidence-attach UI.
+  That is the next batch. This one renders references to artifacts already attached
+  through the admin PATCH, being a filename or the explicit empty state, and nothing more.
+- Any client-facing AI disclosure. The section 6.4 AI-silent boundary in `home/page.tsx`
+  stays intact.
+- The live-Vertex flip. Post-batch, env-only, per D-029, never committed.
+
+## Backlog
+
+Version at close: `3.6.0`, tag and CHANGELOG level only. Package manifests are not
+touched. New decisions land in the task that makes them: D-035 (S2), D-036 (S1), D-037
+(S8). D-034 is taken by merged PR #49. One migration, `0034_zt_narratives` (S4).
+
+- [ ] **S1 · Shared export style module and five-exporter adoption (D-036).**
+      Scope: new `apps/api/app/export_style.py` as the single home for deliverable styling,
+      adopted by `app/{tech_debt,attack,csf,zt,risk}/exporters.py` and `playbook_export.py`.
+      Brand hexes documented against `packages/design-system` tokens: ink `#0e1220`, border
+      `#d6dae3`, sunken `#eef2f7`, brand navy `#1b3a7a`. `LEVEL_HEX` relocates from
+      `playbook_export.py:204-210` and is re-exported there for compat. Consult `/dataviz` for
+      ramp construction (sequential, AA-checked text on fills).
+      Acceptance criteria:
+  - `graded_hex(level, n_levels)` raises on out-of-range input rather than clamping.
+    Evidence: `tests/unit/test_export_style.py`, a case asserting the raise on both a
+    negative level and one above `n_levels`.
+  - `escaped_title(service_title, client_name)` escapes `&` and `<`, and never repeats the
+    org name. Evidence: same file, a case asserting the rendered title for an org named
+    with an ampersand equals the escaped single-org string.
+  - Hotfix PR #50's inline `html.escape()` calls are gone from all five exporters and the
+    behaviour now comes from `escaped_title()`. Evidence: `grep -c 'html.escape' ` over the
+    five exporter modules returns 0, plus the existing header tests still pass unchanged.
+  - Per-exporter page geometry is preserved, not unified: the four service exporters keep
+    0.6in margins and the playbook keeps 0.7in, with `new_pdf_doc()` parameterizing them.
+    Evidence: `tests/unit/test_export_style.py` parity contracts asserting each exporter's
+    margin value, plus PDF page-count pins on a fixed context.
+  - No rendered text changes. Evidence: every existing exporter content test passes with
+    no edits to the test files, shown by the diff touching no `tests/unit/test_*exporters*`
+    assertion lines.
+  - D-036 appended to DECISIONS.md.
+    Note: new module under `app/` means `docker compose restart api`.
+
+- [ ] **S2 · ATT&CK deliverable renders curated evidence and a tactic heatmap (D-035).**
+      Scope: `app/attack/exporters.py` and the `routes/attack.py` context builder.
+      Acceptance criteria:
+  - The Coverage sheet carries Detection tools, Prevention tools, Response tools, and
+    Rationale columns, lists joined with `", "`. Evidence:
+    `tests/unit/test_attack_exporters.py`, an XLSX header contract case plus a case
+    asserting a joined-tools cell equals `"Okta, CrowdStrike"` for a two-tool row.
+  - An Evidence reference column resolves the attached artifact's filename from
+    `evidence_artifact_id` through a join in the route context builder, and renders
+    `"No evidence attached"` when NULL. Evidence: same file, one case per branch.
+  - Gap Direction cells state citation facts only, never causal or remediation inference:
+    `"No detection, prevention, or response tool is cited for this technique"`, or
+    `"Cited: <tools> (partial)"`. Evidence: same file, a tool-less gap case asserting the
+    first string verbatim.
+  - The PDF and DOCX carry a defensibility stat phrased on citations,
+    `"N of M scored techniques cite at least one tool"`, and a methodology note disclosing
+    that tools and rationale are drafted by Run AI, are consultant-editable, have a per-row
+    lock, and that substantiation states arrive next batch. Evidence: same file, substring
+    assertions over extracted PDF text.
+  - Heatmap Summary Coverage % cells carry `coverage_hex` fills. Evidence: same file,
+    asserting `cell.fill.start_color`.
+  - D-035 appended to DECISIONS.md recording the label discipline: citation facts only, no
+    remediation column, no migration, no prompt change.
+    Source-faithful labeling is the blocker Codex raised: Run AI overwrites every unlocked
+    row's tools and rationale at `routes/attack.py:593-599`, so those fields are AI-applied
+    unless the consultant edited or locked them, and no acceptance state exists yet.
+
+- [ ] **S3 · CSF released deliverable adopts the POA&M machinery and tier heatmap.**
+      Scope: `routes/csf.py` release/export path plus `app/csf/exporters.py`.
+      Acceptance criteria:
+  - The release path loads `CsfGapAction` rows and passes them into `build_context`.
+    Evidence: `tests/unit/test_csf_deliverable_routes.py`, a case asserting the context
+    carries the action rows.
+  - The XLSX Gap Plan carries Characterization, Owner, Deadline, Resources, Success
+    criteria, and POA&M ref, with `priority_override` winning, mirroring the
+    `playbook_export.py:137-178` contract. Evidence: `tests/unit/test_csf_exporters.py`,
+    a header contract case, a case asserting an action row renders its owner and deadline,
+    and a case asserting the override value wins over the computed one.
+  - The PDF and DOCX carry an Action Plan section, a tier-model methodology block built
+    from `TIER_DEFINITIONS`, and computed next-step sentences. Evidence: same file, a
+    tier-definition substring assertion and a next-step line assertion over extracted text.
+    The playbook's five-dimension METHODOLOGY text is not copied; it describes a different
+    scoring model.
+  - Answers-sheet Tier cells and per-function Average-tier cells carry `graded_hex(tier, 4)`
+    fills. Evidence: same file, asserting `cell.fill.start_color`.
+  - An Evidence reference resolves `CsfAnswer.evidence_artifact_id` to a filename, or
+    renders `"No evidence attached"`. Evidence: same file, one case per branch.
+  - A zero-actions assessment still renders. Evidence:
+    `tests/unit/test_csf_deliverable_routes.py`, the C0-pattern case.
+
+- [ ] **S4 · ZT roadmap and persisted AI narratives, migration `0034_zt_narratives`.**
+      Highest risk in the batch. Scope: the migration, `schemas/zt.py`, `routes/zt.py`,
+      `app/zt/exporters.py`, `apps/web/src/lib/zt/types.ts`.
+      Acceptance criteria:
+  - Migration `0034_zt_narratives` adds `roadmap_summary` Text, `executive_summary` Text,
+    and `pillar_narratives` JSON using the `JSON().with_variant(JSONB, "postgresql")`
+    pattern from `attack_assessment.py:34`. All three nullable, `batch_alter_table`,
+    additive. Evidence: `tests/unit/test_zt_routes.py`, a case parsing a row with all three
+    columns NULL (the C0 pattern).
+  - The narrative persist is atomic against a racing discard. The existing shape is
+    check-then-write (flush, re-read parent status at `zt.py:504`, write), leaving a window
+    a discard can commit into. It becomes a conditional parent
+    `UPDATE ... WHERE status IN (<editable statuses>)` requiring exactly one affected row
+    (the D-031 pattern from the previous batch), or a row lock held through commit.
+    Evidence: `tests/unit/test_zt_run_ai.py`, a race case that injects the discard through
+    a monkeypatch **between** the status check and the write, asserting the persist loses
+    loudly. A discard arranged before the check proves nothing about this window and does
+    not satisfy this criterion.
+  - The three new fields leave the API and reach the web type: `ZtAssessmentResponse` gains
+    them as optional with `pillar_narratives` defaulting to `None` and never a mutable
+    `{}`; the manual enumeration in `routes/zt.py` `_serialize_assessment` (`:159`) is
+    extended; `apps/web/src/lib/zt/types.ts:52` gains them as optional. Evidence:
+    `tests/unit/test_zt_routes.py` asserting the serialized payload carries all three keys,
+    plus `tsc --noEmit` green with the web type consumed.
+  - Every persisted-narrative write sets `documents_stale`. Evidence:
+    `tests/unit/test_zt_run_ai.py`, a case asserting the flag after persist.
+  - The exporter renders a Roadmap section from `build_roadmap(gap.gaps)` carrying month,
+    capability, pillar, and current to target. Evidence: `tests/unit/test_zt_exporters.py`,
+    a month and capability contract case.
+  - Narrative sections render only when persisted; absent means the section is omitted, not
+    an empty header. Labels are "Assessment narrative" and "Consultant summary", with AI
+    attribution living in the methodology note the way the playbook does it. Evidence: same
+    file, one case rendering with narratives set and one asserting no section header when
+    NULL.
+  - The stage heatmap is framework-aware: `graded_hex(stage, level_count(framework))`, DoD
+    being a 3-rung ladder and CISA 4. Evidence: same file, a case asserting the DoD ramp
+    uses 3 rungs.
+  - An Evidence reference resolves `ZtAnswer.evidence_artifact_id` to a filename, or
+    renders `"No evidence attached"`. Evidence: same file, one case per branch.
+    Note: `alembic upgrade head` in-container before any later e2e.
+
+- [ ] **S5 · Demo evidence depth: seed, fixtures, tech-debt narrative.**
+      Scope: `scripts/seed_demo.py`, `app/ai/fixtures.py`, `app/tech_debt/exporters.py`.
+      Acceptance criteria:
+  - The seed replaces the every-25th hardcoded sentence at `:811-815` with systematic
+    structured evidence: covered and partial rows get deterministic detection, prevention,
+    and response tools drawn from seeded Atlas capability names plus a per-(status, tactic)
+    rationale; gap rows get a rationale explaining the miss; a deterministic subset of CSF
+    and ZT answers gets evidence-flavored notes; the seeded ZT assessment gets
+    `roadmap_summary` and `pillar_narratives`. Idempotency is preserved. Evidence: two
+    consecutive `python scripts/seed_demo.py` runs produce identical row counts, captured
+    in the log line.
+  - Fixture prose deepens with the cycles byte-identical. Evidence:
+    `tests/unit/test_ai_runtime_fixtures.py`, a regression pin asserting
+    `_MITRE_STATUS_CYCLE` and the ZT and CSF arithmetic are unchanged, plus a case
+    asserting the rationale names the cited tool.
+  - The e2e prose pin moves with the prose in the same commit:
+    `s5-attack.spec.ts:151` currently pins `"Fixture-mode draft coverage assessment for
+T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pin and
+    the fixture string changing together.
+  - The tech-debt PDF, DOCX, and XLSX summaries carry a computed portfolio paragraph:
+    counts by disposition, top cost drivers, and savings framing including the existing
+    lower-bound caveat. Computed sentences only. Evidence:
+    `tests/unit/test_exporters.py`, a narrative contract case.
+  - SMOKE section 26 boxes re-pointed to the evidence-rich seed.
+
+- [ ] **S6 · Questionnaire guidance: make every question answerable.**
+      Scope: `CsfQuestionnaire.tsx`, `ZtQuestionnaire.tsx`, `CsfSelfAssessment.tsx`, new
+      `apps/web/src/lib/guidance/`, new `CsfMaturityReference.tsx`. Author content under
+      `/writing-style`.
+      Acceptance criteria:
+  - A per-question "What do these levels mean?" disclosure renders full level descriptions
+    plus a worked example, in both the admin and client renders. Evidence: vitest case
+    asserting the disclosure content in the client configuration.
+  - The guidance module carries a plain-language explainer per tier, one worked example per
+    CSF function per tier (6x4), and one per ZT stage (CISA 4 and DoD 3). Evidence: vitest
+    case asserting every tier and stage has both a description and an example, iterating
+    the full set rather than sampling.
+  - Web and backend label text cannot drift. Evidence: vitest parity pin asserting the four
+    tier labels match `TIER_DEFINITIONS` and the stage labels match `CISA_STAGES` and
+    `DOD_STAGES`.
+  - Clients see the interview prompts: `CsfSelfAssessment.tsx` fetches
+    `GET /csf/services/{id}/questionnaire` (already any-role tenant-scoped at
+    `routes/csf.py:226-238`, so zero backend change) and passes `questionsByCode` labeled
+    `"Consider:"` rather than `"Interview ·"`. Evidence: vitest case asserting the client
+    label.
+  - The Notes textarea carries instructive copy naming the tool, policy, or process behind
+    an answer. Evidence: vitest case on the copy.
+  - `TierPicker` and `ZtStagePicker` internals are untouched, keeping the roving-tabindex
+    and select-on-Enter contract and the auto-save PATCH-flood guard at
+    `TierPicker.tsx:32-37`. Evidence: the diff touches neither file.
+
+- [ ] **S7 · Workspace and platform comprehension.**
+      Scope: new `components/admin/WorkflowSteps.tsx`, `CsfPlaybookPanel.tsx`,
+      `/admin/management`, `HomeDashboard.tsx`, `CsfSelfAssessment.tsx`. Scheduled before S8,
+      which touches the same workspace files.
+      Acceptance criteria:
+  - A static ordered step strip renders in all four workspaces with per-service copy and
+    the current step derived from assessment or list status. Evidence: vitest
+    step-highlight table case covering each status to step mapping.
+  - The CSF and ZT copy carries the ownership line: the consultant reviews and edits the
+    client's answers, the client sees the outcome, the consultant owns the quality. The
+    existing banner at `CsfWorkspace.tsx:385-394` stays. Evidence: vitest case on the copy.
+  - `CsfPlaybookPanel.tsx` carries a header legend explaining Tiers, Enterprise, Rule, and
+    the Gap priority chips at `:70-109`. Evidence: vitest disclosure-renders case.
+  - The home "Your services" legend explains all five `phaseFor` labels at `:76-93`, and an
+    Impact Profile explainer renders where `profileLabel` does at
+    `CsfSelfAssessment.tsx:253-261`. Evidence: vitest case asserting all five labels.
+
+- [ ] **S8 · AI transparency, consultant-facing (D-037).**
+      Scope: `routes/admin.py`, the four workspaces, new `HowAiWorks.tsx`, risk register rows.
+      Acceptance criteria:
+  - `AiStatusBanner` mounts in the three unbannered workspaces (attack, csf, zt). Evidence:
+    vitest mount case per workspace.
+  - The fixture-mode copy stops lying. `routes/admin.py:502-512` becomes `"AI runs in
+offline fixture mode: Run AI returns deterministic demo drafts, not live model
+output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail string
+    verbatim.
+  - The banner distinguishes tones, fixture being info and live-misconfigured being
+    warning. Evidence: vitest case per tone.
+  - Risk-register rows badge AI-suggested entries using the existing origin and trust
+    fields at `models/risk_register.py:87-88`, admin surface only. Evidence: vitest case
+    asserting the badge renders for an AI-origin row and not for a consultant one.
+  - A compact `HowAiWorks.tsx` disclosure renders near Run AI in the four workspaces
+    covering what AI drafts per service, what code computes, the redaction gate, and
+    fixture versus live. Evidence: vitest content case.
+  - The client surface stays byte-silent on AI. Evidence: the diff touches no client-surface
+    file, and the section 6.4 AI-silent comment in `home/page.tsx` is intact.
+  - D-037 appended to DECISIONS.md.
+
+- [ ] **S9 · e2e proofs and SMOKE sections 33, 34, 35.**
+      Scope: extend existing specs, add exactly one new file.
+      Acceptance criteria:
+  - `s3-selfassessment.spec.ts` proves a client sees tier guidance, an interview prompt,
+    and the notes helper copy. `s6-zt.spec.ts` proves stage guidance and that the DoD
+    ladder shows 3 stages. `s7-csf-playbook.spec.ts` proves the column legend and stepper.
+    `s4` and `s5` prove the fixture-info banner is visible. Evidence: each named spec
+    green, quoted in the log line.
+  - One new `s27-comprehension.spec.ts` proves the management purpose copy, the home status
+    legend, the risk AI-suggested badge, and the HowAiWorks disclosure. Evidence: the spec
+    committed and green.
+  - One PDF acceptance contract per service, unit-level over real bytes in the existing
+    exporter test files, asserts section order via extracted-text index ordering plus one
+    representative linkage: a score, its evidence or citation reference, and its gap or
+    action appearing in the expected sequence. Evidence: the four named test cases.
+  - SMOKE gains section 33 (Defensible deliverables, boxes citing the S1 to S5 unit test
+    filenames), section 34 (Questionnaire guidance, spec filenames), and section 35
+    (Workspace comprehension and AI transparency, spec filenames). Section 26 is
+    re-pointed to the evidence-rich seed. Section 10 keeps exactly its one manual
+    aesthetics line, now also covering heatmap coloring, which is the only thing tests
+    cannot see in a PDF.
+  - The full host e2e suite is green after `--force-recreate web`, `alembic upgrade head`,
+    and a re-seed. Evidence: the Playwright run summary pasted into the log line.
+
+- [ ] **S10 · Prose scrub.**
+      First to cut. Load `/writing-style` and sweep UI copy plus export, fixture, and seed
+      prose, including everything S2 through S8 authored. Code identifiers, log prefixes, and
+      UI glyphs are exempt.
+      Acceptance criteria:
+  - Where the scrub changes a substring a unit test pins, prose and pin move together in
+    one commit. Alignment, never weakening. Evidence: the commit diff showing both sides.
+  - The full push gate is green afterwards. Evidence: gate output in the log line.
+
+- [ ] **S11 · Wrap-up.**
+      Acceptance criteria:
+  - SMOKE final pass over the section 10 note, section 26, and sections 33 to 35. Every box
+    is checked only with its proving spec or test filename beside it. Evidence: the diff.
+  - CHANGELOG `[3.6.0]` carries a per-task entry with its commit. BUILD_REPORT syncs gate
+    results at HEAD, e2e spec count, migration 0034, and D-035, D-036, D-037.
+  - `CONTEXT.md` is overwritten with the end-of-batch snapshot, and the launching dev's own
+    `context/<name>.md` is refreshed. Owner-only rule applies: never write the other dev's
+    file.
+  - No live-LLM config reached a committed file. Evidence:
+    `git diff main --stat` showing no `.env`, and a grep for `SHIELD_LLM_MODE=live`
+    returning nothing outside documentation.
+  - Full push gate plus full e2e green on a quiet box. Deferred items carried forward.
+
+## Log
+
+The driver appends one line per completed sprint: `date · sprint · evidence-paths · sha`.
+Checkpoints append `checkpoint · pass|fixed · counts`. Shutdown appends
+`shutdown · pass|fixed|blocked · pushed=<t/f> · pr=<url|none>`.
+
+- 2026-07-30 · backlog authored from SPRINT_10.md, translated to the loop-sprint-cron
+  format on `chore/reconcile-ops-pipeline`. Not yet launched.
