@@ -15,13 +15,13 @@
 
 import NextAuth, { CredentialsSignin, customFetch } from "next-auth";
 import type { NextAuthConfig, User } from "next-auth";
-import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import Keycloak from "next-auth/providers/keycloak";
 
 import { ApiError, apiFetch } from "@/lib/api";
-import { OIDC_EXCHANGE_ERROR, REAUTH_REQUIRED_ERROR } from "@/lib/auth/errors";
+import { OIDC_EXCHANGE_ERROR } from "@/lib/auth/errors";
 import { isOidcEnabled, keycloakFetch } from "@/lib/auth/oidc";
+import { reasonOf, resolveSessionToken } from "@/lib/auth/refresh";
 
 interface LoginResponse {
   access_token: string | null;
@@ -46,72 +46,6 @@ interface LoginResponse {
  */
 class MfaRequiredError extends CredentialsSignin {
   code = "mfa_required";
-}
-
-/** Mirrors the backend TokenPairResponse returned by POST /auth/refresh, which
- * always yields a full (non-null) pair — unlike /auth/login, which can return
- * an MFA challenge instead. */
-interface RefreshResponse {
-  access_token: string;
-  refresh_token: string;
-  access_expires_at: string;
-  refresh_expires_at: string;
-}
-
-/** Refresh this many ms early so an in-flight proxy call never races expiry. */
-const REFRESH_SKEW_MS = 30_000;
-
-/** Pull the typed `reason` out of the backend's {error:{reason}} envelope. */
-function reasonOf(payload: unknown): string | undefined {
-  if (payload && typeof payload === "object" && "error" in payload) {
-    const err = (payload as { error?: unknown }).error;
-    if (err && typeof err === "object" && "reason" in err) {
-      const reason = (err as { reason?: unknown }).reason;
-      return typeof reason === "string" ? reason : undefined;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Trade the stored refresh token for a fresh access+refresh pair.
- *
- * The backend access token lives 15 min while the NextAuth session lives
- * 24 h, so without this the session keeps handing proxies a dead bearer and
- * every upstream call 401s. On failure we stamp the token with an error so
- * `session()` stops exposing the access token and the UI falls back to
- * sign-in. A backend `reauth_required` / `refresh_reused` reason (daily
- * forced-reauth ceiling, or a rotated-out token) is surfaced as the distinct
- * REAUTH_REQUIRED_ERROR so the UI can show friendly "please sign in again"
- * copy rather than a generic error.
- */
-async function refreshAccessToken(token: JWT): Promise<JWT> {
-  if (!token.refreshToken) {
-    return { ...token, error: "RefreshAccessTokenError" };
-  }
-  try {
-    const refreshed = await apiFetch<RefreshResponse>("/auth/refresh", {
-      method: "POST",
-      body: { refresh_token: token.refreshToken },
-      // Refresh is not tenant-scoped; don't leak a cookie-derived X-Client-Id.
-      clientId: "",
-    });
-    return {
-      ...token,
-      accessToken: refreshed.access_token,
-      refreshToken: refreshed.refresh_token,
-      accessExpiresAt: refreshed.access_expires_at,
-      error: undefined,
-    };
-  } catch (err) {
-    const reason = err instanceof ApiError ? reasonOf(err.payload) : undefined;
-    const isReauth =
-      reason === "reauth_required" || reason === "refresh_reused";
-    return {
-      ...token,
-      error: isReauth ? REAUTH_REQUIRED_ERROR : "RefreshAccessTokenError",
-    };
-  }
 }
 
 interface MeResponse {
@@ -313,14 +247,12 @@ export const authConfig: NextAuthConfig = {
         return token;
       }
       // Subsequent calls: keep the access token alive while it's still valid,
-      // otherwise rotate it via the refresh token before any proxy reads it.
-      const expiresAt = token.accessExpiresAt
-        ? Date.parse(token.accessExpiresAt)
-        : 0;
-      if (expiresAt && Date.now() < expiresAt - REFRESH_SKEW_MS) {
-        return token;
-      }
-      return refreshAccessToken(token);
+      // otherwise rotate it before any proxy reads it. Delegated to the
+      // chain-cache refresher (hotfix, D-034): concurrent server-side callers
+      // share one in-flight rotation and stale-cookie callers ride the cached
+      // chain head, so the backend never sees the token replays it treats as
+      // theft (the ~15-min forced sign-out storm).
+      return resolveSessionToken(token);
     },
     async session({ session, token }) {
       session.role = token.role;

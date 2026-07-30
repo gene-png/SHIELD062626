@@ -72,6 +72,16 @@ class User(UUIDPKMixin, TimestampMixin, Base):
     # any user who has not yet logged in simply have no active refresh token.
     active_refresh_jti: Mapped[str | None] = mapped_column(String(36))
 
+    # One-step reuse grace (hotfix, D-034): the jti rotated out by the most
+    # recent NORMAL rotation plus when that rotation happened. /auth/refresh
+    # accepts a replay of exactly this jti within jwt_refresh_reuse_grace_seconds
+    # of refresh_rotated_at (concurrent web-side refreshes and post-restart
+    # stale cookies replay it benignly); the window is anchored here and grace
+    # hits never update these fields. Nullable/additive (C0): pre-migration
+    # rows carry no grace window and behave strictly, as before.
+    prev_refresh_jti: Mapped[str | None] = mapped_column(String(36))
+    refresh_rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     # Keycloak subject (TOFU-bound) for the hybrid OIDC exchange (Sprint 9 T4,
     # D-032). NULL until this user first completes POST /auth/oidc/exchange, at
     # which point the token's `sub` is stamped here; a later exchange whose sub

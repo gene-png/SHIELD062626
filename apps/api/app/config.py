@@ -137,6 +137,14 @@ class Settings(BaseSettings):
     # Session security (Master Spec §4.5)
     jwt_access_ttl_seconds: int = Field(default=900, ge=60)
     jwt_refresh_ttl_seconds: int = Field(default=1800, ge=300)
+    # One-step refresh reuse grace (hotfix, D-034): how long after a rotation
+    # the immediately-prior refresh token may still be redeemed for a fresh
+    # pair. Concurrent web-side refreshes and post-restart stale cookies replay
+    # that token benignly; without grace every such replay force-signs-out the
+    # user (reason=refresh_reused). The window is anchored at rotation time —
+    # grace hits do not extend it — and a token two or more rotations old is
+    # always rejected. 0 restores strict single-jti rotation.
+    jwt_refresh_reuse_grace_seconds: int = Field(default=900, ge=0)
     # Short-lived token issued after the password factor when MFA is enrolled;
     # exchanged for the full pair by POST /auth/mfa/verify-login (Sprint 6 T4).
     jwt_mfa_pending_ttl_seconds: int = Field(default=300, ge=60)
