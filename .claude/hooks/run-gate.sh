@@ -55,7 +55,18 @@ FAILED=""
 MISSING=""
 RAN=0
 
-while IFS= read -r step; do
+# Read the step list on fd 3, not stdin, and run each step with stdin closed.
+#
+# A step that reads stdin otherwise eats the rest of the list. `docker compose exec -T`
+# does exactly that: SHIELD's five-step commit gate ran step one, which consumed steps two
+# through five out of the heredoc, and then reported "passed (1 steps)". Every gate after
+# the first stdin-reading tool was skipped, and the report said green. ssh and ffmpeg
+# behave the same way.
+#
+# This is the failure this whole file argues against in its header: a step that does not
+# run must never be reported as a step that passed. Fixing it here rather than by adding
+# </dev/null to each profile means a profile author cannot reintroduce it by forgetting.
+while IFS= read -r step <&3; do
   [ -n "$step" ] || continue
   name="${step%%=*}"
   run="${step#*=}"
@@ -76,11 +87,11 @@ while IFS= read -r step; do
   [ -n "$resolved" ] && run="$(printf '%q' "$resolved")${run#"$first"}"
 
   RAN=$((RAN+1))
-  out="$(eval "$run" 2>&1)" || FAILED="$FAILED
+  out="$(eval "$run" 2>&1 </dev/null)" || FAILED="$FAILED
 
 --- $name ---
 $(printf '%s' "$out" | tail -30)"
-done <<EOF
+done 3<<EOF
 $(printf '%s' "$STEPS")
 EOF
 

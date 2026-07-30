@@ -27,8 +27,13 @@ require_parsed "$CMD"
 # Normalise runs of whitespace so `git   add   -A` matches too.
 NORM="$(printf '%s' "$CMD" | tr -s '[:space:]' ' ')"
 
+# `git add .` is matched as a whole argument, not as a substring. Written as
+# *"git add ."* it also matched every dotfile path: `git add .claude/profile`,
+# `git add .github/workflows/ci.yml`, `git add .gitignore`. In this repo that is most of
+# the ops pipeline and all of CI, so the guard refused the exact staging it is meant to
+# encourage, and the only way past it was the bulk stage it exists to prevent.
 case "$NORM" in
-  *"git add -A"*|*"git add --all"*|*"git add ."*|*"git add -u"*)
+  *"git add -A"*|*"git add --all"*|*"git add -u"*|*"git add ."|*"git add . "*)
     refuse "bulk staging is refused. Stage named paths instead.
 
   git add path/to/file.ts path/to/other.ts
