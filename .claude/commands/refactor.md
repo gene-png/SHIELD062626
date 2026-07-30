@@ -1,102 +1,74 @@
 ---
-description: Codebase-wide refactor pass — finds accumulated complexity, duplication, and drift after multiple sprints. Different from /debugloop which finds bugs; this finds smell. Always TDD-safe: no behaviour changes, tests stay green.
-allowed-tools: Read, Edit, Write, Bash(find:*), Bash(npx tsc:*), Bash(npx playwright test:*), Bash(git diff:*)
+description: Remove complexity without changing behaviour. Contract tests survive, assertions never weaken, and the mutations get rerun around what moved.
+argument-hint: [area to refactor, or blank for the whole codebase]
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(bash .claude/hooks/*), Bash(git diff:*), Bash(git status:*), Agent
 ---
 
-Run a structured refactor pass across the codebase. The goal is to reduce complexity and duplication that has accumulated over multiple sprints — **without changing any behaviour**.
+# /refactor
 
-**Ground rule: every test must still pass after every change. If a refactor would break a test, stop and flag it rather than modifying the test.**
-
----
-
-## Stage 1 — Parallel analysis
-
-Spawn four subagents to analyse in parallel:
-
-### Agent 1 — Duplication Scanner
-Read all source files and identify:
-- Functions that do the same thing in different places
-- Copy-pasted blocks (even with minor variations)
-- Similar conditional logic repeated across files
-- Constants or magic numbers defined multiple times
-
-Report as: `[FILE:LINE] — duplicate of [FILE:LINE] — description`
-
-### Agent 2 — Complexity Scanner
-Read all source files and flag:
-- Functions longer than ~25 lines that could be split
-- Functions that do more than one thing (detectable by: "and" in the function name, multiple unrelated operations in the body, deeply nested conditionals)
-- Files longer than ~200 lines that have grown into catch-alls
-- Parameters lists with more than 4 parameters (candidate for an options object)
-
-Report as: `[FILE:LINE] functionName — reason it's complex`
-
-### Agent 3 — Naming & Consistency Scanner
-Read all source files and flag:
-- Inconsistent naming conventions (camelCase vs snake_case, `get` vs `fetch` vs `load` for similar operations)
-- Vague names that require reading the function body to understand (`handle`, `process`, `doThing`, single-letter variables outside loops)
-- Inconsistent module/file naming
-- Functions named differently than what they actually do
-
-Report as: `[FILE:LINE] — current name — issue — suggested name`
-
-### Agent 4 — Architecture Drift Scanner
-Read `ARCHITECTURE.md` and compare against what actually exists:
-- Files or modules that exist but weren't planned
-- Planned modules that ended up in the wrong place
-- Dependencies between modules that shouldn't exist (e.g. UI code importing directly from DB layer)
-- `TODO`, `FIXME`, `HACK` comments accumulated in the code
-
-Report as: `[FILE] — description of drift`
+## Scope
+$ARGUMENTS
 
 ---
 
-## Stage 2 — Prioritise and plan
+This command finds smell. `/debugloop` finds defects. Keep them apart, because a refactor
+that also fixes a bug is a change nobody can review.
 
-Consolidate all findings into a prioritised refactor plan:
+## Take the baseline first
+
+Run the suite and record the exact numbers before touching anything. Without a baseline
+you cannot tell a defect you introduced from one that was already there, and this repo
+has three known-unstable admin-bulk tests that move between runs.
+
+Paste the baseline.
+
+## What to look for
+
+- The same logic in more than one place, especially a hardcoded value repeated across
+  renderers.
+- A function doing several jobs, where the seam is obvious rather than imagined.
+- Dead code, unreached branches, unused exports.
+- Types that permit states the domain does not: a string where an enum belongs, an
+  optional field that is never absent in practice, an `as` at an I/O boundary.
+- Drift between two copies of something that was meant to stay in step.
+
+## What to leave alone
+
+No abstraction before it is needed. A second occurrence is a coincidence. A third is a
+pattern. Extracting a shared helper from two callers usually costs more than it saves.
+
+## The refusals
+
+**REFUSE** to weaken an assertion. If a test fails after a change, the change is wrong
+until proven otherwise. Revert it and say what happened.
+
+**REFUSE** to replace a public interaction with state injection to make a test faster. An
+acceptance test that stops clicking has stopped testing.
+
+**REFUSE** to change what happens for a missing or unknown input. That behaviour is the
+specification, however incidental it looks.
+
+**REFUSE** to change behaviour at all. If you find a defect, stop, write it down, and
+finish the refactor first. Then run `/debugloop` on it separately.
+
+## After each change
+
+Run the suite. Compare to the baseline, not to green: the same tests pass that passed
+before, and no new failure appears.
+
+## Rerun the mutations around what moved
+
+For each boundary you changed, break the code on purpose and confirm a test still goes
+red. **Paste it.** A refactor can silently sever a test from the thing it was testing,
+and the suite stays green either way, which is the failure mode this whole command set
+exists to catch.
+
+## Report
 
 ```
-## Refactor Plan
-
-### High Priority (complexity or duplication that's actively causing problems)
-1. [specific change] — [why it matters]
-
-### Medium Priority (naming and consistency)
-2. [specific change]
-
-### Low Priority / Nice to Have
-3. [specific change]
-
-### Architecture Drift (flag for discussion, don't auto-fix)
-- [item]
+BASELINE: <n> passed, <n> failed, <n> skipped
+CHANGES: <one line each, with the smell removed>
+AFTER: <n> passed, <n> failed, <n> skipped  (identical to baseline, or explained)
+MUTATIONS RERUN: <boundary> -> <pasted failure>
+DEFECTS FOUND, NOT FIXED: <list for /debugloop>
 ```
-
-**Present this plan to me and wait for approval before making any changes.**
-
----
-
-## Stage 3 — Execute approved refactors
-
-For each approved item, in priority order:
-
-1. Make the change — smallest possible diff that achieves the goal
-2. Run `npx tsc --noEmit` — confirm no type errors
-3. Run `npx playwright test --reporter=line` — confirm all tests still pass
-4. If tests break, **revert the change immediately** and flag it — do not try to fix tests to accommodate a refactor
-
-Do not batch multiple refactors together. One at a time, tests after each.
-
----
-
-## Stage 4 — Final check
-
-After all approved refactors:
-
-```bash
-npx playwright test --reporter=line
-npx tsc --noEmit
-```
-
-Both must be clean.
-
-Report: what was changed, what was skipped (and why), final test result.
