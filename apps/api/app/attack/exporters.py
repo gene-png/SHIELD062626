@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 from collections.abc import Iterable
 from dataclasses import dataclass
+from html import escape
 from typing import TYPE_CHECKING
 
 from app.attack.analytics import CoverageRollup
@@ -295,8 +296,10 @@ def render_pdf(ctx: AttackDeliverableContext) -> bytes:
     body = styles["BodyText"]
 
     story: list = []
-    story.append(Paragraph(ctx.service_title, h1))
-    story.append(Paragraph(ctx.client_legal_name, body))
+    # Paragraph parses reportlab mini-XML: a bare "&" (e.g. "ATT&CK", "R&D
+    # Corp") re-emits as an unknown entity with a synthesized semicolon.
+    story.append(Paragraph(escape(ctx.service_title), h1))
+    story.append(Paragraph(escape(ctx.client_legal_name), body))
     story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("Coverage summary", h2))

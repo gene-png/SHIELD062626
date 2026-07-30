@@ -255,3 +255,15 @@ def test_each_generate_is_a_new_version(app_client) -> None:
     assert v2["version"] == 2
     latest = c.get(f"/risk/clients/{cid}/register/latest", headers=bh)
     assert latest.json()["version"] == 2
+
+
+@pytest.mark.unit
+def test_pdf_escapes_ampersand_in_client_name() -> None:
+    # The client-name header line feeds reportlab Paragraph markup: a bare "&"
+    # must be escaped so it renders literally instead of re-emitting as an
+    # unknown entity with a synthesized semicolon.
+    ctx = build_risk_context(
+        client_legal_name="Rook&Pawn Security", version=1, entries=[_risk_entry()]
+    )
+    text = _pdf_text(render_pdf(ctx))
+    assert "Rook&Pawn Security" in text

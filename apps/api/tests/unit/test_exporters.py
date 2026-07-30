@@ -229,3 +229,24 @@ def test_context_marks_savings_unknown_when_cut_has_no_cost() -> None:
     assert ctx.estimated_savings == 50_000
     assert ctx.savings_cost_known is False
     assert ctx.client_legal_name == "Client"  # fallback when None
+
+
+@pytest.mark.unit
+def test_pdf_escapes_ampersand_in_header() -> None:
+    # The header lines feed reportlab Paragraph markup: a bare "&" in the
+    # client name must be escaped so it renders literally instead of
+    # re-emitting as an unknown entity with a synthesized semicolon.
+    cap_list = CapabilityList(
+        id=uuid.uuid4(),
+        service_id=uuid.uuid4(),
+        version=1,
+        status=CapabilityListStatus.APPROVED,
+    )
+    ctx = build_context(
+        client_legal_name="Rook&Pawn Security",
+        service_title="Technical Debt Review",
+        cap_list=cap_list,
+        items=[_item(name="Wiz")],
+    )
+    text = _pdf_text(render_pdf(ctx))
+    assert "Rook&Pawn Security" in text
