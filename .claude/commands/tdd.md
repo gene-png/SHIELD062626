@@ -1,28 +1,116 @@
 ---
-description: Start a TDD cycle for a feature or function. Writes a failing test first, confirms it fails, then implements.
-argument-hint: <description of the feature or function to build>
-allowed-tools: Read, Edit, Write, Bash(npx playwright test:*)
+description: One test-first cycle with an observed red run, a counterexample fixture, and a mutation check before it counts as done.
+argument-hint: <the behaviour to build, or the spec file to build from>
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(bash .claude/hooks/*), Bash(echo:*), Bash(rm:*), Bash(git diff:*)
 ---
 
-We are doing TDD. Follow this sequence strictly — do not skip steps.
+# /tdd
 
-## The feature to build
+## What to build
 $ARGUMENTS
 
-## Steps
+---
 
-1. **Write the test first.** API behaviour: a pytest under `apps/api/tests/unit/`. Browser behaviour: a Playwright spec under `e2e/smoke/` (or `e2e/` subdir that fits). The test must target the described behaviour. Do not create any implementation code yet.
+Test-first ordering has weaker evidence behind it than its advocates claim. Fucci's
+industrial experiment with 24 professionals found no significant difference in external
+quality from the ordering alone. The rule survives here for a better reason: **an
+observed red run is the only proof that the assertion existed before the code that could
+have authored it.** Everything below serves that one purpose.
 
-2. **Run the test and confirm it fails.** Use the matching command from `CLAUDE.md` (in-container pytest, or `cd e2e && npx playwright test <file>`). Show me the failure output. If the test passes immediately, stop — something is wrong. Either the test is not actually testing the right thing, or the implementation already exists. Flag this before proceeding.
+The phase marker at `.claude/state/phase` is enforced by a hook, not by good intentions.
+During `implement` you cannot edit a test file.
 
-3. **Write the minimum implementation to make the test pass.** No extra features, no defensive abstractions, no speculative generality. Just enough to go green.
+---
 
-4. **Run the test again and confirm it passes.** Show me the passing output.
+## 1. Find the source of the expectation
 
-5. **Review for simplicity.** If anything in the implementation is more complex than it needs to be, simplify it now. Do not add cleverness.
+Read the spec in `docs/specs/` if one exists. If none does, write down in one sentence
+where the expected behaviour comes from: the requirement, a boundary rule, a client's
+words.
 
-6. **Check error handling.** Ensure any failure modes throw explicitly — no silent catches, no fallback returns that hide errors.
+**REFUSE** to proceed on "what the function should obviously do". That is the
+implementation talking.
 
-7. **Confirm debug logs are in place** at key points: after the main operation completes, and at any branch that isn't obvious.
+## 2. Enter the spec phase
 
-Report the result of each step before moving to the next.
+```
+echo spec > .claude/state/phase
+```
+
+Source files are now locked. Tests and documents stay writable.
+
+## 3. Write the test
+
+Rules, all of them mechanical:
+
+- Every expected value carries a comment naming its source: the spec line, the boundary
+  rule, or the counterexample it encodes.
+- **Never paste actual output into an expected value.** If you ran the code to learn what
+  to expect, you have written a snapshot wearing a test's clothes.
+- Fixture data differs on purpose from any constant the implementation will contain. Say
+  in the file header which values differ and from what.
+- Include the empty-input case. For anything producing user-facing output, include an
+  assertion that no fact absent from the input appears in the output.
+- Assert through the public interface. Setting internal state directly does not count.
+
+## 4. Run it and paste the failure
+
+Run the suite. **Paste the failing output verbatim, including the assertion message.**
+
+That pasted failure is your licence to write implementation code. Without it in the
+session, write none.
+
+**REFUSE** on either of these:
+- The test passes on its first run. Delete it, say so, and write a different test. A test
+  whose first recorded run is green does not count toward this work.
+- The test fails on an import or syntax error rather than a missing behaviour. That is a
+  broken file, not a red run.
+
+## 5. Enter the implement phase
+
+```
+echo implement > .claude/state/phase
+```
+
+Test files are now locked by the hook. If the test turns out to be wrong, stop and say
+so rather than editing it: state what the test asserts, what the requirement says, and
+which one is mistaken. Only then switch to `fix`.
+
+## 6. Write the minimum that passes
+
+No speculative generality, no defensive abstraction. Errors throw rather than returning a
+fallback that hides them. Assert the preconditions you rely on with `invariant()`, which
+throws in every environment including production.
+
+## 7. Run it and paste the pass
+
+## 8. Mutate, and watch it go red
+
+Break the code on purpose: flip a comparison, delete a line, return a constant where a
+derived value belongs. Run the test. **Paste the failure.** Revert.
+
+Thirty seconds, and it is the only mechanical way to tell a test that protects behaviour
+from one that mirrors the implementation.
+
+**REFUSE** to report this cycle complete if the mutation leaves the suite green. A test
+that stays green when the code is broken asserts nothing, whatever its name says.
+
+## 9. Clear the phase
+
+```
+rm -f .claude/state/phase
+```
+
+---
+
+## Report
+
+Five things, and nothing else:
+
+1. The source of the expectation, quoted.
+2. The pasted red run.
+3. The pasted green run.
+4. The mutation applied and the pasted failure it caused.
+5. Anything that could not be tested this way, written as `needs-human: <reason>`.
+
+A report missing item 2 or item 4 is an incomplete cycle, not a finished one.

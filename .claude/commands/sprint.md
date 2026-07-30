@@ -1,94 +1,86 @@
 ---
-description: Sprint orchestrator for an existing project. Plans the next sprint, executes it with TDD, runs the debug loop, and snapshots context. Use at the start of each new sprint.
-argument-hint: [optional: brief description of this sprint's goal]
-allowed-tools: Read, Write, Edit, Bash(npx playwright test:*), Bash(npx tsc:*), Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(find:*)
+description: Open and execute one work unit. Spec, then a TDD cycle per behaviour in dependency order, then verify against the criteria.
+argument-hint: [sprint number or goal, or blank to take the next one from the tracker]
+allowed-tools: Read, Write, Edit, Grep, Glob, Bash(bash .claude/hooks/*), Bash(git:*), Bash(echo:*), Bash(rm:*), Agent
 ---
 
-Run the full sprint cycle. This will plan, build, debug, and snapshot in one sequence.
+# /sprint
 
-## Sprint goal
+## The sprint
 $ARGUMENTS
 
----
-
-## Stage 1 — Orient
-
-Read the current state of the project before anything else:
-- `CONTEXT.md` — state of main
-- `context/dave.md` + `context/gene.md` — what's in flight on both sides
-- `DELIVERY_PLAN.md` — the sprint roadmap
-- Open PRs: !`gh pr list --state open`
-- Recent git log: !`git log --oneline -10`
-
-(`CLAUDE.md` conventions are already loaded. For long autonomous sprints use
-`/loop-sprint-cron` with a staged queue instead — this command is the
-interactive, single-session variant.)
-
-Summarise what this sprint will deliver in 3–5 bullet points. If `$ARGUMENTS` was provided, use it to focus the scope. If not, derive the goal from `CONTEXT.md`'s "Important Next Steps."
-
-**Show me the sprint goal and wait for my confirmation before proceeding.**
+If blank, take the next unstarted sprint from the tracker. `.claude/sprint-plan` names
+the file when a repo has more than one; where that file is absent the tracker is
+`docs/SPRINTS.md`. Resolve it from the pointer rather than from the working directory, and
+say which one you are reading.
 
 ---
 
-## Stage 2 — Plan functions
+## Stage 1. Specify, and stop for David
 
-Run `/planfunction` inline.
+Run `/spec` on the sprint goal. That produces the invariants, the journey matrix, the
+acceptance criteria, the closed-list register and the counterexample fixtures.
 
-Produce `SPRINT.md` with full typed function signatures, process outlines, and test plans for everything this sprint requires.
+Then **stop and show David**:
+- the acceptance criteria, verbatim
+- which ones are already `needs-human`
+- anything in the sprint that the spec could not phrase as an observable outcome
 
-Present the plan. Wait for confirmation.
+**REFUSE** to start work until he has replied. This is one of the two gates in the whole
+pipeline that reaches a person, and it is the cheap one: a wrong direction costs a
+sentence here and a day later.
 
----
+## Stage 2. Build, one behaviour at a time
 
-## Stage 3 — Execute (with parallelization)
+For each behaviour in the spec, **in dependency order**, run the `/tdd` cycle including
+every one of its stop conditions.
 
-Read `SPRINT.md` and identify the dependency graph before building anything:
-- Which functions depend on other functions in this sprint?
-- Which functions are completely independent of each other?
+**Do not parallelise this across subagents.** The old version of this command spawned one
+subagent per function, each writing its own test and then implementing against it. That
+is the arrangement that produced tests encoding the implementation, which is defect 6 in
+`docs/workflow-lessons.md`. One cycle at a time, and the test comes from the spec.
 
-**For independent functions:** spawn one subagent per function. Each subagent runs a full TDD cycle for its function simultaneously:
-1. Write the test
-2. Confirm it fails
-3. Implement the minimum to pass
-4. Confirm it passes
-5. Report back: function name, test result, files changed
+Keep each change small enough to read. If a single behaviour is producing more than about
+400 lines, it was more than one behaviour.
 
-**For dependent functions:** build in dependency order, sequentially. A function cannot be started until its dependencies are green.
+## Stage 3. Smoke it
 
-After all subagents complete, run the full gate set to confirm nothing conflicts (commands in `CLAUDE.md`): `cd e2e && npx playwright test --reporter=line`, plus in-container pytest / tsc for the layers touched.
+Run `/smoke`. Fresh state, public interactions, all six rows of the matrix, artifacts
+saved to disk.
 
----
+**REFUSE** to move on while the empty-input row is unrun. That is the row that catches
+invention, and it is the row nobody ever did.
 
-## Stage 4 — Debug loop
+## Stage 4. Verify
 
-Run `/debugloop` inline.
+Run `/verify` against the acceptance criteria from Stage 1.
 
-Full multi-agent audit on everything written this sprint:
-- Type errors
-- Logic and runtime issues
-- Spec compliance against `SPRINT.md`
-- Test coverage gaps
+Then update the tracker. **A box is checked only when its criterion has an evidence line
+in the verify table.** A criterion marked `needs-human` leaves its box unchecked and
+gains a `needs-human:` note beside it saying what a person must look at.
 
-Fix everything found. Do not finish this stage until tests are green and the audit is clean.
+**REFUSE** to mark the sprint delivered while any criterion lacks evidence. Exit codes
+and test counts are not evidence. Neither is your own account of having checked.
 
----
+## Stage 5. Report
 
-## Stage 5 — Snapshot context
+```
+SPRINT: <id> - <goal>
+TRACKER: <which file>
 
-Run `/context` inline.
+CRITERIA
+| # | Criterion | Evidence | Result |
 
-Update `CONTEXT.md`:
-- Move this sprint's work to "Just Completed"
-- Update "Current State"
-- Update "Important Next Steps" with what comes after
+SMOKE: <artifact paths, one per matrix row>
+BUILT: <one line per behaviour, with its red/green/mutation cycle referenced>
+NOT DELIVERED: <criteria not met, and why>
+needs-human: <what David must look at, and where>
+```
 
----
+Then say plainly whether the sprint is delivered, delivered except the `needs-human`
+items, or not delivered. There is no fourth answer.
 
-## Final report
+## What this command does not do
 
-Print:
-- Sprint goal and whether it was fully delivered
-- Functions built (count and names)
-- Test results
-- Any issues found in debug loop and how they were resolved
-- What the next sprint should focus on
+It does not commit, push, or close out. That is `/ship`, and keeping them apart means the
+decision to ship is a separate decision from the decision that the work is finished.

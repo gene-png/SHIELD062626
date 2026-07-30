@@ -1,33 +1,75 @@
 ---
-description: Lightweight test runner — run the suite that matches what changed (e2e, pytest, tsc) and fix any failures. Use mid-work to stay green. For a deep end-of-session audit, use /debugloop instead.
-argument-hint: [optional e2e spec file or pytest -k pattern]
-allowed-tools: Bash(npx playwright test:*), Bash(cd e2e:*), Bash(docker compose exec:*), Bash(export PATH:*), Read, Edit, Write
+description: Run the suite, then produce the evidence block. A green suite is a precondition, never a result.
+argument-hint: [specific test file or pattern, or blank for everything]
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(bash .claude/hooks/*), Bash(git diff:*)
 ---
 
-Run the tests that cover what changed (see `CLAUDE.md` for the canonical commands):
+# /test
 
-- **e2e (browser flows):** `cd e2e && npx playwright test $ARGUMENTS --reporter=line` — host-run, base URL http://localhost:3000. If `apps/web` source changed since the containers started, `docker compose up -d --force-recreate web` FIRST (bind-mount hot-reload gotcha).
-- **API changes:** `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin" && docker compose exec -T api pytest -m unit -q` (run detached and poll if the shell may time out).
-- **Web TS changes:** `docker compose exec -T web sh -lc "cd /app && pnpm -F web exec tsc --noEmit"`
+## What to run
+$ARGUMENTS
 
-If only one layer changed, run only that layer's suite; run all three before a commit that touches multiple layers.
+---
 
-## If all tests pass
-Report the result and stop.
+Run the suite. Then do the part that matters.
 
-## If any tests fail
-For each failure:
+## If tests fail
 
-1. **Read the failure message carefully.** Understand what the test expected vs. what actually happened.
+Fix the code, not the test.
 
-2. **Find the root cause in the implementation** — not in the test. Do not modify test assertions to make them pass unless the test itself has a genuine bug (wrong selector, wrong URL, etc.). If you believe a test needs changing, say so explicitly and explain why before touching it.
+**REFUSE** to reach green by deleting a test, skipping it, loosening an assertion, or
+widening an expected value. If going green requires changing an existing test, stop and
+show the test, what it asserts, and why it is wrong. That is a conversation, not an edit.
 
-3. **Fix the implementation.**
+Watch for `.skip`, `.only`, `xit`, and a falling assertion count. Each is a green suite
+bought by removing the thing that was checking.
 
-4. **Re-run the tests** to confirm green.
+## If tests pass
 
-5. **Do not introduce graceful fallbacks to silence a failure.** FAIL LOUDLY is a project principle — if the test is failing because something is broken, fix what is broken. Never add try/catch to hide the error.
+A green suite proves the tests you wrote pass. It says nothing about the ones you did not
+write, and that is where the last four defects lived.
 
-Known flake (not a defect): next-dev cold-compile timeouts under back-to-back e2e load — one clean re-run is the fix; don't rewrite specs for it.
+**Print the evidence block before reporting anything.** Three parts, all required.
 
-Report what you found, what you changed, and the final test result.
+### Part 1. What changed and what covers it
+
+```
+git diff --name-only main
+```
+
+For each changed source file, name the test file and title that exercises it **directly**.
+Any changed file with no direct test is listed as `UNCOVERED`.
+
+### Part 2. The empty case
+
+For every changed function that produces user-facing output, run it with empty input and
+**paste the output**. Absent must render as absent. A sensible default is a defect.
+
+If nothing changed produces user-facing output, say so in one line.
+
+### Part 3. One mutation
+
+Take the most substantial change in the diff. Break it: flip a comparison, return a
+constant, delete an input read. Run the suite. **Paste the failure.** Revert.
+
+**REFUSE** to report a pass if the suite stays green under mutation. It means the suite
+executes that code without checking it, which is what 650 tests did to `buildBriefRows`.
+
+## Report
+
+```
+SUITE: <n> passed, <n> failed, <n> skipped
+UNCOVERED: <files, or none>
+EMPTY CASE: <pasted output, or not applicable>
+MUTATION: <what was broken> -> <pasted failure>
+```
+
+Report the suite result last, and never on its own. A report with only a pass count is an
+incomplete run.
+
+## Not this
+
+No coverage percentage, and no gate on one. Inozemtseva and Holmes (ICSE 2014, 31,000
+suites) found the correlation with effectiveness disappears once suite size is
+controlled. Read a coverage report to find untested files. Never quote the number as a
+result.

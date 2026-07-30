@@ -1,84 +1,94 @@
 ---
-description: Deep multi-agent audit — type errors, logic bugs, spec compliance, and test coverage gaps, then fixes everything found. Use at end of session or after a large implementation. For a quick mid-work test run, use /test instead.
-allowed-tools: Read, Edit, Write, Bash(npx tsc:*), Bash(npx playwright test:*), Bash(git diff:*), Bash(find:*)
+description: Reproduce a defect through the public interface, keep the reproduction as a regression test, then fix it.
+argument-hint: <the defect, or blank to audit recent work for defects>
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(bash .claude/hooks/*), Bash(echo:*), Bash(rm:*), Bash(git diff:*), Agent
 ---
 
-Run a structured debug loop on the current codebase. Use subagents to parallelise the checks, then consolidate findings and fix all issues found.
+# /debugloop
 
-## What to check
-
-<recent_changes>
-!`git diff HEAD`
-</recent_changes>
-
-<changed_files>
-!`git diff HEAD --name-only`
-</changed_files>
-
-## Agent 1 — Type & Signature Audit
-Spawn a subagent to:
-- Check every function in the changed files
-- Verify parameter types match how the function is called at every call site
-- Verify return types match what callers expect
-- Flag any `any` types introduced (TS) or untyped dict-passing across module boundaries (Python)
-- Run the typecheck for the layers touched (commands in `CLAUDE.md`): web `tsc --noEmit` in-container; API `pytest -m unit` in-container catches type/contract breaks
-- Report findings as a list: `[FILE:LINE] description of issue`
-
-## Agent 2 — Logic & Runtime Error Audit
-Spawn a subagent to:
-- Read each changed function and trace the execution paths
-- Look for: null/undefined dereferences, off-by-one errors, incorrect conditionals, unreachable branches, infinite loops, async/await misuse (missing await, unhandled promises)
-- Check that every thrown error includes a useful message with context (not just `throw new Error('failed')`)
-- Check that no `catch` block silently swallows an error
-- Report findings as a list: `[FILE:LINE] description of issue`
-
-## Agent 3 — Spec Compliance Audit
-Spawn a subagent to:
-- Read `CONTEXT.md` and any planning docs (the active `SPRINT_<n>.md`, `docs/architecture.md`, `reference-docs/SHIELDv2_Master_Spec.txt` sections relevant to the change)
-- Compare what was just written against what was intended
-- Flag any function that is missing, named differently than planned, or behaves differently than specified
-- Report findings as a list: `[FILE] description of discrepancy`
-
-## Agent 4 — Test Coverage Audit
-Spawn a subagent to:
-- Check every function in the changed files
-- Confirm there is a test covering the main behaviour
-- Confirm there is a test covering at least one failure/edge case
-- List any functions with no test at all
-- Report findings as a list: `[FILE] function name — coverage status`
+## The defect
+$ARGUMENTS
 
 ---
 
-## After all agents complete
+## The sequence, and the order is the command
 
-Consolidate all findings into a single report:
+### 1. Reproduce through the public interface, before reading the code
+
+Click the control. Type the input. Call the exported function with the arguments a caller
+would use. **Paste what happened.**
+
+**REFUSE** to start fixing before a reproduction exists. A defect you cannot reproduce is
+a hypothesis, and hypotheses get fixed by changing code until the symptom moves, which is
+how a second defect gets added to the first.
+
+**REFUSE** to reproduce by setting internal state, calling a private helper, or seeding
+the database. If the defect will not appear through the public interface, say so plainly.
+That is a finding: either the defect is not what you think, or the interface hides it.
+
+### 2. Turn the reproduction into a failing test
+
+Before any fix. The test asserts the behaviour a user should have seen, not the behaviour
+the code currently produces.
 
 ```
-## Debug Loop Report
-
-### Type & Signature Issues
-[list or "none found"]
-
-### Logic & Runtime Issues
-[list or "none found"]
-
-### Spec Compliance Issues
-[list or "none found"]
-
-### Test Coverage Gaps
-[list or "none found"]
+echo spec > .claude/state/phase
 ```
 
-Then **fix every issue found**, in order of severity (type errors and runtime bugs first, then spec issues, then coverage gaps). For each fix:
-- State what you are changing and why
-- Make the change
-- Do not introduce new abstractions to paper over a bug — fix the root cause
+Paste the red run.
 
-After all fixes, run the suites for every layer touched (see `CLAUDE.md` for the exact commands):
-```bash
-cd e2e && npx playwright test --reporter=line      # plus pytest / tsc in-container as applicable
+### 3. Fix it
+
+```
+echo implement > .claude/state/phase
 ```
 
-If tests fail, fix the failures before finishing. Do not exit the loop until all tests are green and the report is clean.
+Test files are locked by the hook while you do this. Fix the cause, not the symptom. If
+the fix needs the test changed, the test was wrong: stop and say so.
 
-Final output: a summary of what was fixed and confirmation of green tests.
+### 4. Paste the green run, then mutate
+
+Break the fix on purpose. Confirm the new test goes red. Revert. Paste it.
+
+### 5. Ask what class this belongs to
+
+One question, and it is the difference between fixing a bug and fixing a kind of bug:
+
+**Where else does this same mistake live?** Grep for the pattern. A hardcoded value in
+one renderer is usually in three. The contamination scan that caught the client name
+immediately found a second copy nobody knew about.
+
+List what you found, and either fix each or write it down as `needs-human`.
+
+### 6. Clear the phase
+
+```
+rm -f .claude/state/phase
+```
+
+---
+
+## When run with no argument
+
+Do not sweep the whole codebase. Take the diff since the last commit and ask four
+questions of it, each in its own fresh subagent so none of them is defending work it did:
+
+1. Which changed function produces customer-visible output, and what does it do with
+   empty input?
+2. Which changed function has no direct test?
+3. Which changed `catch` swallows its error?
+4. Which changed value is hardcoded that should have come from an input?
+
+Each subagent returns findings with file and line, or `none found` **above a list of the
+files it inspected**. A bare `none found` is not a result, it is a shrug.
+
+## Report
+
+```
+DEFECT: <what a user saw>
+REPRODUCED: <pasted, via public interface>
+REGRESSION TEST: <file>::<title>, red then green, both pasted
+MUTATION: <break> -> <pasted failure>
+CLASS: <where else this pattern lives> or <searched <n> files, this is the only one>
+needs-human: <anything left>
+```
