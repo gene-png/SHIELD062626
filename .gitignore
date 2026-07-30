@@ -1,7 +1,11 @@
 # Secrets
+# .env.* catches the variants the three explicit lines missed: .env.bak, .env.live,
+# .env.save, and whatever the next hurried backup gets called. Flipping SHIELD_LLM_MODE
+# between live and fixture invites exactly that copy, and `cp .env .env.bak-live` produced
+# an untracked file holding live provider config that no pattern here covered.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.pem
 *.key
 
