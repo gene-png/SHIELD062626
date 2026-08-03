@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import io
 from collections.abc import Mapping, Sequence
-from html import escape
 from typing import Any
+
+from app import export_style
 
 # ---------------------------------------------------------------------------
 # XLSX workbook
@@ -46,10 +47,10 @@ def render_xlsx(
     resources/success_criteria/poam_ref). Optional — when omitted the Action
     Plan sheet still renders with the code-computed defaults (Sprint 5 T5)."""
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
+    from openpyxl.styles import Font
 
     wb = Workbook()
-    head_fill = PatternFill(start_color="FFEEF2F7", end_color="FFEEF2F7", fill_type="solid")
+    head_fill = export_style.xlsx_header_fill()
 
     def _header(ws: Any, cols: list[str]) -> None:
         ws.append(cols)
@@ -200,14 +201,9 @@ def render_xlsx(
 # Shared reporting data
 # ---------------------------------------------------------------------------
 
-# Maturity level colours: L1 (weakest) red -> L5 (strongest) green.
-LEVEL_HEX: dict[int, str] = {
-    1: "#fca5a5",
-    2: "#fdba74",
-    3: "#fde047",
-    4: "#bef264",
-    5: "#86efac",
-}
+# Maturity level colours: L1 (weakest) red -> L5 (strongest) green. Relocated
+# to app/export_style.py in S1 (D-036); re-exported here for existing importers.
+LEVEL_HEX = export_style.LEVEL_HEX
 FUNCTION_NAMES = {
     "GV": "Govern",
     "ID": "Identify",
@@ -346,7 +342,12 @@ def _pdf_styles() -> dict[str, Any]:
         "body": base["BodyText"],
         "h2": ParagraphStyle("h2", parent=base["Heading2"], spaceBefore=14, spaceAfter=6),
         "cell": ParagraphStyle("cell", fontSize=8, leading=10),
-        "small": ParagraphStyle("small", parent=base["BodyText"], fontSize=8, textColor="#64748b"),
+        "small": ParagraphStyle(
+            "small",
+            parent=base["BodyText"],
+            fontSize=8,
+            textColor=export_style.PLAYBOOK_MUTED_HEX,
+        ),
     }
 
 
@@ -363,11 +364,16 @@ def _pdf_table(
 
     data = [header, *body]
     style: list[Any] = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(export_style.PLAYBOOK_HEADER_HEX)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d6dae3")),
+        (
+            "ROWBACKGROUNDS",
+            (0, 1),
+            (-1, -1),
+            [colors.white, colors.HexColor(export_style.PLAYBOOK_ZEBRA_HEX)],
+        ),
+        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor(export_style.BORDER_HEX)),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
     ]
@@ -398,10 +404,12 @@ def _cover(
     story.append(Paragraph("NIST CSF 2.0", styles["title"]))
     story.append(Paragraph(subtitle, styles["h2"]))
     story.append(Spacer(1, 0.4 * inch))
-    story.append(Paragraph(f"Prepared for: <b>{escape(client_name)}</b>", styles["body"]))
+    prepared_for = export_style.escaped_line(client_name)
+    story.append(Paragraph(f"Prepared for: <b>{prepared_for}</b>", styles["body"]))
     story.append(Paragraph(f"Working profile version: {version}", styles["body"]))
     if generated_on:
-        story.append(Paragraph(f"Generated: {escape(generated_on)}", styles["body"]))
+        generated = export_style.escaped_line(generated_on)
+        story.append(Paragraph(f"Generated: {generated}", styles["body"]))
     story.append(Spacer(1, 0.3 * inch))
     story.append(Paragraph("Prepared by SHIELD by Kentro.", styles["body"]))
     story.append(
@@ -453,7 +461,7 @@ def _gap_table(story: list[Any], styles: dict[str, Any], gaps: Sequence[Any]) ->
     body = [
         [
             g.subcategory_code,
-            Paragraph(escape(g.name), styles["cell"]),
+            Paragraph(export_style.escaped_line(g.name), styles["cell"]),
             f"L{g.enterprise_level}",
             f"L{g.target_level}" if g.target_level else "—",
             g.priority or "",
@@ -473,19 +481,10 @@ def _gap_table(story: list[Any], styles: dict[str, Any], gaps: Sequence[Any]) ->
 
 
 def _new_pdf(out: io.BytesIO, title: str, client_name: str) -> Any:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate
-
-    return SimpleDocTemplate(
+    return export_style.new_pdf_doc(
         out,
-        pagesize=letter,
-        leftMargin=0.7 * inch,
-        rightMargin=0.7 * inch,
-        topMargin=0.7 * inch,
-        bottomMargin=0.7 * inch,
-        title=f"{title} — {client_name}",
-        author="SHIELD by Kentro",
+        title=export_style.metadata_title(title, client_name),
+        side_margin_in=export_style.PLAYBOOK_PAGE_MARGIN_IN,
     )
 
 
@@ -598,7 +597,7 @@ def render_full_pdf(
         body = [
             [
                 r.subcategory_code,
-                Paragraph(escape(r.name), styles["cell"]),
+                Paragraph(export_style.escaped_line(r.name), styles["cell"]),
                 f"L{r.enterprise_level}",
                 f"L{r.target_level}" if r.target_level else "—",
                 ("Yes" if r.gap else ""),

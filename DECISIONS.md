@@ -876,3 +876,50 @@ still an instant 401, the ceiling is absolute, and
 `alembic/versions/0033_user_prev_refresh_jti.py`,
 `tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/refresh.ts` (+ test),
 `apps/web/src/lib/auth/options.ts`; DECISIONS D-016, D-020.
+
+## D-036 — One shared export style module; page geometry stays per-exporter
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** Deliverable
+styling now lives in `apps/api/app/export_style.py`, adopted by all five
+`exporters.py` modules and by `csf/playbook_export.py`. Before this, four brand
+hexes, one openpyxl header fill, one reportlab page setup and PR #50's inline
+`html.escape()` calls were copied across six modules. `risk/exporters.py` was
+already carrying `--surface-sunken` by hand as `"FFEEF2F7"`, which is what a
+palette value written six times looks like after it drifts once.
+
+The module owns the four brand hexes mirrored from
+`packages/design-system/src/tokens.css` (ink `#0e1220`, border `#d6dae3`, sunken
+`#eef2f7`, brand navy `#1b3a7a`), the derived openpyxl ARGB header fill,
+`LEVEL_HEX` relocated from `playbook_export.py` and re-exported there so
+existing importers keep working, and the header helpers `escaped_title()`,
+`escaped_line()` and `metadata_title()` that replace PR #50's scattered escape
+calls. A new sequential ramp, `graded_hex()` with its paired `graded_ink_hex()`,
+is available for future shading: one hue built in OKLCH off the brand navy,
+monotonic light to dark, every step's paired text colour clearing WCAG AA at
+4.5:1 (tightest step 4.78:1). Nothing renders through it yet, because adopting
+it anywhere would change a colour a client has already received.
+
+Two things this deliberately does not do.
+
+1. **Page geometry is not unified.** All five service exporters (the four
+   assessment services plus the Risk Register) render at a 0.6in side margin
+   and the playbook at 0.7in. `new_pdf_doc()` takes the
+   margin as an argument and each caller passes its own constant, because
+   standardising the two values would reflow every deliverable and move page
+   counts for no stated benefit. `tests/unit/test_export_style.py` pins both
+   constants, spies on the margin each exporter actually passes, and pins page
+   counts on fixed contexts.
+2. **`graded_hex()` raises on a level outside `1..n_levels`** rather than
+   clamping to an end of the ramp. A level out of range is a caller bug, and a
+   clamped colour is a lie about the data.
+
+**No rendered text changed.** Every existing exporter content test passes with
+its assertions untouched, and extracted PDF text plus XLSX cell values, fills
+and bold flags were diffed before and after the refactor and came back
+identical.
+
+**Ref:** `apps/api/app/export_style.py`,
+`apps/api/app/{tech_debt,attack,csf,zt,risk}/exporters.py`,
+`apps/api/app/csf/playbook_export.py`,
+`apps/api/tests/unit/test_export_style.py`,
+`packages/design-system/src/tokens.css`; `docs/SPRINTS.md` S1; PR #50.

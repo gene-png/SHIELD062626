@@ -15,9 +15,9 @@ from __future__ import annotations
 import io
 from collections.abc import Iterable
 from dataclasses import dataclass
-from html import escape
 from typing import TYPE_CHECKING
 
+from app import export_style
 from app.attack.analytics import CoverageRollup
 from app.attack.catalog import TACTICS, TECHNIQUES, technique_by_id
 from app.attack.coverage import CoverageStatus, coverage_label
@@ -76,7 +76,7 @@ def _tactic_name(tactic_id: str) -> str:
 
 def render_xlsx(ctx: AttackDeliverableContext) -> bytes:
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Font
     from openpyxl.utils import get_column_letter
 
     wb = Workbook()
@@ -84,7 +84,7 @@ def render_xlsx(ctx: AttackDeliverableContext) -> bytes:
     if default is not None:
         wb.remove(default)
 
-    header_fill = PatternFill(start_color="FFEEF2F7", end_color="FFEEF2F7", fill_type="solid")
+    header_fill = export_style.xlsx_header_fill()
     bold = Font(bold=True)
     italic = Font(italic=True)
 
@@ -215,7 +215,7 @@ def render_docx(ctx: AttackDeliverableContext) -> bytes:
         to_bytes,
     )
 
-    doc = new_document(f"{ctx.service_title} — {ctx.client_legal_name}")
+    doc = new_document(export_style.metadata_title(ctx.service_title, ctx.client_legal_name))
     add_title(doc, ctx.service_title, ctx.client_legal_name)
 
     add_heading(doc, "Coverage summary")
@@ -268,27 +268,20 @@ def render_docx(ctx: AttackDeliverableContext) -> bytes:
 
 
 def render_pdf(ctx: AttackDeliverableContext) -> bytes:
-    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.platypus import (
         PageBreak,
         Paragraph,
-        SimpleDocTemplate,
         Spacer,
         Table,
     )
 
     out = io.BytesIO()
-    doc = SimpleDocTemplate(
+    doc = export_style.new_pdf_doc(
         out,
-        pagesize=letter,
-        leftMargin=0.6 * inch,
-        rightMargin=0.6 * inch,
-        topMargin=0.7 * inch,
-        bottomMargin=0.7 * inch,
-        title=f"{ctx.service_title} — {ctx.client_legal_name}",
-        author="SHIELD by Kentro",
+        title=export_style.metadata_title(ctx.service_title, ctx.client_legal_name),
+        side_margin_in=export_style.SERVICE_PAGE_MARGIN_IN,
     )
     styles = getSampleStyleSheet()
     h1 = styles["Title"]
@@ -296,10 +289,10 @@ def render_pdf(ctx: AttackDeliverableContext) -> bytes:
     body = styles["BodyText"]
 
     story: list = []
-    # Paragraph parses reportlab mini-XML: a bare "&" (e.g. "ATT&CK", "R&D
-    # Corp") re-emits as an unknown entity with a synthesized semicolon.
-    story.append(Paragraph(escape(ctx.service_title), h1))
-    story.append(Paragraph(escape(ctx.client_legal_name), body))
+    story.append(
+        Paragraph(export_style.escaped_title(ctx.service_title, ctx.client_legal_name), h1)
+    )
+    story.append(Paragraph(export_style.escaped_line(ctx.client_legal_name), body))
     story.append(Spacer(1, 0.2 * inch))
 
     story.append(Paragraph("Coverage summary", h2))
@@ -389,11 +382,11 @@ def _table_style() -> TableStyle:
 
     return TableStyle(
         [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(export_style.SURFACE_SUNKEN_HEX)),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#0e1220")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(export_style.INK_HEX)),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d6dae3")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor(export_style.BORDER_HEX)),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
         ]
