@@ -27,19 +27,20 @@ PAYLOAD="$(read_payload)"
 CMD="$(payload_command "$PAYLOAD")"
 require_parsed "$CMD"
 
+NORM="$(printf '%s' "$CMD" | tr -s '[:space:]' ' ')"
+
 # `gh auth ...` is the remediation, so it cannot be part of what gets refused. Without this
 # carve-out the refusal is unrecoverable inside a session: the hook blocks every `gh` call,
 # and the fix it prints ("gh auth switch --user ...") is a `gh` call. Nothing under
 # `gh auth` publishes to a repo, so exempting it costs the guard nothing.
-case "$CMD" in
-  *"gh auth"*) allow ;;
-esac
+cmd_invokes "gh auth" "$NORM" && allow
 
 # Only guard the two commands that publish. Everything else passes untouched.
-case "$CMD" in
-  *"git push"*|*"gh "*) ;;
-  *) allow ;;
-esac
+# cmd_invokes tests the first word of each shell segment rather than searching for a
+# substring, so a command that merely contains the characters "gh " goes through.
+if ! cmd_invokes "git push" "$NORM" && ! cmd_invokes "gh" "$NORM"; then
+  allow
+fi
 
 OWNER="$(expected_owner)"
 [ -n "$OWNER" ] || allow      # no remote, nothing to be wrong about

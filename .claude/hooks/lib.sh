@@ -101,6 +101,26 @@ is_windows() {
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Does the command actually INVOKE this tool, rather than merely mention it?
+#
+#   cmd_invokes "gh" "$NORM"        gh, as a command
+#   cmd_invokes "git push" "$NORM"  git push, as a command
+#
+# Matching `*"gh "*` as a substring was wrong in both directions people hit. It fired on
+# `grep -E "gh account|identity"`, on `echo "high "`, and on a commit message that mentions
+# the tool, none of which run anything. Over-blocking is not the safe side of this trade:
+# `pipeline-design.md` names a hook that cries wolf as the one that gets switched off, and
+# a guard nobody runs protects nothing. It also fired on the hook's own remediation output.
+#
+# So split on shell separators and test the FIRST word of each segment. `gh auth switch`
+# matches, `echo "gh account"` does not, and `foo && gh pr create` still matches because
+# the separator starts a new segment.
+cmd_invokes() {
+  printf '%s' "$2" \
+    | sed -E 's/(\|\||&&|[;|&()`\n])/\n/g' \
+    | grep -qE "^[[:space:]]*(sudo[[:space:]]+)?$1([[:space:]]|\$)"
+}
+
 # --- repo config -------------------------------------------------------------
 
 repo_root() { git rev-parse --show-toplevel 2>/dev/null || printf ''; }

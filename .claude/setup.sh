@@ -94,6 +94,63 @@ if [ -n "$PW_USED" ]; then
   fi
 fi
 
+# --- identity ----------------------------------------------------------------
+#
+# Repair the active gh account at session start rather than discovering it is wrong at the
+# first push. identity.sh refuses every push and every gh call under the wrong account, by
+# design, so a stale account does not fail softly: it halts whatever is running. During an
+# unattended sprint loop that means the run stops at its first push with work uncommitted.
+#
+# The active account is machine state, not repo state. It survives reboots and is shared by
+# every repo on the box, so it drifts whenever another project needs a different account.
+# On this box it was found switched away after a multi-day gap between sessions.
+#
+# Only ever switches to an account that is ALREADY authenticated. This never logs anyone in,
+# never prompts, and never touches credentials. If the wanted account is not present it says
+# so and leaves the state alone, because guessing is how the wrong identity authors a commit.
+
+if [ -f .claude/expected-owner ]; then
+  OWNER="$(grep -vE '^\s*(#|$)' .claude/expected-owner 2>/dev/null | head -1 | tr -d '[:space:]')"
+  case "$OWNER" in
+    gene-png|SpearheadAnalytica) WANT_ACCOUNT="SpearheadAnalytica" ;;
+    *)                           WANT_ACCOUNT="$OWNER" ;;
+  esac
+
+  if [ -n "$WANT_ACCOUNT" ] && command -v gh >/dev/null 2>&1; then
+    ACTIVE="$(gh api user --jq .login 2>/dev/null || printf '')"
+    if [ -z "$ACTIVE" ]; then
+      echo "gh: not authenticated, account check skipped"
+    elif [ "$ACTIVE" = "$WANT_ACCOUNT" ]; then
+      echo "gh account: $ACTIVE"
+    elif gh auth status 2>&1 | grep -q "account $WANT_ACCOUNT "; then
+      if gh auth switch --user "$WANT_ACCOUNT" >/dev/null 2>&1; then
+        echo "gh account: switched $ACTIVE -> $WANT_ACCOUNT (this repo expects $WANT_ACCOUNT)"
+      else
+        echo "gh account: WRONG ($ACTIVE, want $WANT_ACCOUNT) and the switch failed."
+        echo "            Fix before pushing:  gh auth switch --user $WANT_ACCOUNT"
+      fi
+    else
+      echo "gh account: WRONG ($ACTIVE, want $WANT_ACCOUNT) and $WANT_ACCOUNT is not logged in."
+      echo "            Fix before pushing:  gh auth login  then  gh auth switch --user $WANT_ACCOUNT"
+    fi
+  fi
+
+  # Commit authorship is repo state and cannot be repaired without choosing for the user,
+  # so this only reports. identity.sh is what enforces it.
+  WANT_EMAIL=""
+  case "$OWNER" in
+    gene-png|SpearheadAnalytica) WANT_EMAIL="davidcatarious@spearheadanalytica.com" ;;
+    canmoreai)                   WANT_EMAIL="david.catarious@canmorecompany.com" ;;
+  esac
+  if [ -n "$WANT_EMAIL" ]; then
+    EMAIL="$(git config --get user.email 2>/dev/null || printf '')"
+    if [ "$EMAIL" != "$WANT_EMAIL" ]; then
+      echo "git identity: WRONG (${EMAIL:-unset}, want $WANT_EMAIL)"
+      echo "              Fix before committing:  git config --local user.email \"$WANT_EMAIL\""
+    fi
+  fi
+fi
+
 echo "=== ready ==="
 echo "branch: $(git branch --show-current 2>/dev/null || echo 'not a git repo')"
 echo "head:   $(git log --oneline -1 2>/dev/null || echo 'no commits yet')"
