@@ -63,6 +63,12 @@ echo "identity: stays out of the way"
 check "non-publishing command"      $ALLOW identity.sh '{"tool_input":{"command":"ls"}}'
 check "git commit is not a push"    $ALLOW identity.sh '{"tool_input":{"command":"git commit -m x"}}'
 check "correct identity pushes"     $ALLOW identity.sh '{"tool_input":{"command":"git push origin main"}}'
+# The guard matched "gh " anywhere in the string, so these all tripped it while running
+# nothing. The first two are real commands from this repo's own session logs.
+check "grep pattern containing gh"  $ALLOW identity.sh '{"tool_input":{"command":"bash .claude/setup.sh | grep -E \"gh account|identity\""}}'
+check "a word ending in gh"         $ALLOW identity.sh '{"tool_input":{"command":"echo \"high priority\""}}'
+check "commit message mentions gh"  $ALLOW identity.sh '{"tool_input":{"command":"git commit -m \"use gh for releases\""}}'
+check "a path under .github"        $ALLOW identity.sh '{"tool_input":{"command":"cat .github/workflows/ci.yml"}}'
 
 echo "identity: refuses"
 saved="$(git config --local --get user.email || printf '')"
@@ -76,6 +82,12 @@ check "personal email, Spearhead repo" $BLOCK identity.sh '{"tool_input":{"comma
 # the hook could not recover inside itself. Nothing under `gh auth` publishes to a repo.
 check "gh auth switch escapes"        $ALLOW identity.sh '{"tool_input":{"command":"gh auth switch --user SpearheadAnalytica"}}'
 check "gh auth status escapes"        $ALLOW identity.sh '{"tool_input":{"command":"gh auth status"}}'
+# Narrowing the matcher must not open a hole: a real invocation after a separator, or
+# behind sudo, is still an invocation.
+check "gh after &&"                   $BLOCK identity.sh '{"tool_input":{"command":"cd /tmp && gh pr create"}}'
+check "gh after a pipe"               $BLOCK identity.sh '{"tool_input":{"command":"echo x | gh pr comment 1 -F -"}}'
+check "gh after a semicolon"          $BLOCK identity.sh '{"tool_input":{"command":"ls; gh release create v1"}}'
+check "push after &&"                 $BLOCK identity.sh '{"tool_input":{"command":"git add a.ts && git push"}}'
 if [ -n "$saved" ]; then git config --local user.email "$saved"; else git config --local --unset user.email; fi
 check "restored identity pushes"      $ALLOW identity.sh '{"tool_input":{"command":"git push"}}'
 

@@ -6,14 +6,19 @@ produced three candidate visual systems; Sprint 10 is staged and launchable)._
 
 ## Branch / in flight
 
-- **`docs/design-systems-and-remediation` (this branch):** the design sprint
-  output plus the plan for four defects it uncovered. Adds
-  `docs/design-systems.md` (three complete visual systems, full light and dark
-  token sets, 234 contrast pairings verified) and
-  `docs/design-systems-contrast.mjs` (re-run with `node`, exits non-zero on
-  failure). Adds **S0** to `docs/SPRINTS.md` and one criterion to **S1**.
-  No product code changed.
-- **Nothing else in flight.** Main is green at `9c16a3f`.
+- **`fix/session-identity-selfheal` (this branch):** `.claude/setup.sh` repairs a
+  stale gh account at SessionStart instead of letting the loop discover it at the
+  first push, and `identity.sh` stops firing on commands that merely contain the
+  characters `gh `. Hook suite 33 to 41 green. No product code changed.
+- **Nothing else in flight.** Everything else is merged; main is clean.
+
+## Not done, by decision
+
+- **Gene has no identity mapping and cannot push.** `identity.sh` maps one owner
+  to one email, which conflates "which company authors this repo" with "which
+  human is pushing". Supporting a second developer means a per-repo allowlist of
+  (email, gh-account) pairs. Dave said not to worry about it on 2026-08-03, so it
+  is deliberately unbuilt rather than forgotten.
 
 ## Merged this session
 
@@ -47,7 +52,7 @@ All four verified against the code, not taken on the agent's word.
 
 ## Next steps
 
-1. **Merge this docs PR.**
+1. **Merge the identity PR.**
 2. **Launch Sprint 10** (agents never do this): confirm
    `bash .claude/hooks/run-gate.sh commit` is green with the stack up, cut
    `feat/defensible-reports-sprint-10` from `main`, then
@@ -64,14 +69,20 @@ All four verified against the code, not taken on the agent's word.
    Inter), define dark mode, dual-mode axe sweep, mirror the ramps into the
    exporters.
 
-## Before the loop runs, two things to settle
+## Before the loop runs
 
-- **The gh account reverts on its own.** It was switched to `SpearheadAnalytica`
-  twice this session and both times came back as `david-catarious_kentro`, with
-  no `GH_TOKEN` in the environment. `identity.sh` refuses every push and `gh`
-  call under the wrong account, so if it flips mid-sprint the loop halts at its
-  first push. Worth finding the culprit (VS Code's GitHub auth provider is the
-  likely suspect) before a long unattended run.
+- **The gh account. Handled, and the earlier note here was wrong.** An earlier
+  version of this file said the account "reverts on its own" and told you to hunt
+  the culprit. It does not. Checking the mtime on
+  `AppData/Roaming/GitHub CLI/hosts.yml` showed the one flip happened across the
+  multi-day gap between the 2026-07-30 and 2026-08-03 sessions, not spontaneously
+  mid-run: the active account is machine state shared by every repo on the box,
+  so it drifts when another project needs a different account, and it survives
+  reboots. There is no ghost. `.claude/setup.sh` now checks it at every
+  SessionStart and switches back if the expected account is already
+  authenticated, so a stale account self-heals instead of halting the loop at its
+  first push. It only ever switches to an account that is already logged in;
+  it never prompts and never touches credentials.
 - **`.env` is now `SHIELD_LLM_MODE=fixture`.** It was live-Vertex, which failed
   two pytest cases; both pass in fixture, and fixture is what the sprint and e2e
   require. Set it back to `live` plus
