@@ -877,6 +877,64 @@ still an instant 401, the ceiling is absolute, and
 `tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/refresh.ts` (+ test),
 `apps/web/src/lib/auth/options.ts`; DECISIONS D-016, D-020.
 
+## D-035 — The ATT&CK deliverable labels citations, never causes or remedies
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** The ATT&CK
+Coverage deliverable now prints the curated tool citations, the rationale, the
+attached evidence filename and a per-tactic coverage heatmap. Every label it
+adds states a citation fact. None of them states why a gap exists or what to do
+about it, and there is no remediation column.
+
+The reason sits in `app/routes/attack.py`. Run AI overwrites `detection_tools`,
+`prevention_tools`, `response_tools` and `rationale` on every unlocked coverage
+row, on every run. A consultant can edit those fields and can lock the row to
+keep the next run out, but nothing records that anyone did: there is no
+acceptance or substantiation state on `attack_coverage`. At render time the code
+cannot tell an AI draft from consultant-verified work. A deliverable that said
+"gap because no EDR agent is deployed" would be presenting an AI draft as a
+finding, on Kentro letterhead, to a client paying for that distinction.
+
+So the Gap Direction column emits exactly two shapes:
+
+- `No detection, prevention, or response tool is cited for this technique`
+- `Cited: <tools> (partial)`
+
+Both are checkable against the row that produced them. The PDF and DOCX carry
+the same discipline in a computed stat, `N of M scored techniques cite at least
+one tool`, and a methodology note that says outright that tools and rationale
+are drafted by Run AI, that a consultant can edit them, that a per-row lock
+exists, and that substantiation states are not recorded yet.
+`tests/unit/test_attack_exporters.py` asserts both strings verbatim and scans
+every Gap Direction cell for causal and remedial vocabulary, so drafting
+inference copy into that column fails a test instead of reaching a client.
+
+Two supporting rules.
+
+1. **The evidence filename comes from a join that raises.**
+   `_evidence_filenames()` resolves each cited `evidence_artifact_id` to
+   `artifacts.title` within the tenant and answers a typed 409
+   (`evidence_artifact_missing`) when it cannot. "No evidence attached" is
+   reserved for a genuinely NULL column, because a failed lookup degrading into
+   that sentence would read as a fact about the engagement.
+2. **The heatmap reuses S1's ramp.** `coverage_hex()` maps a 0 to 100 percentage
+   onto seven bands of `export_style.GRADED_RAMP_HEX`, pairs each with its
+   AA-safe ink, and raises outside that range rather than clamping, per D-036.
+
+**What this deliberately does not do.** No migration: the acceptance state that
+would let the report claim more is its own decision, not a column added in
+passing. No prompt change, so Run AI behaves exactly as before and only the
+deliverable's account of it changed. No remediation column anywhere.
+
+**Known inconsistency left standing.** The PDF and DOCX still head the gap list
+"Top remediation gaps (N of M shown)", inherited from Work Order C4. That is a
+heading rather than a Gap Direction cell, so it falls outside this decision's
+scope; the S10 prose scrub should retitle it.
+
+**Ref:** `apps/api/app/attack/exporters.py`, `apps/api/app/routes/attack.py`,
+`apps/api/tests/unit/test_attack_exporters.py`,
+`apps/api/tests/unit/test_attack_evidence_join.py`; DECISIONS D-016, D-036;
+`docs/SPRINTS.md` S2.
+
 ## D-036 — One shared export style module; page geometry stays per-exporter
 
 **Decision (sprint 10, `feat/defensible-reports-sprint-10`).** Deliverable
