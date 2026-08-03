@@ -40,12 +40,22 @@ export function tierFor(l: Likelihood, i: Impact): RiskTier {
   return "negligible";
 }
 
+/**
+ * Tier colours as token references, never literals. The five pairs live in
+ * `packages/design-system/src/tokens.css` as `--tier-*-{bg,fg}` and are exposed
+ * through the Tailwind preset as `tier.<tier>-{bg,fg}`, so a second theme
+ * overrides them in one place. `matrix.test.ts` resolves every entry back
+ * through tokens.css and asserts it still equals the hex it replaced.
+ */
 export const TIER_COLOR: Record<RiskTier, { bg: string; fg: string }> = {
-  critical: { bg: "#fee2e2", fg: "#991b1b" },
-  high: { bg: "#ffedd5", fg: "#9a3412" },
-  medium: { bg: "#fef9c3", fg: "#854d0e" },
-  low: { bg: "#dcfce7", fg: "#166534" },
-  negligible: { bg: "#f1f5f9", fg: "#475569" },
+  critical: { bg: "var(--tier-critical-bg)", fg: "var(--tier-critical-fg)" },
+  high: { bg: "var(--tier-high-bg)", fg: "var(--tier-high-fg)" },
+  medium: { bg: "var(--tier-medium-bg)", fg: "var(--tier-medium-fg)" },
+  low: { bg: "var(--tier-low-bg)", fg: "var(--tier-low-fg)" },
+  negligible: {
+    bg: "var(--tier-negligible-bg)",
+    fg: "var(--tier-negligible-fg)",
+  },
 };
 
 export function titleCase(s: string | null | undefined): string {

@@ -61,7 +61,10 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
   const rows = [...LIKELIHOODS].reverse();
   return (
     <div className="overflow-x-auto">
-      <table className="border-collapse text-center text-xs">
+      {/* Cells are separated by a 1px gap that shows the surface behind the
+          table, not by a literal white border: `border-white` would stay white
+          and glow on a dark canvas. Same 1px seam, theme-following. */}
+      <table className="border-separate border-spacing-px text-center text-xs">
         <thead>
           <tr>
             <th className="p-2" />
@@ -87,7 +90,7 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
                 return (
                   <td
                     key={im}
-                    className="h-12 w-16 border border-white text-sm font-semibold"
+                    className="h-12 w-16 text-sm font-semibold"
                     style={{ backgroundColor: color.bg, color: color.fg }}
                     title={`${titleCase(lk)} × ${titleCase(im)}`}
                   >
@@ -137,7 +140,7 @@ function DownloadLink({
   return (
     <a
       href={`/api/proxy/artifacts/${id}/download`}
-      className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-muted"
+      className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-sunken"
     >
       {label}
       {filename ? (
@@ -278,7 +281,7 @@ export function RiskRegisterDashboard(): JSX.Element {
               type="button"
               onClick={onExport}
               disabled={busy !== null}
-              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-50"
+              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken disabled:opacity-50"
             >
               {busy === "export" ? "Exporting…" : "Export XLSX / PDF / Word"}
             </button>
