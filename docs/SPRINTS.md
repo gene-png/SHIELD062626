@@ -121,7 +121,7 @@ recorded in `docs/design-systems.md`, which found web-side color that no theme c
 It runs first because it is pure refactor with no visual change, and because it touches
 files S7 and S8 also touch.
 
-- [ ] **S0 · Web color moves onto tokens. No visual change.**
+- [x] **S0 · Web color moves onto tokens. No visual change.**
       Scope: `apps/web/src/lib/risk/matrix.ts`, `components/admin/risk/RiskRegisterDashboard.tsx`,
       `packages/design-system/src/tokens.css`, `src/tailwind-preset.ts`, and the six files
       using a token that does not exist. Every hex stays the value it is today; this task
@@ -432,3 +432,19 @@ Checkpoints append `checkpoint · pass|fixed · counts`. Shutdown appends
 
 - 2026-07-30 · backlog authored from SPRINT_10.md, translated to the loop-sprint-cron
   format on `chore/reconcile-ops-pipeline`. Not yet launched.
+- 2026-08-03 · S0 · `docs/evidence/S0/served-css-colourless.md`,
+  `apps/web/src/lib/risk/matrix.test.ts`,
+  `apps/web/src/components/admin/risk/RiskRegisterDashboard.test.tsx` · `5b575c3`.
+  Driver-verified independently of the runner: `gate: shield/push passed (7 steps)`;
+  `s16-axe` 5 passed (1.6m) re-run after `--force-recreate web` because the runner's own
+  sweep predated two later edits; all ten tier values identical in the **served**
+  stylesheet to `git show main:apps/web/src/lib/risk/matrix.ts`;
+  `grep -rn "surface-muted" apps/web/src` exit 1, no output; both test files added, zero
+  existing assertions modified. vitest 47→56.
+  Two notes for later tasks. **The criterion text contains an ordering trap**: it names the
+  tokens `negligible,low,medium,high,critical` but lists the hexes starting with
+  _critical's_ pair, so a positional reading inverts the whole ramp and every frozen-table
+  test still passes. The runner keyed by name and got all ten right. And **the axe sweep
+  never visits the risk register**, so its pass proves no regression on the surfaces it
+  does visit, not that the recoloured matrix is accessible; what carries that is the
+  byte-identical values, which make a cell-text contrast change impossible.
