@@ -123,6 +123,24 @@ one step fails and you need to run it in isolation.
   UI :8025); enabling it without an SMTP host refuses to boot. Flipping
   REQUIRE_EMAIL_VERIFY breaks every e2e sign-in (seeded/spec users are
   unverified) — enforcement is a deploy-time choice, not a dev default.
+- **Inter has never actually loaded.** `--font-sans` names it first, but there is
+  no `next/font` usage and no `@font-face` anywhere in `apps/web`, so the app
+  renders Segoe UI on Windows and whatever `system-ui` resolves to elsewhere. Any
+  screenshot, any judgement about type, and any claim the design contract is being
+  honoured has to account for that. Fixing it means self-hosting woff2 via
+  `next/font/local`; it is scheduled with the visual-system batch rather than
+  alone, because that batch has to self-host faces anyway (found 2026-07-30).
+- **Color in `apps/web` belongs in tokens, not in components.** A hex written into
+  a component is invisible to theming, and there is no dark mode to catch it
+  today. Two live examples found 2026-07-30: `lib/risk/matrix.ts` hard-codes the
+  five risk-tier pairs and applies them via inline `style`, and the 5x5 matrix
+  separates cells with `border-white`, which glows on any dark canvas. S0 in
+  `docs/SPRINTS.md` moves both onto tokens without changing a single value.
+- **A Tailwind class naming a token that does not exist emits nothing, silently.**
+  `bg-surface-muted` appeared in 8 places across 6 files with no such token
+  defined, so those hover states and fills did nothing and no build step
+  complained. When adding a colour utility, confirm the token exists in
+  `packages/design-system/src/tokens.css` and the preset.
 
 ## How we collaborate (two developers + agents)
 
@@ -138,6 +156,7 @@ mechanism; docs carry only what git can't show.
 | `docs/architecture.md` | Structure | Updated in the PR that changes architecture |
 | `SPRINT_<n>.md` | Per-sprint plan and its rationale (immutable once the sprint closes) | Sprint author |
 | `docs/SPRINTS.md` | The executable backlog the loop runs. Named by `.claude/sprint-plan` | Sprint author, then the loop appends to its Log |
+| `docs/design-systems.md` | Three candidate visual systems with full light/dark token sets. No system adopted yet; the pick takes a D-number. Contrast evidence re-runs via `node docs/design-systems-contrast.mjs` | Design author; update the status line when one is chosen |
 | `SMOKE_TEST.md` | QA checklist — a box is checked ONLY if a green committed spec proves it, annotated with the spec filename | Both, honesty convention enforced |
 
 Rules of the road:
