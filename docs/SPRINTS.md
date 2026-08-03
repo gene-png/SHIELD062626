@@ -180,7 +180,7 @@ files S7 and S8 also touch.
   - D-036 appended to DECISIONS.md.
     Note: new module under `app/` means `docker compose restart api`.
 
-- [ ] **S2 · ATT&CK deliverable renders curated evidence and a tactic heatmap (D-035).**
+- [x] **S2 · ATT&CK deliverable renders curated evidence and a tactic heatmap (D-035).**
       Scope: `app/attack/exporters.py` and the `routes/attack.py` context builder.
       Acceptance criteria:
   - The Coverage sheet carries Detection tools, Prevention tools, Response tools, and
@@ -467,3 +467,26 @@ Checkpoints append `checkpoint · pass|fixed · counts`. Shutdown appends
   contracts: an evidence command that passes before the work begins certifies nothing.
   The brand-navy 7-step ramp S1 built is AA-checked but **renders nothing yet**; adopting it
   would change a colour clients have already received, so it waits for the visual batch.
+- 2026-08-03 · S2 · `docs/evidence/S2/empty-input-run.md`,
+  `apps/api/tests/unit/test_attack_exporters.py`,
+  `apps/api/tests/unit/test_attack_evidence_join.py` · `e7cd945`. Driver-verified with the
+  protocol's mandatory **empty-input run**, since S2 changes a customer-visible artifact:
+  the ATT&CK deliverable rendered for an assessment with all 633 techniques unscored and
+  nothing curated invents no tool name, reports an honest `0 of 0 scored techniques cite at
+least one tool`, and fills all 633 evidence cells with the explicit `No evidence
+attached` state. `gate: shield/push passed (7 steps)`. `gap_direction()` read directly:
+  exactly two returns, both citation facts. Both grep guards from S1 still empty. One import
+  line removed from the existing attack test, zero assertions changed; DECISIONS.md a pure
+  addition with D-035 ordered between D-034 and D-036.
+  **Open item, needs a human, carried out of S2 deliberately.** The PDF and DOCX head the
+  gap list `Top remediation gaps (N of M shown)` (`app/attack/exporters.py:435` and `:540`).
+  It predates S2 (Work Order C4) and is a heading rather than a Gap Direction cell, so it is
+  outside S2's criteria — but it frames gaps as remediation targets immediately above cells
+  D-035 forbids from doing so, and the empty-input render shows it reading `Top remediation
+gaps (0 of 0 shown)` on a report that scored nothing. The runner declined to change
+  client-visible copy outside its criteria, which was the right call. Either pull the fix
+  forward or let S10's prose scrub take it, but do not let it close unnoticed.
+  Third consecutive sprint with a defective evidence clause: criterion 4 requires the stat
+  and methodology note in **PDF and DOCX** but its evidence names only "substring assertions
+  over extracted PDF text", so the DOCX half could not fail. The runner substituted a real
+  DOCX paragraph extraction and said so.
