@@ -147,7 +147,7 @@ files S7 and S8 also touch.
   - The full `s16-axe` sweep still passes, and no existing vitest or e2e assertion changed.
     Evidence: the gate output plus a diff showing no edits to existing test assertions.
 
-- [ ] **S1 · Shared export style module and five-exporter adoption (D-036).**
+- [x] **S1 · Shared export style module and five-exporter adoption (D-036).**
       Scope: new `apps/api/app/export_style.py` as the single home for deliverable styling,
       adopted by `app/{tech_debt,attack,csf,zt,risk}/exporters.py` and `playbook_export.py`.
       Brand hexes documented against `packages/design-system` tokens: ink `#0e1220`, border
@@ -448,3 +448,22 @@ Checkpoints append `checkpoint · pass|fixed · counts`. Shutdown appends
   never visits the risk register**, so its pass proves no regression on the surfaces it
   does visit, not that the recoloured matrix is accessible; what carries that is the
   byte-identical values, which make a cell-text contrast change impossible.
+- 2026-08-03 · S1 · `docs/evidence/S1/rendered-output-unchanged.md`,
+  `apps/api/tests/unit/test_export_style.py` · `57068f3`. Driver-verified independently:
+  the tech-debt deliverable was rendered from a fixed context on the post-S1 tree and again
+  with `apps/api/app` checked out at `87c6df7`, and the two dumps — extracted PDF text plus
+  every XLSX cell value, fill ARGB and bold flag — diffed `IDENTICAL`, ampersand org name
+  included. `gate: shield/push passed (7 steps)`. Margins stay split, 0.6in across the five
+  service exporters and 0.7in in `playbook_export.py`, with `new_pdf_doc()` parameterizing
+  rather than unifying. `grep -rn 'PatternFill(start_color="FF' apps/api/app` exit 1. One
+  test file added, zero existing assertions modified. pytest 734→762. D-036 at
+  `DECISIONS.md:880`.
+  **This task's third criterion could not fail.** It asks `grep -c 'html.escape'` over the
+  five exporters to return 0; it returned 0 on the pre-S1 tree too, because PR #50 wrote
+  `from html import escape` and called bare `escape(...)`. The runner caught this, said so,
+  and substituted the check that bites — bare `escape(` over the six modules, now empty.
+  Together with S0's inverted-hex ordering, that is two of the first two sprints whose
+  written evidence clause was defective. Read the remaining clauses as drafts, not as
+  contracts: an evidence command that passes before the work begins certifies nothing.
+  The brand-navy 7-step ramp S1 built is AA-checked but **renders nothing yet**; adopting it
+  would change a colour clients have already received, so it waits for the visual batch.
