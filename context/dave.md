@@ -1,35 +1,81 @@
 # Dave: current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-07-30 (ops-pipeline reconciliation: #49, #50, #51 all
-merged; PR #52 landed the shared pipeline and broke the loop launch; this
-session fixes that)._
+_Last updated: 2026-07-30 (ops pipeline fixed and merged as #53; design sprint
+produced three candidate visual systems; Sprint 10 is staged and launchable)._
 
 ## Branch / in flight
 
-- **`chore/reconcile-ops-pipeline` (this branch):** makes PR #52's shared ops
-  pipeline actually work in SHIELD. #52 merged a generic multi-repo pipeline
-  that left the loop unlaunchable in four ways, all fixed here: the duplicate
-  `loop-sprint-cron` command shadowed the new skill so neither resolved;
-  `.claude/sprint-plan` pointed at the Sprint-5-era `DELIVERY_PLAN.md`;
-  `.claude/profile` named `node-pnpm`, whose gate refuses every commit because
-  pnpm is not installed on this box and which declares no Python steps at all;
-  and the identity hook blocked every `git push` and `gh` call. New
-  `docs/SPRINTS.md` carries Sprint 10 as an S1 to S11 backlog in the format the
-  skill requires. New `.claude/profiles/shield.sh` runs the real containerized
-  gates.
-- **Three hook bugs found and fixed while verifying, each with a regression
-  test** (suite is 33 green): `run-gate.sh` fed its step list on stdin, so
-  `docker compose exec -T` ate the remaining steps and the five-step gate
-  reported "passed (1 steps)"; `no-bulk-stage.sh` matched `git add .` as a
-  substring, so every dotfile path read as a bulk stage; `identity.sh` blocked
-  `gh auth switch`, the command its own refusal message tells you to run.
+- **`docs/design-systems-and-remediation` (this branch):** the design sprint
+  output plus the plan for four defects it uncovered. Adds
+  `docs/design-systems.md` (three complete visual systems, full light and dark
+  token sets, 234 contrast pairings verified) and
+  `docs/design-systems-contrast.mjs` (re-run with `node`, exits non-zero on
+  failure). Adds **S0** to `docs/SPRINTS.md` and one criterion to **S1**.
+  No product code changed.
+- **Nothing else in flight.** Main is green at `9c16a3f`.
 
-## Merged since the last update
+## Merged this session
 
-- **#49** auth refresh reuse storm (migration 0033, D-034), **#50** export
-  header mangling, **#51** the Sprint 10 plan, **#52** the ops pipeline, plus
-  dependabot #45, #46, #48. Main CI green at `f9e40aa` across all five jobs.
+- **#53** ops-pipeline reconciliation. PR #52 had installed the shared pipeline
+  wired for a generic repo, which left the loop unlaunchable four ways: the
+  duplicate `loop-sprint-cron` command shadowed the new skill so neither
+  resolved; `.claude/sprint-plan` pointed at the Sprint-5-era
+  `DELIVERY_PLAN.md`; `.claude/profile` named `node-pnpm`, whose gate refuses
+  every commit because pnpm is not installed on this box and which declares no
+  Python steps at all; and the identity hook blocked every `git push` and `gh`
+  call. Also fixed three bugs in the hooks themselves, each with a regression
+  test (suite 26 to 33 green): `run-gate.sh` fed its step list on stdin so
+  `docker compose exec -T` ate the rest and a five-step gate reported "passed
+  (1 steps)"; `no-bulk-stage.sh` matched `git add .` as a substring so every
+  dotfile path read as a bulk stage; `identity.sh` blocked `gh auth switch`,
+  the command its own refusal prints as the fix.
+- Earlier: **#49** auth refresh reuse storm (migration 0033, D-034), **#50**
+  export header mangling, **#51** the Sprint 10 plan, **#52** the ops pipeline,
+  dependabot **#45**, **#46**, **#48**.
+
+## The four defects the design sprint found, and where each lands
+
+All four verified against the code, not taken on the agent's word.
+
+| Defect | Home | Why there |
+|---|---|---|
+| `bg-surface-muted` is a silent no-op, 8 places across 6 files | **S0** | Trivial, and it touches files S7/S8 also touch, so it runs first |
+| `lib/risk/matrix.ts` hard-codes tier hexes inline; `border-white` cell gaps | **S0** | Prerequisite for any dark mode. Values stay identical, so it is provably colorless |
+| `risk/exporters.py:123` duplicates `--surface-sunken` as `FFEEF2F7` | **S1** | S1 already exists to be the single home for deliverable styling |
+| Inter has never loaded (no `next/font`, no `@font-face`) | **The visual-system batch** | That batch self-hosts faces anyway; fixing it alone changes every screen for no gain |
+
+## Next steps
+
+1. **Merge this docs PR.**
+2. **Launch Sprint 10** (agents never do this): confirm
+   `bash .claude/hooks/run-gate.sh commit` is green with the stack up, cut
+   `feat/defensible-reports-sprint-10` from `main`, then
+   `/loop-sprint-cron start --account SpearheadAnalytica`. Backlog is
+   `docs/SPRINTS.md` (now S0 through S11); rationale is `SPRINT_10.md`.
+3. **Pick a visual system** from `docs/design-systems.md`. Recommendation is
+   Ledger, because the artifact a skeptical client challenges is a printed
+   document and Ledger is the only one where screen and report share a
+   typographic voice. The pick takes a D-number and updates that file's status
+   line. Not urgent, but it gates step 5.
+4. **Sprint 11 "Evidence and access"** planning PR, with **dark mode pulled
+   out** of it.
+5. **The visual-system batch**: adopt the chosen system, self-host faces (fixes
+   Inter), define dark mode, dual-mode axe sweep, mirror the ramps into the
+   exporters.
+
+## Before the loop runs, two things to settle
+
+- **The gh account reverts on its own.** It was switched to `SpearheadAnalytica`
+  twice this session and both times came back as `david-catarious_kentro`, with
+  no `GH_TOKEN` in the environment. `identity.sh` refuses every push and `gh`
+  call under the wrong account, so if it flips mid-sprint the loop halts at its
+  first push. Worth finding the culprit (VS Code's GitHub auth provider is the
+  likely suspect) before a long unattended run.
+- **`.env` is now `SHIELD_LLM_MODE=fixture`.** It was live-Vertex, which failed
+  two pytest cases; both pass in fixture, and fixture is what the sprint and e2e
+  require. Set it back to `live` plus
+  `docker compose up -d --force-recreate api` when evaluating real Run-AI output.
 
 ## Decisions made / carried (recorded for agents)
 
@@ -50,18 +96,11 @@ session fixes that)._
   runs fixture).
 - **Keycloak SSO stays at hybrid depth** (D-032); infra stays local containers.
 
-## Next steps
+## Carried, not scheduled
 
-1. Merge the ops-pipeline reconciliation PR once CI is green.
-2. Launch Sprint 10 myself (agents never launch it): confirm
-   `bash .claude/hooks/run-gate.sh commit` is green with the stack up, cut
-   `feat/defensible-reports-sprint-10` from `main`, then
-   `/loop-sprint-cron start --account SpearheadAnalytica`. The backlog is
-   `docs/SPRINTS.md`; `SPRINT_10.md` holds the rationale.
-3. After Sprint 10 merges: Sprint 11 planning PR (design already drafted).
-4. **`sharp <0.35.0` HIGH advisory follow-up on `main`:** Dependabot bump or a
-   root pnpm override. The `postcss` moderate rides along.
-5. Flip live Vertex on this box for real Run-AI output while evaluating.
+- **`sharp <0.35.0` HIGH advisory on `main`:** Dependabot bump or a root pnpm
+  override. The `postcss` moderate rides along.
+- Dependabot **#47** (npm-minor-patch, 6 updates) is still open and green.
 
 ## Notes for Gene
 

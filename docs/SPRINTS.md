@@ -115,6 +115,38 @@ Version at close: `3.6.0`, tag and CHANGELOG level only. Package manifests are n
 touched. New decisions land in the task that makes them: D-035 (S2), D-036 (S1), D-037
 (S8). D-034 is taken by merged PR #49. One migration, `0034_zt_narratives` (S4).
 
+**S0 was added on 2026-07-30, after the Codex review of `SPRINT_10.md`.** It is not in
+that document and was not reviewed with the rest. It comes from the design sprint
+recorded in `docs/design-systems.md`, which found web-side color that no theme can reach.
+It runs first because it is pure refactor with no visual change, and because it touches
+files S7 and S8 also touch.
+
+- [ ] **S0 · Web color moves onto tokens. No visual change.**
+      Scope: `apps/web/src/lib/risk/matrix.ts`, `components/admin/risk/RiskRegisterDashboard.tsx`,
+      `packages/design-system/src/tokens.css`, `src/tailwind-preset.ts`, and the six files
+      using a token that does not exist. Every hex stays the value it is today; this task
+      only moves it somewhere a second theme can override. Adopting a visual system is a
+      later sprint and is NOT in scope here.
+      Acceptance criteria:
+  - The five risk tiers become `--tier-{negligible,low,medium,high,critical}-{bg,fg}` in
+    `tokens.css`, carrying the exact values `TIER_COLOR` hard-codes today
+    (`#fee2e2`/`#991b1b`, `#ffedd5`/`#9a3412`, `#fef9c3`/`#854d0e`, `#dcfce7`/`#166534`,
+    `#f1f5f9`/`#475569`), exposed through the Tailwind preset, and `matrix.ts` reads them
+    instead of inlining hexes. Evidence: a vitest case asserting each of the ten resolved
+    values equals the literal it replaced, so the refactor is provably colorless.
+  - The 5x5 matrix no longer separates cells with `border-white`
+    (`RiskRegisterDashboard.tsx:90`), which would glow on any dark canvas. It uses a gap in
+    the surface color. Evidence: a vitest case asserting no `border-white` class on a
+    matrix cell.
+  - `bg-surface-muted` and `hover:bg-surface-muted` resolve to real CSS. The token does not
+    exist, so all 8 occurrences across 6 files (`AiPreviewButton.tsx` x2,
+    `CsfPlaybookPanel.tsx`, `DiscardDraftButton.tsx`, `RiskRegisterDashboard.tsx` x2,
+    `KeycloakSignInButton.tsx`, `MfaEnrollment.tsx`) currently emit nothing. Replace with
+    `bg-surface-sunken`. Evidence: `grep -r "surface-muted" apps/web/src` returns no
+    matches, quoted in the log line.
+  - The full `s16-axe` sweep still passes, and no existing vitest or e2e assertion changed.
+    Evidence: the gate output plus a diff showing no edits to existing test assertions.
+
 - [ ] **S1 · Shared export style module and five-exporter adoption (D-036).**
       Scope: new `apps/api/app/export_style.py` as the single home for deliverable styling,
       adopted by `app/{tech_debt,attack,csf,zt,risk}/exporters.py` and `playbook_export.py`.
@@ -139,6 +171,12 @@ touched. New decisions land in the task that makes them: D-035 (S2), D-036 (S1),
   - No rendered text changes. Evidence: every existing exporter content test passes with
     no edits to the test files, shown by the diff touching no `tests/unit/test_*exporters*`
     assertion lines.
+  - No exporter carries a duplicated palette literal. `risk/exporters.py:123` fills XLSX
+    headers with `FFEEF2F7`, which is `--surface-sunken` written out by hand; the six
+    exporter modules using `PatternFill`/`RGBColor` all draw from the new module instead.
+    Evidence: a grep for `PatternFill(start_color="FF` outside `export_style.py` returns
+    nothing, quoted in the log line. Found in the 2026-07-30 design sprint and added after
+    the Codex review.
   - D-036 appended to DECISIONS.md.
     Note: new module under `app/` means `docker compose restart api`.
 
@@ -368,6 +406,23 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
     `git diff main --stat` showing no `.env`, and a grep for `SHIELD_LLM_MODE=live`
     returning nothing outside documentation.
   - Full push gate plus full e2e green on a quiet box. Deferred items carried forward.
+
+## What comes after this batch
+
+Not backlog entries. Recorded here so the sequencing survives a session boundary.
+
+1. **Evidence and access** (the drafted next batch): substantiation states
+   tool-present/configured/validated, per-claim evidence attach plus post-intake upload,
+   client inbox, client risk-register release, client self-start. **Dark mode should come
+   out of it.** Adopting a visual system and defining a dark mode from scratch is a batch
+   on its own, and leaving it inside this one would blow the scope.
+2. **The visual system**: adopt one of the three in `docs/design-systems.md`, self-host its
+   faces, define dark mode, and mirror the chosen ramps into the exporters so the app and
+   the deliverable match. Prerequisites already handled: S0 puts web color on tokens, and
+   S1 puts export color in one module, which is most of the groundwork. Blocked on Dave
+   choosing a system; the recommendation is Ledger and the choice takes a D-number.
+   Note that Inter has never actually loaded (see `CLAUDE.md`), so this batch is where the
+   type contract becomes true rather than aspirational.
 
 ## Log
 
