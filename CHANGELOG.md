@@ -7,6 +7,177 @@ All notable changes to SHIELD by Kentro v2.0. Format roughly follows [Keep a Cha
 > (smoke sweep) is now `[3.0.1]` and Sprint 2 (findings burn-down, formerly
 > `[3.0.1]`) is now `[3.0.2]`. No tags existed for the collided numbers.
 
+## [3.6.0] · Sprint 10 · Reports you can defend (defensible deliverables, comprehension, AI transparency) · 2026-08-04
+
+Branch `feat/defensible-reports-sprint-10`. Twelve sprints (S0 through S11) run by
+the autonomous loop against `docs/SPRINTS.md`. A deliverable is defensible when a
+reader can find the number, find what it rests on, and find what to do about it, in
+that order, without leaving the document. This batch builds that out per service:
+it renders the evidence the AI already produced, puts the CSF POA&M into the
+released report, gives Zero Trust a roadmap and persisted narratives, moves export
+styling into one module, explains every maturity level where the question is asked,
+and stops the AI-status copy claiming AI is disabled when Run AI works.
+
+A minor release: new sections in four client-visible deliverables, new guidance and
+transparency surfaces in the consultant workspaces, one additive migration. Version
+is tag and CHANGELOG level only; package manifests are untouched. `SPRINT_10.md` was
+reviewed read-only by OpenAI Codex before the planning PR merged (findings folded
+into the tasks); S0 was added after that review and was not part of it.
+
+**S9 did not close.** Two of its five acceptance criteria carry `needs-human` and
+are carried forward rather than papered over: the interview prompt has no data path
+in any environment, and no green full-suite e2e run exists on this box. Its other
+three criteria are met with evidence. See `docs/SPRINTS.md` for the per-sprint
+Log the driver kept.
+
+- **Web color moves onto tokens, no visual change (S0, `5b575c3`):** the five risk
+  tiers become `--tier-{negligible,low,medium,high,critical}-{bg,fg}` in
+  `tokens.css`, carrying the values `TIER_COLOR` hard-coded inline, exposed through
+  the Tailwind preset and read by `matrix.ts`. The 5x5 matrix separates cells with a
+  gap in the surface color instead of `border-white`, which would glow on any dark
+  canvas. `bg-surface-muted`, a utility naming a token that does not exist and
+  therefore emitting no CSS at 8 places across 6 files, becomes `bg-surface-sunken`.
+  Provably colorless: all ten resolved tier values are identical in the **served**
+  stylesheet to the literals they replaced. Prerequisite for the visual-system batch,
+  which is where a dark mode gets defined.
+- **One shared export style module (S1, `57068f3`; D-036):** new
+  `app/export_style.py` is the single home for deliverable styling, adopted by the
+  five service exporters and `playbook_export.py`. `graded_hex(level, n_levels)`
+  raises on an out-of-ladder level rather than clamping, which is what later caught a
+  seed that could not run at all (S5). `escaped_title()` escapes `&` and `<` once
+  without repeating the org name, replacing hotfix PR #50's inline calls. Page
+  geometry stays deliberately per-exporter, 0.6in for the four services and 0.7in for
+  the playbook, with `new_pdf_doc()` parameterizing rather than unifying. No rendered
+  text changed: the tech-debt deliverable was rendered from a fixed context pre- and
+  post-S1 and the two dumps (extracted PDF text plus every XLSX cell value, fill ARGB
+  and bold flag) diffed identical. No exporter carries a duplicated palette literal
+  any more.
+- **ATT&CK deliverable renders its curated citations (S2, `e7cd945`; D-035):** the
+  Coverage sheet gains Detection, Prevention and Response tool columns plus
+  Rationale, joined with `", "`, and an Evidence reference resolving
+  `evidence_artifact_id` to the attached artifact's filename through a tenant-filtered
+  join, or the explicit `"No evidence attached"`. Gap Direction cells state citation
+  facts only, never a cause or a remedy. The PDF and DOCX carry a defensibility stat
+  phrased on citations (`"N of M scored techniques cite at least one tool"`) and a
+  methodology note disclosing that tools and rationale are drafted by Run AI, are
+  consultant-editable, carry a per-row lock, and that no field should be read as
+  verified. Coverage % cells carry `coverage_hex` fills. Proven against an
+  empty-input render: 633 unscored techniques invent no tool name and report `0 of 0`
+  honestly. See DECISIONS **D-035**.
+- **CSF released deliverable adopts the POA&M machinery (S3, `19a1fe6`, fix
+  `d3864f3`):** the release path loads `CsfGapAction` rows into `build_context`, so
+  the XLSX Gap Plan carries Characterization, Owner, Deadline, Resources, Success
+  criteria and POA&M ref with `priority_override` winning over the computed score.
+  The PDF and DOCX gain an Action Plan section, a tier-model methodology block built
+  from `TIER_DEFINITIONS`, and computed next-step sentences. Tier cells and
+  per-function average-tier cells carry `graded_hex(tier, 4)` fills. The empty-input
+  render caught a client-facing false reassurance in the code this sprint wrote: at 3
+  of 106 subcategories scored, the report advised maintaining current controls,
+  because a gap is raised only for an ANSWERED subcategory below target, so nothing
+  scored and everything scored both reached the zero-gap branch. Narrowed to three
+  branches, with the adequacy claim surviving only at full coverage.
+- **Zero Trust roadmap and persisted AI narratives (S4, `3590500`; migration
+  0034):** `0034_zt_narratives` adds `roadmap_summary`, `executive_summary` and
+  `pillar_narratives`, all nullable, additive and SQLite-safe. The narrative persist
+  stopped being check-then-write: it is now a conditional parent
+  `UPDATE ... WHERE status IN (editable)` requiring exactly one affected row, the
+  D-031 shape, so a discard committing mid-window loses loudly with a typed 409
+  instead of writing a narrative into a discarded assessment. Verified by injecting
+  the discard strictly between the status check and the durable write; the pre-fix
+  shape returned 200 and persisted. The exporter renders a Roadmap section from
+  `build_roadmap()`, renders narrative sections only when persisted, and colors the
+  stage heatmap on its own framework's ladder (3 rungs for DoD, 4 for CISA). Three
+  reporting defects no criterion covered were fixed alongside: the PDF printed
+  `No gaps at target stage 3` identically whether every capability sat at target or
+  none was scored, and the headline printed against 8% coverage unqualified. Both now
+  state their own coverage: `This is an absence of data, not an absence of gaps.`
+- **Demo evidence depth: seed, fixtures, tech-debt narrative (S5, `ed639e3`):**
+  every seeded ATT&CK coverage row now carries deterministic Detection, Prevention
+  and Response citations drawn from seeded Atlas capability names plus a
+  per-(status, tactic) rationale, a subset of CSF and ZT answers carries
+  evidence-flavored notes, and the seeded ZT assessments carry `roadmap_summary` and
+  `pillar_narratives`. Idempotency preserved, with a `row census:` line printed on
+  both the seeding and the already-seeded path so two runs are comparable. Fixture
+  prose deepened with `_MITRE_STATUS_CYCLE` and the ZT and CSF arithmetic
+  byte-frozen. The tech-debt PDF, DOCX and XLSX gained a computed portfolio
+  paragraph: counts by disposition, top cost drivers by name, and the existing
+  lower-bound caveat kept. S5 also fixed a seed that could not run on an empty
+  database at all: the shared stage pattern handed DoD ZTRA a stage 4 and S1's
+  `graded_hex` correctly raises on an out-of-ladder level, so the DoD XLSX render
+  crashed. Clamped per framework now.
+- **Questionnaire guidance: make every question answerable (S6, `1251a18`):** a
+  per-question `What do these levels mean?` disclosure renders every rung with a
+  plain-language explainer and a worked example keyed to that CSF function or ZT
+  stage, in both the admin and client renders, from a new
+  `apps/web/src/lib/guidance/` module (24 CSF examples across 6 functions x 4 tiers,
+  plus CISA 4 and DoD 3). Clients get the interview prompts labeled `Consider:`
+  rather than `Interview ·`, and the Notes textarea asks for the tool, policy or
+  process behind the answer. The web layer deliberately carries no label or
+  description text of its own: labels render from the catalog payload and the tests
+  feed sentinels, so a reintroduced local copy fails. `TierPicker` and
+  `ZtStagePicker` internals are untouched, keeping the roving-tabindex contract and
+  the auto-save PATCH-flood guard.
+- **Workspace and platform comprehension (S7, `517b4b3`):** a new
+  `WorkflowSteps.tsx` step strip renders in all four workspaces with per-service copy
+  and the current step derived from status, exactly one step marked
+  `data-step-state="current"` and `aria-current="step"`. An unrecognized status fails
+  loudly instead of defaulting to step 1, and the expectation type is
+  `Record<Status, number>` so `tsc` rejects a new wire status until it is mapped. The
+  CSF and ZT copy carries the ownership line. `CsfPlaybookPanel` gains a
+  `What the columns mean` legend enumerating Tiers, Enterprise, Rule and the six
+  weighted-floor rules in first-match order, and reading out the P1/P2/P3 chips. The
+  client home gains a legend for all five phase words, and an Impact Profile
+  explainer renders where the profile label does.
+- **AI transparency, consultant-facing (S8, `56373e2`; D-037):** `AiStatusBanner`
+  mounts in the three workspaces that lacked it, and the fixture-mode copy stops
+  lying: `routes/admin.py` now serves `"AI runs in offline fixture mode: Run AI
+returns deterministic demo drafts, not live model output"` in place of copy claiming
+  AI was disabled, which was false because Run AI works and returns the registered
+  fixture. The banner distinguishes tone, info for fixture and warning for
+  live-misconfigured. A new `HowAiWorks.tsx` disclosure renders near Run AI in all
+  four workspaces covering what AI drafts per service, what code computes, the single
+  redaction gate, and fixture versus live. Risk-register rows badge their provenance
+  on the admin surface only. The client surface stays silent on AI, and the section
+  6.4 comment saying so is intact and asserted. See DECISIONS **D-037**.
+- **e2e proofs and SMOKE sections 33 to 35 (S9, `718234b`; box left open):** one new
+  `s27-comprehension.spec.ts` (4 tests) proves the management purpose copy, the home
+  phase legend, the risk provenance badge and the `HowAiWorks` disclosure; the
+  s3/s4/s5/s6/s7 specs gained assertions for tier and stage guidance, the DoD ladder
+  by name, the playbook column legend, the step strip, and the fixture-info banner.
+  Four PDF acceptance contracts, one per service, assert section order as a
+  subsequence over real extracted bytes plus one representative linkage each,
+  walking a number from headline to the row that produces it. SMOKE gained sections
+  33, 34 and 35 with per-box spec filenames and four boxes deliberately left
+  unchecked. No application source was touched and no test line was deleted. The two
+  unmet criteria are recorded above.
+- **Prose scrub (S10, `73ae76b`):** 61 em-dashes rewritten rather than swapped (41
+  sentence splits, 12 colons, 5 commas, 3 parentheses) across UI copy, export,
+  fixture and seed prose, including everything S2 through S8 authored. Seven pinned
+  literals moved, prose and pin in the same commit at identical strictness; two
+  regexes got stricter, losing a `.*` wildcard. Nothing frozen moved:
+  `apps/api/app/ai/` has an empty diff, so the fixture cycles are byte-identical, and
+  no honesty claim was re-inflated, which was the check that mattered after five
+  sprints spent making sentences narrower. Title separators like `"{org} — {label}"`
+  were correctly left alone: three tests pin them. Also fixed the stale
+  `ZtSelfAssessment.tsx` Notes placeholder that S6's commit message claimed to have
+  updated.
+- **Wrap-up (S11, this commit):** SMOKE final pass over the section 10 note, section
+  26 and sections 33 to 35, every box carrying its proving spec or test filename and
+  the four deliberately-unchecked boxes keeping their explanations; this CHANGELOG
+  `[3.6.0]` entry; BUILD_REPORT synced to HEAD; the `CONTEXT.md` end-of-batch
+  snapshot carrying every deferred item; and `context/dave.md` refreshed. No
+  live-LLM configuration reached a committed file: the diff against `main` touches no
+  `.env`, and every tracked `SHIELD_LLM_MODE=live` occurrence is documentation, a
+  refusal message, or a self-skipping test marker.
+
+Migration this batch: **0034** (`zt_assessment` narrative columns, S4), additive and
+SQLite-safe (C0). New DECISIONS: **D-035** (the ATT&CK deliverable labels citations,
+never causes or remedies), **D-036** (one shared export style module, page geometry
+stays per-exporter), **D-037** (AI transparency is consultant-facing, the client
+screen stays silent). e2e spec files grew from 27 to 28 (`s27-comprehension` added).
+Two mid-batch verification and security checkpoints ran at `9c49382` and `f58332b`,
+both passing with nothing fixed and nothing committed by the checkpoint itself.
+
 ## [3.5.0] · Sprint 9 · Activate the seam (hybrid SSO + discard affordance + demo automation) · 2026-07-22
 
 Branch `feat/sso-discard-demo-sprint-9`. Eleven tasks (T0 through T10) across
