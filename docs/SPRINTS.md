@@ -296,7 +296,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     `tests/unit/test_exporters.py`, a narrative contract case.
   - SMOKE section 26 boxes re-pointed to the evidence-rich seed.
 
-- [ ] **S6 · Questionnaire guidance: make every question answerable.**
+- [x] **S6 · Questionnaire guidance: make every question answerable.**
       Scope: `CsfQuestionnaire.tsx`, `ZtQuestionnaire.tsx`, `CsfSelfAssessment.tsx`, new
       `apps/web/src/lib/guidance/`, new `CsfMaturityReference.tsx`. Author content under
       `/writing-style`.
@@ -631,3 +631,37 @@ absence of gaps.`
   `demo-reset --demo` or a wipe picks up the new seed, and that path is destructive and opt-in
   per D-033. S9's criteria assume the evidence-rich seed is live, so that reset has to be run
   deliberately before S9's suite.
+- 2026-08-04 · S6 · `docs/evidence/S6/unrunnable-criterion-and-findings.md`,
+  `apps/web/src/lib/guidance/guidance.test.ts`, plus vitest beside each of the three
+  components · `1251a18`. `gate: shield/push passed (7 steps)`. vitest 56→79 across 13→17
+  files, zero skips. Pickers verified untouched: `git diff --name-only | grep -E
+"TierPicker|ZtStagePicker"` returns nothing, so the roving-tabindex contract and the
+  PATCH-flood guard are intact. No new hex; all six colour utilities added exist in
+  `tokens.css` and the preset.
+  **Criterion 3 was not weak, it was unrunnable.** It asks for a vitest pin against
+  `TIER_DEFINITIONS`, `CISA_STAGES` and `DOD_STAGES`, which live in `apps/api` — but the web
+  service mounts only `./apps/web`, `./packages`, `./package.json` and `./pnpm-workspace.yaml`,
+  and `docker compose exec -T web sh -lc "ls /app/apps"` prints `web` alone. No pin vitest can
+  write is able to read those constants, and the only literal satisfaction is comparing against
+  a hardcoded web-side copy, which passes while the component ignores the wire — the exact drift
+  the criterion exists to prevent. Substitute inverts it: the web layer now carries **no** label
+  or description text, labels render from the catalog payload, and tests feed sentinels
+  (`WIRE-LABEL-1`) so a reintroduced copy fails. Driver-verified by grep: no label string in
+  `lib/guidance/` or `CsfMaturityReference.tsx`. Seventh consecutive defective clause and the
+  first that was impossible rather than merely unfalsifiable.
+  The 6x4 + 4 + 3 completeness test asserts 24 and 7 unique examples and the lookups raise on a
+  missing entry; the runner confirmed it goes red by deleting `PR` tier 3.
+  **Open item: Zero Trust clients get no guidance, and the gap is in the plan.**
+  `ZtSelfAssessment.tsx` mounts `ZtStagePicker` directly (`:13`, `:339`) rather than
+  `ZtQuestionnaire`, and that file is absent from S6's scope list. CSF's questionnaire is shared
+  so one disclosure serves both audiences; ZT's is not. All seven stages of guidance data exist
+  and are tested, but nothing client-side consumes them. The runner honoured scope and flagged
+  it. Closing it is an import plus one element beside the picker.
+  **Open item, highest value found in this run: a swallowed error on the client's only write
+  path.** `CsfSelfAssessment.tsx:172` is a bare `catch {}` around the answer PATCH, a direct
+  violation of `CLAUDE.md` principle 2, and it predates S6. The consequence compounds with what
+  this batch built: a client picks a tier, the optimistic UI shows it saved, the PATCH fails
+  silently, the answer is lost, and the deliverable then reports — honestly, thanks to S3 — that
+  the subcategory is unscored and carries no finding. The newly truthful reporting will
+  faithfully describe a gap that a silent save failure created. The client answered and the
+  report says they did not.
