@@ -39,7 +39,7 @@ from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.attack.analytics import compute as compute_attack  # noqa: E402
-from app.attack.catalog import TECHNIQUES, parent_techniques  # noqa: E402
+from app.attack.catalog import TECHNIQUES, parent_techniques, tactic_by_id  # noqa: E402
 from app.attack.coverage import CoverageStatus  # noqa: E402
 from app.attack.exporters import (  # noqa: E402
     build_context as build_attack_context,
@@ -120,7 +120,7 @@ from app.zt.catalog import capabilities as zt_capabilities  # noqa: E402
 from app.zt.exporters import build_context as build_zt_context  # noqa: E402
 from app.zt.exporters import render_pdf as render_zt_pdf  # noqa: E402
 from app.zt.exporters import render_xlsx as render_zt_xlsx  # noqa: E402
-from app.zt.maturity import ZtFrameworkCode  # noqa: E402
+from app.zt.maturity import ZtFrameworkCode, level_count  # noqa: E402
 from app.zt.scoring import analyze_gaps as analyze_zt_gap  # noqa: E402
 from app.zt.scoring import compute as compute_zt  # noqa: E402
 
@@ -564,6 +564,43 @@ def _csf_tier_for(index: int) -> int:
     return pattern[index % len(pattern)]
 
 
+# Evidence-flavoured notes: each names the artifact, the interview, or the
+# system a consultant would cite. Same every-7th subcategory as before, so the
+# noted-row count does not move.
+_CSF_EVIDENCE_NOTES = (
+    "Evidence: policy reviewed with the ISSO; implementing system named in the "
+    "SSP control narrative.",
+    "Evidence: interview with the control owner plus a screenshot of the current "
+    "configuration; no periodic review record yet.",
+    "Evidence: ticket queue sampled for the last quarter — the practice runs, but "
+    "nobody measures it.",
+    "Evidence: the policy exists and the tooling is deployed; the gap is that the "
+    "output is never reviewed.",
+    "Evidence: consultant walk-through of the runbook; the last exercise predates "
+    "the current architecture.",
+)
+
+
+def _csf_evidence_note(index: int) -> str:
+    return _CSF_EVIDENCE_NOTES[(index // 7) % len(_CSF_EVIDENCE_NOTES)]
+
+
+# Same every-9th capability as before, evidence-flavoured.
+_ZT_EVIDENCE_NOTES = (
+    "Evidence: control inheritance from the agency MAS, confirmed against the "
+    "inherited-controls appendix.",
+    "Evidence: enforcement point demonstrated in the identity provider; policy "
+    "scope still narrower than the stated target.",
+    "Evidence: telemetry confirmed reaching the SIEM; no alerting built on it yet.",
+    "Evidence: architecture diagram plus a live config read; the automation half "
+    "of this capability is manual today.",
+)
+
+
+def _zt_evidence_note(index: int) -> str:
+    return _ZT_EVIDENCE_NOTES[(index // 9) % len(_ZT_EVIDENCE_NOTES)]
+
+
 def _seed_csf(db: Session, storage: StorageBackend, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.NIST_CSF,
@@ -594,7 +631,7 @@ def _seed_csf(db: Session, storage: StorageBackend, admin: User, org: Client) ->
             client_id=org.id,
             subcategory_code=sc.code,
             maturity_tier=_csf_tier_for(idx),
-            notes=("Validated by ISSO walk-through." if idx % 7 == 0 else None),
+            notes=(_csf_evidence_note(idx) if idx % 7 == 0 else None),
             answered_by=admin.id,
             answered_at=utcnow(),
         )
@@ -652,9 +689,53 @@ def _seed_csf(db: Session, storage: StorageBackend, admin: User, org: Client) ->
 # ---------------------------------------------------------------------------
 
 
-def _zt_stage_for(index: int) -> int:
+def _zt_stage_for(index: int, max_stage: int) -> int:
+    """Deterministic seeded stage, clamped to the framework's ladder.
+
+    DoD ZTRA tops out at stage 3 while CISA ZTMM 2.0 goes to 4, so the shared
+    pattern has to be clamped per framework. Without the clamp a seeded DoD
+    stage of 4 reaches ``export_style.graded_hex(4, 3)``, which (correctly)
+    raises rather than clamping — a fresh ``python scripts/seed_demo.py``
+    crashed in the DoD XLSX render. CISA is unaffected: min(x, 4) == x.
+    """
     pattern = [1, 2, 2, 3, 3, 3, 4, 2, 3, 1, 2, 3, 3, 3, 4]
-    return pattern[index % len(pattern)]
+    return min(pattern[index % len(pattern)], max_stage)
+
+
+def _zt_pillar_narratives(
+    catalog_fw: ZtFrameworkCode, stage_map: dict[str, int], target_stage: int
+) -> dict[str, str]:
+    """One narrative per pillar, every figure COMPUTED from the seeded stages."""
+    stages_by_pillar: dict[str, list[int]] = {}
+    for cap in zt_capabilities(catalog_fw):
+        stage = stage_map.get(cap.code)
+        if stage is None:
+            continue
+        stages_by_pillar.setdefault(cap.pillar_code, []).append(stage)
+    narratives: dict[str, str] = {}
+    for pillar, stages in stages_by_pillar.items():
+        below = sum(1 for s in stages if s < target_stage)
+        narratives[pillar] = (
+            f"{len(stages)} capabilities scored, current stages S{min(stages)} to "
+            f"S{max(stages)}. {below} sit below the S{target_stage} engagement target. "
+            "Each row cites the enforcement point, the policy behind it, and the "
+            "telemetry that proves it fires; where a row carries no note, the "
+            "evidence is still outstanding."
+        )
+    return narratives
+
+
+def _zt_roadmap_summary(score, gap) -> str:
+    """Consultant summary for the seeded assessment. Computed, not canned."""
+    return (
+        f"Overall posture is {score.overall_stage_label} across "
+        f"{score.answered_capabilities} of {score.total_capabilities} scored "
+        f"capabilities, with {gap.total_gap_count} below the S{gap.target_stage} "
+        "target. Sequence the identity and device pillars first — they gate every "
+        "later decision point — then take the remaining pillars one stage at a "
+        "time, re-scoring each capability against its cited evidence before a "
+        "target date is committed to the client."
+    )
 
 
 def _seed_zt(
@@ -699,10 +780,8 @@ def _seed_zt(
                 assessment_id=assessment.id,
                 client_id=org.id,
                 capability_code=cap.code,
-                maturity_stage=_zt_stage_for(idx),
-                notes=(
-                    "Validated via control inheritance from agency MAS." if idx % 9 == 0 else None
-                ),
+                maturity_stage=_zt_stage_for(idx, level_count(catalog_fw)),
+                notes=(_zt_evidence_note(idx) if idx % 9 == 0 else None),
                 answered_by=admin.id,
                 answered_at=utcnow(),
             )
@@ -714,6 +793,10 @@ def _seed_zt(
     notes_map = {a.capability_code: a.notes for a in answers}
     score = compute_zt(catalog_fw, stage_map)
     gap = analyze_zt_gap(catalog_fw, stage_map, notes=notes_map)
+
+    assessment.pillar_narratives = _zt_pillar_narratives(catalog_fw, stage_map, gap.target_stage)
+    assessment.roadmap_summary = _zt_roadmap_summary(score, gap)
+    db.flush()
 
     today = date.today()
     pdf_name = deliverable_filename(
@@ -775,6 +858,99 @@ def _attack_status_for(index: int, is_sub: bool) -> str | None:
     return None
 
 
+# Coverage evidence is drawn from the SEEDED Atlas Tech Debt capability names
+# (_TD_ITEMS above), so every cited tool in the ATT&CK workspace resolves to a
+# capability this client actually owns — the same validation the run-AI route
+# applies to a live suggestion.
+_ATTACK_DETECTION_TOOLS = (
+    "CrowdStrike Falcon",
+    "Splunk Enterprise",
+    "Defender for Endpoint",
+    "Wiz",
+)
+_ATTACK_PREVENTION_TOOLS = (
+    "Okta Workforce Identity",
+    "Tenable.io",
+    "HashiCorp Vault",
+    "Prisma Cloud",
+)
+_ATTACK_RESPONSE_TOOLS = (
+    "Splunk Enterprise",
+    "CrowdStrike Falcon",
+    "Sumo Logic",
+)
+
+
+def _tactic_name(tech) -> str:
+    """First mapped tactic's display name, or a neutral label when unmapped."""
+    if not tech.tactics:
+        return "unmapped"
+    return tactic_by_id(tech.tactics[0]).name
+
+
+def _attack_evidence(
+    index: int, status: str | None, tactic: str
+) -> tuple[list[str], list[str], list[str], str | None, str | None]:
+    """Structured coverage evidence for one seeded technique.
+
+    Returns ``(detection, prevention, response, rationale, notes)``. Purely
+    deterministic in ``index``, ``status`` and ``tactic``, so a re-seed of the
+    same catalog produces byte-identical rows. Covered and partial rows carry a
+    Detection/Prevention/Response citation plus a per-(status, tactic)
+    rationale; a gap row cites nothing and its rationale says why; an
+    unscored row carries no evidence at all rather than an invented one.
+    """
+    detection = [_ATTACK_DETECTION_TOOLS[index % len(_ATTACK_DETECTION_TOOLS)]]
+    prevention = [_ATTACK_PREVENTION_TOOLS[index % len(_ATTACK_PREVENTION_TOOLS)]]
+    response = [_ATTACK_RESPONSE_TOOLS[index % len(_ATTACK_RESPONSE_TOOLS)]]
+
+    if status == CoverageStatus.COVERED.value:
+        return (
+            detection,
+            prevention,
+            response,
+            f"{tactic}: {detection[0]} raises the analytic on this behaviour, "
+            f"{prevention[0]} blocks the variants seen in this environment, and "
+            f"{response[0]} carries the documented response play. Walked through "
+            "with the SOC lead during the coverage review.",
+            f"Analytic and runbook reviewed in {response[0]}; last exercised in the "
+            "quarterly purple-team drill.",
+        )
+    if status == CoverageStatus.PARTIAL.value:
+        return (
+            detection,
+            prevention,
+            response,
+            f"{tactic}: {detection[0]} detects the mainline behaviour and "
+            f"{prevention[0]} blocks part of it, but {response[0]} handles the "
+            "response generically — there is no technique-specific play, so dwell "
+            "time is the open question.",
+            f"Detection tuned in {detection[0]}; response play still generic.",
+        )
+    if status == CoverageStatus.GAP.value:
+        return (
+            [],
+            [],
+            [],
+            f"{tactic}: no analytic fires on this behaviour, no preventive control "
+            "was identified, and no response play is documented. Ranked into the "
+            f"{tactic.lower()} remediation track; nothing is cited because nothing "
+            "covers it today.",
+            None,
+        )
+    if status == CoverageStatus.NOT_APPLICABLE.value:
+        return (
+            [],
+            [],
+            [],
+            f"{tactic}: the platform or service this technique abuses is not present "
+            "in the assessed environment, so the row is out of scope rather than "
+            "uncovered. Re-open it if the estate changes.",
+            None,
+        )
+    return [], [], [], None, None
+
+
 def _seed_attack(db: Session, storage: StorageBackend, admin: User, org: Client) -> Service:
     svc = Service(
         kind=ServiceKind.ATTACK_COVERAGE,
@@ -802,17 +978,20 @@ def _seed_attack(db: Session, storage: StorageBackend, admin: User, org: Client)
     parent_ids = {t.id for t in parent_techniques()}
     for idx, tech in enumerate(TECHNIQUES):
         status_value = _attack_status_for(idx, tech.id not in parent_ids)
+        detection, prevention, response, rationale, notes = _attack_evidence(
+            idx, status_value, _tactic_name(tech)
+        )
         coverage_rows.append(
             AttackCoverage(
                 assessment_id=assessment.id,
                 client_id=org.id,
                 technique_code=tech.id,
                 status=status_value,
-                notes=(
-                    "Detection: EDR + SIEM correlation rule."
-                    if status_value == "covered" and idx % 25 == 0
-                    else None
-                ),
+                detection_tools=detection,
+                prevention_tools=prevention,
+                response_tools=response,
+                rationale=rationale,
+                notes=notes,
                 answered_by=admin.id,
                 answered_at=utcnow(),
             )
@@ -1141,6 +1320,35 @@ def _seed_risk_register(
 # ---------------------------------------------------------------------------
 
 
+def _print_row_census(db: Session) -> None:
+    """Print the evidence row counts. Runs on BOTH the seeding and the skip path.
+
+    Idempotency evidence: two consecutive invocations must print an identical
+    line. A second run that duplicated rows — or one that quietly re-wrote the
+    evidence — shows up here instead of in a broken demo.
+    """
+    coverage = db.query(AttackCoverage).all()
+    counts = {
+        "services": db.query(Service).count(),
+        "attack_coverage": len(coverage),
+        "attack_rationale": sum(1 for r in coverage if r.rationale),
+        "attack_detection_cited": sum(1 for r in coverage if r.detection_tools),
+        "attack_prevention_cited": sum(1 for r in coverage if r.prevention_tools),
+        "attack_response_cited": sum(1 for r in coverage if r.response_tools),
+        "attack_notes": sum(1 for r in coverage if r.notes),
+        "csf_answers": db.query(CsfAnswer).count(),
+        "csf_notes": db.query(CsfAnswer).filter(CsfAnswer.notes.is_not(None)).count(),
+        "zt_answers": db.query(ZtAnswer).count(),
+        "zt_notes": db.query(ZtAnswer).filter(ZtAnswer.notes.is_not(None)).count(),
+        "zt_narrated": db.query(ZtAssessment)
+        .filter(ZtAssessment.roadmap_summary.is_not(None))
+        .count(),
+        "capability_items": db.query(CapabilityItem).count(),
+        "risk_entries": db.query(RiskEntry).count(),
+    }
+    print("row census: " + " ".join(f"{k}={v}" for k, v in counts.items()))
+
+
 def main() -> None:
     print(f"DATABASE_URL = {os.environ['DATABASE_URL']}")
     print("Applying migrations...")
@@ -1158,6 +1366,7 @@ def main() -> None:
         _ensure_client_domain(db, org, admin)
         if db.execute(select(Service).limit(1)).scalar_one_or_none() is not None:
             print("Services already present; skipping seeding.")
+            _print_row_census(db)
             print("  admin: ", ADMIN_EMAIL)
             print("  client:", CLIENT_EMAIL)
             print("  password:", PASSWORD)
@@ -1208,6 +1417,7 @@ def main() -> None:
         print(f"  -> {register.id} (v{register.version}, {len(_RISK_ENTRIES)} entries)")
 
         db.commit()
+        _print_row_census(db)
 
     print()
     print("Demo seed complete: 4 services + a synthesized Risk Register, all released.")

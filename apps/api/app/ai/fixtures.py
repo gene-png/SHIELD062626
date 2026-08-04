@@ -97,6 +97,58 @@ def _strs(value: object) -> list[str]:
 
 _MITRE_STATUS_CYCLE = ("covered", "partial", "gap", "covered", "not_applicable")
 
+# Prose ONLY. The status cycle above and the citation arithmetic below are
+# byte-frozen (four e2e specs pin them); this table just gives each status a
+# sentence a reader can act on instead of "draft coverage assessment".
+_MITRE_STATUS_PROSE: dict[str, str] = {
+    # "covered" is composed in _mitre_rationale, because what it may claim
+    # depends on whether a response tool was actually cited.
+    "partial": (
+        "an analytic fires on this behaviour but the response play is unproven, "
+        "so dwell time is the open question"
+    ),
+    "gap": ("no detection, prevention or response coverage is claimed for this " "behaviour today"),
+    "not_applicable": (
+        "the underlying platform or service is not present in this environment, "
+        "so the technique is out of scope rather than uncovered"
+    ),
+}
+
+
+def _mitre_status_prose(status: str, response: list[str]) -> str:
+    """The status clause. A claim is only made where the row carries a citation."""
+    if status != "covered":
+        return _MITRE_STATUS_PROSE[status]
+    if response:
+        return "an analytic fires on this behaviour and a response play is named"
+    return (
+        "an analytic fires on this behaviour, but no response play is cited, so the "
+        "response half of this row is unevidenced"
+    )
+
+
+def _mitre_rationale(code: str, status: str, detection: list[str], response: list[str]) -> str:
+    """Compose the fixture rationale for one technique. Prose only.
+
+    The sentence is built from the citations the row already carries, so it can
+    never name a tool the row does not cite (and never a tool outside the
+    client's supplied capability list), and never claims a half of the row that
+    cites nothing.
+    """
+    clause = _mitre_status_prose(status, response)
+    lead = f"Fixture-mode draft coverage evidence for {code}: {clause}."
+    cited = [*detection, *response]
+    if cited:
+        return (
+            f"{lead} Cited tooling: {', '.join(cited)}. Confirm each citation against "
+            "the client's approved capability list, and attach the analytic or "
+            "runbook reference, before this draft is released."
+        )
+    return (
+        f"{lead} No tooling is cited, so an analyst has to supply the evidence - or "
+        "the scope decision - before this draft is released."
+    )
+
 
 def _fixture_mitre_map(payload: dict[str, Any]) -> LLMResponse:
     codes = sorted(_strs(payload.get("technique_codes")))
@@ -119,14 +171,17 @@ def _fixture_mitre_map(payload: dict[str, Any]) -> LLMResponse:
                 "detection_tools": detection,
                 "prevention_tools": [],
                 "response_tools": response,
-                "rationale": f"Fixture-mode draft coverage assessment for {code}.",
+                "rationale": _mitre_rationale(code, status, detection, response),
             }
         )
     body: dict[str, Any] = {
         "techniques": techniques,
         "executive_summary": (
             "Fixture-mode ATT&CK coverage draft. Statuses and tool citations are "
-            "deterministic placeholders for offline demo; confirm before release."
+            "deterministic placeholders for offline demo; confirm before release. "
+            "Read each row's rationale as a prompt for the evidence an analyst still "
+            "owes - the analytic name, the runbook, or the scope decision - not as a "
+            "finding. Nothing here was measured against live telemetry."
         ),
         "top_blind_spots": [t["technique_code"] for t in techniques if t["status"] == "gap"][:5],
     }
@@ -152,19 +207,38 @@ def _fixture_zt_score(payload: dict[str, Any]) -> LLMResponse:
         target = min(current + 2, max_stage)  # DoD caps at 3, CISA at 4
         capabilities.append({"code": code, "current": current, "target": target})
         pillar = code.split(".", 1)[0] if "." in code else code[:2]
-        pillar_narratives.setdefault(pillar, f"Fixture-mode narrative for the {pillar} pillar.")
+        pillar_narratives.setdefault(pillar, _zt_pillar_narrative(pillar, max_stage))
     body: dict[str, Any] = {
         "capabilities": capabilities,
         "pillar_narratives": pillar_narratives,
         "executive_summary": (
             "Fixture-mode Zero Trust draft: current posture is early-stage with "
-            "clear near-term targets across the pillars."
+            "clear near-term targets across the pillars. Every stage below is a "
+            "deterministic offline placeholder, so treat it as the shape of the "
+            "conversation to have with the control owners rather than as a measured "
+            "maturity rating."
         ),
         "roadmap_summary": (
-            "Prioritize the identity and device pillars in the first two quarters."
+            "Prioritize the identity and device pillars in the first two quarters: "
+            "they gate every later decision point, and the drafted current stages "
+            "cluster at the low end of the ladder. Sequence the remaining pillars "
+            "behind them, one stage at a time, and re-score each capability against "
+            "real evidence before committing a target date to a client."
         ),
     }
     return _resp(body)
+
+
+def _zt_pillar_narrative(pillar: str, max_stage: int) -> str:
+    """Compose the per-pillar fixture narrative. Prose only - no stage math here."""
+    return (
+        f"Fixture-mode narrative for the {pillar} pillar. The drafted current stages "
+        f"sit early on a ladder that tops out at stage {max_stage}, which is the "
+        "posture we expect before any Zero Trust programme work has landed. The "
+        "evidence an assessor needs here is the enforcement point, the policy that "
+        "drives it, and the telemetry that proves it fires; none of that was read "
+        "offline, so confirm each capability with its owner before release."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +258,31 @@ def _fixture_csf_score(payload: dict[str, Any]) -> LLMResponse:
             row: dict[str, Any] = {"tier": tier, "subcategory_code": code}
             for di, dim in enumerate(_CSF_DIMENSIONS):
                 row[dim] = (base + di) % 3  # deterministic 0/1/2
-            row["what_we_found"] = f"Fixture-mode finding for {code} in the {tier} tier profile."
+            row["what_we_found"] = _csf_what_we_found(code, tier)
             scores.append(row)
     body: dict[str, Any] = {
         "scores": scores,
-        "executive_summary": ("Fixture-mode NIST CSF draft across the seeded working profile."),
+        "executive_summary": (
+            "Fixture-mode NIST CSF draft across the seeded working profile. The five "
+            "dimension scores are deterministic offline placeholders, and the engine - "
+            "not this draft - computes every subcategory total, function roll-up and "
+            "tier gap from them. Re-score against interview notes and artifacts before "
+            "any of it reaches a client."
+        ),
     }
     return _resp(body)
+
+
+def _csf_what_we_found(code: str, tier: str) -> str:
+    """Compose the per-(tier, subcategory) narrative. Prose only - no score math."""
+    return (
+        f"Fixture-mode finding for {code} in the {tier} tier profile. The drafted "
+        "dimension scores say the practice is written down somewhere but not evenly "
+        "governed, implemented, monitored and improved, which is the usual shape when "
+        "a control has an owner and no measurement. To turn this into a finding an "
+        "assessor needs the policy reference, the implementing system, and whatever "
+        "record shows the control was exercised in the last cycle."
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -148,7 +148,7 @@ test("matrix + heatmap render, Run AI reports updated fields, and the panel show
   await expect(page.getByText("Response", { exact: true })).toBeVisible();
   await expect(page.getByText(expectedTool as string).first()).toBeVisible();
   await expect(
-    page.getByText(/Fixture-mode draft coverage assessment for T1001/),
+    page.getByText(/Fixture-mode draft coverage evidence for T1001/),
   ).toBeVisible();
 });
 

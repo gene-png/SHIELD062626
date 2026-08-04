@@ -312,14 +312,33 @@ token/flow logic is `pytest -m unit` proven with delivery stubbed.
 - [x] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. (s21-email-verify.spec.ts — 2 tests) **Now RUNS (not skips) in dev + CI as of Sprint 7 T3 (`d95f5c7`):** `SHIELD_EMAIL_DELIVERY_ENABLED` defaults to `true` in `docker-compose.yml` (SMTP → the `mailhog` service), so both tests execute the real token flow through the wire on every run; T3's full-suite pass confirmed both green. (`SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` deliberately stays `false` — flipping it breaks every e2e sign-in.)
 - [x] Browser-drive the verify-email / forgot-password / reset-password **pages**: register, confirm the address from the emailed token on `/verify-email`, then request a reset on `/forgot-password`, complete it on `/reset-password`, and sign in with the **new** password. (s23-auth-pages.spec.ts, 2 tests.) Opt-in like s21 (SKIPS with delivery off; RUNS in dev/CI where delivery is on since Sprint 7 T3); both tests green standalone and in the full suite (Sprint 8 T3).
 
-## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8)
+## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8; Sprint 10 S5)
 
 The seed now writes artifact bytes through `get_storage()` (the SAME backend the
 API reads — MinIO under compose) and releases its deliverables, so a clean seed
 produces a coherent, downloadable Atlas story (before T2 seeded downloads 410'd).
 
+Sprint 10 S5 made that story evidence-rich rather than gesture-rich. Every
+seeded ATT&CK coverage row now carries Detection/Prevention/Response citations
+drawn from the seeded Atlas Tech Debt capability names plus a per-(status,
+tactic) rationale — a gap row cites nothing and says why, an N/A row states the
+scope decision, an unscored row carries no evidence at all. The CSF and ZT
+answers that carry notes now name the artifact, interview, or system a
+consultant would cite, and both seeded ZT assessments carry `roadmap_summary`
+and `pillar_narratives` computed from their own stages. The tech-debt
+deliverable gained a computed portfolio paragraph in all three formats. The seed
+prints a `row census: …` line on BOTH the seeding and the already-seeded path,
+so two consecutive runs are directly comparable.
+
+S5 also fixed a seed that could not run at all on an empty database: the shared
+stage pattern handed DoD ZTRA a stage 4, and S1's `graded_hex` (correctly) raises
+on an out-of-ladder level instead of clamping, so the DoD XLSX render crashed. It
+is clamped per framework now. `e2e/demo/demo-journey.spec.ts` is the spec that
+would have caught it, and it self-skips without `SHIELD_DEMO_SMOKE=1`.
+
 - [x] The real seeded Atlas client (`client@atlas.example`) opens `/documents` and **downloads a seeded released deliverable → 200** with the §15.5 filename and non-zero bytes (410 before the T2 seed→storage fix). (s17-documents.spec.ts — "seeded Atlas client downloads a SEEDED released deliverable (T2 storage parity)")
 - [x] The seeded Atlas **Risk Register** renders on `/admin/risk-register` with **code-derived tiers** (every entry's tier equals `tierFor(likelihood, impact)` — never hard-coded) and its XLSX/PDF/Word exports download 200 with §15.5 filenames. (s8-risk-register.spec.ts — "seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)")
+- [ ] The **evidence-rich seed** (S5): seeded ATT&CK rows carry D/P/R citations + a per-(status, tactic) rationale, seeded CSF/ZT notes name their evidence, both ZT assessments carry `roadmap_summary` + `pillar_narratives`, and the tech-debt PDF/DOCX/XLSX carry the computed portfolio paragraph. **Deliberately unchecked — no committed e2e spec asserts the seeded evidence text.** What does exist: `pytest -m unit` (`test_exporters.py` — `test_portfolio_paragraph_counts_dispositions_and_names_cost_drivers`, `test_portfolio_paragraph_reaches_pdf_docx_and_xlsx`, three thin-data cases; `test_ai_runtime_fixtures.py` — `test_frozen_fixture_cycles_and_arithmetic_are_unchanged`, `test_mitre_rationale_names_the_cited_tool`) and two consecutive `scripts/seed_demo.py` runs printing an identical `row census` line. Check this box when a spec reads the seeded evidence out of the workspace or the deliverable.
 - [x] `scripts/demo-reset.(sh|ps1) --demo`: `down -v` → `up -d --build` (production web image) → wait `/ready` full-matrix → seed → **fail-loud** web-wait (a stalled web build now exits non-zero and dumps `docker compose logs web`, closing the old silent-success gap). The post-reset journey is asserted by a committed spec: `/ready` all-green, `/sign-in` serves 200 with the strict CSP (prod-build proof), admin and client both sign in through the standalone build, the client `/home` shows the released-report hero, and a seeded `/documents` deliverable downloads with non-zero bytes. (`e2e/demo/demo-journey.spec.ts` — 4 tests; self-skips unless `SHIELD_DEMO_SMOKE=1`, run right after `demo-reset.sh --demo`. Sprint 9 T8, D-033. Plain no-flag invocation still targets the base compose.)
 
 ## 27. Hosted-demo compose + CI demo job (Sprint 6 T9; Sprint 9 T9)
