@@ -207,7 +207,7 @@ files S7 and S8 also touch.
     row's tools and rationale at `routes/attack.py:593-599`, so those fields are AI-applied
     unless the consultant edited or locked them, and no acceptance state exists yet.
 
-- [ ] **S3 · CSF released deliverable adopts the POA&M machinery and tier heatmap.**
+- [x] **S3 · CSF released deliverable adopts the POA&M machinery and tier heatmap.**
       Scope: `routes/csf.py` release/export path plus `app/csf/exporters.py`.
       Acceptance criteria:
   - The release path loads `CsfGapAction` rows and passes them into `build_context`.
@@ -490,3 +490,28 @@ gaps (0 of 0 shown)` on a report that scored nothing. The runner declined to cha
   and methodology note in **PDF and DOCX** but its evidence names only "substring assertions
   over extracted PDF text", so the DOCX half could not fail. The runner substituted a real
   DOCX paragraph extraction and said so.
+- 2026-08-03 · S3 · `docs/evidence/S3/coverage-defect.md`,
+  `apps/api/tests/unit/test_csf_exporters.py`,
+  `apps/api/tests/unit/test_csf_deliverable_routes.py` · `19a1fe6` + fix `d3864f3`.
+  **Rejected on first submission, then accepted.** The empty-input run caught a
+  client-facing false reassurance in code S3 wrote: at 3 of 106 subcategories scored, the
+  report advised `maintain the current controls and re-assess on the next cycle`, because
+  `analyze_gaps` raises a gap only for an ANSWERED subcategory below target, so 0/106 and
+  106/106 both reach the zero-gap branch. The first commit's gate was green and all fourteen
+  of its tests passed; every zero-gap case they exercised used a fully scored assessment, so
+  the branch was correct for the only input it was ever given. Fixed into three branches —
+  nothing scored, partially scored, fully scored — with the adequacy claim surviving only at
+  full coverage. Driver re-rendered all three and each asserts `total_gap_count == 0` first,
+  proving the branch was narrowed rather than bypassed. `gate: shield/push passed (7 steps)`.
+  Both grep guards empty; one import line widened, zero assertions changed across both
+  commits. pytest `test_csf_exporters` 10→24, `test_csf_deliverable_routes` 6→8.
+  The runner found three weak criteria on its own before the driver found the fourth:
+  "a zero-actions assessment still renders" passes on a bare no-exception, so it substituted
+  assertions about what renders; the `priority_override` fixture needed the computed value to
+  differ from the override, and it added `assert computed != "P1"` as a vacuity guard; and one
+  of its own new tests passed against the old tree, so it strengthened it.
+  **Open item, needs a human.** The same render headlines `Overall maturity: Repeatable` on
+  2.8% coverage. The coverage figure sits beside it so it is not a lie, but a headline
+  maturity rating computed from 3 of 106 answers is the same class of problem one layer up.
+  Predates S3, covered by no criterion. Whether a coverage floor should gate the headline
+  rating is a product decision.
