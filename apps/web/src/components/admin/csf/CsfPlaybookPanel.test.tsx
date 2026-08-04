@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import * as csfClient from "@/lib/csf/client";
 import type { EnterpriseProfile } from "@/lib/csf/types";
 
-import { CsfPlaybookPanel } from "./CsfPlaybookPanel";
+import {
+  COLUMNS,
+  CsfPlaybookPanel,
+  gapPriorityMeaning,
+  PLAYBOOK_LEGEND,
+} from "./CsfPlaybookPanel";
 
 // Deterministic + offline: the lib client is mocked, and the child editors /
 // preview button are stubbed so this test isolates CsfPlaybookPanel's own
@@ -104,5 +109,59 @@ describe("CsfPlaybookPanel reqSeq stale-fetch guard", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("boom-profile");
+  });
+});
+
+describe("CsfPlaybookPanel column legend", () => {
+  it("explains every notation column and every roll-up rule and Gap chip", async () => {
+    fetchEnterpriseProfile.mockResolvedValue(ent("GV.OC-01"));
+
+    const { container } = render(<CsfPlaybookPanel serviceId="svc-1" />);
+    await screen.findByText("GV.OC-01 outcome");
+
+    const legend = container.querySelector<HTMLElement>(
+      '[data-legend="playbook-columns"]',
+    );
+    if (!legend) throw new Error("no column legend in the playbook panel");
+    expect(legend.querySelector("summary")?.textContent).toBe(
+      "What the columns mean",
+    );
+
+    // Every legend term names a real column, so a renamed header breaks this.
+    const headers = COLUMNS.map((c) => c.header);
+    expect(PLAYBOOK_LEGEND.map((e) => e.term)).toEqual([
+      "Tiers",
+      "Enterprise",
+      "Rule",
+      "Gap",
+    ]);
+    for (const entry of PLAYBOOK_LEGEND) {
+      expect(headers).toContain(entry.term);
+      expect(legend.textContent).toContain(entry.meaning);
+    }
+
+    // All six weighted-floor rules, not a sample.
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      expect(legend.textContent).toContain(`#${n}`);
+    }
+
+    // One reading per Gap chip the table can draw.
+    const chips = legend.querySelectorAll(
+      '[data-legend="gap-priorities"] > li',
+    );
+    expect(Array.from(chips).map((li) => li.textContent?.slice(0, 2))).toEqual([
+      "P1",
+      "P2",
+      "P3",
+    ]);
+    for (const priority of ["P1", "P2", "P3"]) {
+      expect(legend.textContent).toContain(gapPriorityMeaning(priority));
+    }
+  });
+
+  it("raises rather than drawing a Gap chip the legend cannot explain", () => {
+    expect(() => gapPriorityMeaning("P4")).toThrow(
+      /the Gap chip "P4" has no legend entry/,
+    );
   });
 });

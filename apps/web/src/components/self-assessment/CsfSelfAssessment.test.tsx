@@ -167,6 +167,42 @@ describe("CsfSelfAssessment guidance for clients", () => {
     );
   });
 
+  it("explains the impact profile where the profile label is shown", async () => {
+    // The profile line only renders for a client who has one, so the explainer
+    // has to arrive with it rather than as a second, separate mechanism.
+    vi.mocked(csfClient.fetchSelfAssessment).mockResolvedValue({
+      ...ASSESSMENT,
+      client_profile: "MOD",
+    });
+
+    const { container } = render(<CsfSelfAssessment serviceId="svc-1" />);
+
+    await screen.findByText("Mission is understood");
+    const profileLine = screen.getByText("Moderate impact");
+    const details = container.querySelector<HTMLElement>(
+      '[data-guidance-for="impact-profile"]',
+    );
+    if (!details)
+      throw new Error("no impact-profile explainer in the client render");
+    // Same disclosure mechanism S6 used, sitting with the line it explains.
+    expect(details.querySelector("summary")?.textContent).toBe(
+      "What is an impact profile?",
+    );
+    expect(details.textContent).toContain(
+      "It is how sensitive the systems in this assessment are, on the FIPS 199 scale federal programs use. The higher the profile, the more outcomes are in scope, because a higher profile covers everything a lower one does and more. Your analyst set yours during intake, so tell them if it looks wrong.",
+    );
+    expect(profileLine).toBeInTheDocument();
+  });
+
+  it("shows no impact-profile explainer when the client has no profile", async () => {
+    const { container } = render(<CsfSelfAssessment serviceId="svc-1" />);
+
+    await screen.findByText("Mission is understood");
+    expect(
+      container.querySelector('[data-guidance-for="impact-profile"]'),
+    ).toBeNull();
+  });
+
   it("surfaces a failed prompt fetch instead of a question with no context", async () => {
     vi.mocked(csfClient.fetchInterviewQuestionnaire).mockRejectedValue(
       new Error("boom-questionnaire"),

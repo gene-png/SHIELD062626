@@ -279,13 +279,27 @@ export function CsfSelfAssessment({
             everything before anything is processed.
           </p>
           {profileLabel ? (
-            <p className="mb-4 text-xs text-ink-tertiary">
-              Showing the {total} outcomes that apply to your{" "}
-              <span className="font-medium text-ink-secondary">
-                {profileLabel} impact
-              </span>{" "}
-              profile.
-            </p>
+            <div className="mb-4">
+              <p className="text-xs text-ink-tertiary">
+                Showing the {total} outcomes that apply to your{" "}
+                <span className="font-medium text-ink-secondary">
+                  {profileLabel} impact
+                </span>{" "}
+                profile.
+              </p>
+              <details className="mt-1" data-guidance-for="impact-profile">
+                <summary className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700">
+                  What is an impact profile?
+                </summary>
+                <p className="mt-1 rounded-md border border-border-subtle bg-surface-sunken p-2.5 text-xs text-ink-secondary">
+                  It is how sensitive the systems in this assessment are, on the
+                  FIPS 199 scale federal programs use. The higher the profile,
+                  the more outcomes are in scope, because a higher profile
+                  covers everything a lower one does and more. Your analyst set
+                  yours during intake, so tell them if it looks wrong.
+                </p>
+              </details>
+            </div>
           ) : null}
           <CsfQuestionnaire
             catalog={filteredCatalog}

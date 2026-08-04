@@ -67,7 +67,70 @@ function tierLevels(row: EnterpriseSubcategory): string {
     .join("  ");
 }
 
-const COLUMNS: DataTableColumn<EnterpriseSubcategory>[] = [
+/**
+ * Header legend for the Working Profiles table (S7). Four of the columns carry
+ * notation nobody reads off the header alone, so each gets a plain reading here.
+ * `term` must match the column header it explains, which the test pins against
+ * COLUMNS.
+ */
+export const PLAYBOOK_LEGEND: ReadonlyArray<{
+  term: string;
+  meaning: string;
+}> = [
+  {
+    term: "Tiers",
+    meaning:
+      "The client's HIGH, MODERATE and LOW system tiers, written H, M and L. The number after each letter is that tier's maturity level, 1 to 5, from the sum of its five dimension scores. A tier the client does not use is left out.",
+  },
+  {
+    term: "Enterprise",
+    meaning:
+      "One level per subcategory, rolled up from the tier levels by the weighted-floor rules below. Code computes it. The AI only drafts the dimension scores underneath.",
+  },
+  {
+    term: "Rule",
+    meaning:
+      "Which of the six weighted-floor rules produced the Enterprise level. They apply in order and the first match wins.",
+  },
+  {
+    term: "Gap",
+    meaning:
+      "A chip appears only where the Enterprise level sits below the target level. No chip means no gap.",
+  },
+];
+
+/** The six weighted-floor rules, in the order app/csf/playbook.py applies them. */
+const ROLLUP_RULES: readonly string[] = [
+  "All tiers scored the same, so that score stands.",
+  "A Core primary metric with any spread between tiers takes the strict floor, the lowest tier score.",
+  "HIGH is the lowest scorer, so HIGH's score stands.",
+  "MODERATE is the lowest and HIGH is above it, so MODERATE's score stands.",
+  "Only LOW is lowest and the subcategory is Supporting-aligned or Supplemental, so the highest non-LOW score stands.",
+  "Mixed any other way, so the lower score stands.",
+];
+
+const GAP_PRIORITY_MEANING: Record<string, string> = {
+  P1: "A Core metric, on the HIGH tier, with the gap spanning multiple systems.",
+  P2: "A Core metric or the HIGH tier, but not all three of P1's conditions.",
+  P3: "Every other gap.",
+};
+
+/**
+ * Reading for one Gap chip. The legend renders these from the same map that
+ * colours the chips, so a chip with no legend entry RAISES instead of appearing
+ * in the table with nothing explaining it.
+ */
+export function gapPriorityMeaning(priority: string): string {
+  const meaning = GAP_PRIORITY_MEANING[priority];
+  if (!meaning) {
+    throw new Error(
+      `[CsfPlaybookPanel] the Gap chip "${priority}" has no legend entry, so the table would show a priority the legend cannot explain`,
+    );
+  }
+  return meaning;
+}
+
+export const COLUMNS: DataTableColumn<EnterpriseSubcategory>[] = [
   { key: "code", header: "Subcategory", cell: (r) => r.subcategory_code },
   { key: "name", header: "Outcome", cell: (r) => r.name },
   { key: "tiers", header: "Tiers", cell: (r) => tierLevels(r) },
@@ -224,6 +287,54 @@ export function CsfPlaybookPanel({
             AI suggests the dimensions; code computes every level, the cap, and
             the roll-up.
           </CardDescription>
+          <details className="mt-2" data-legend="playbook-columns">
+            <summary className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700">
+              What the columns mean
+            </summary>
+            <dl className="mt-2 flex flex-col gap-2.5 rounded-md border border-border-subtle bg-surface-sunken p-2.5">
+              {PLAYBOOK_LEGEND.map((entry) => (
+                <div key={entry.term}>
+                  <dt className="text-xs font-semibold text-ink-primary">
+                    {entry.term}
+                  </dt>
+                  <dd className="mt-0.5 text-xs text-ink-secondary">
+                    {entry.meaning}
+                  </dd>
+                  {entry.term === "Rule" ? (
+                    <dd className="mt-1">
+                      <ul className="list-none pl-0 text-xs text-ink-secondary">
+                        {ROLLUP_RULES.map((rule, i) => (
+                          <li key={rule} className="mt-0.5">
+                            <span className="font-semibold text-ink-primary">
+                              #{i + 1}
+                            </span>{" "}
+                            {rule}
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  ) : null}
+                  {entry.term === "Gap" ? (
+                    <dd className="mt-1">
+                      <ul
+                        className="list-none pl-0 text-xs text-ink-secondary"
+                        data-legend="gap-priorities"
+                      >
+                        {Object.keys(PRIORITY_COLOR).map((priority) => (
+                          <li key={priority} className="mt-0.5">
+                            <span className="font-semibold text-ink-primary">
+                              {priority}
+                            </span>{" "}
+                            {gapPriorityMeaning(priority)}
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  ) : null}
+                </div>
+              ))}
+            </dl>
+          </details>
         </CardHeader>
         <CardBody className="flex flex-col gap-4">
           {error ? (

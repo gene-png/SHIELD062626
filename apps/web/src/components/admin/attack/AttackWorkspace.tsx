@@ -38,6 +38,7 @@ import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 import { AiPreviewButton } from "@/components/admin/AiPreviewButton";
 import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
+import { WorkflowSteps } from "@/components/admin/WorkflowSteps";
 
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
@@ -367,6 +368,8 @@ export function AttackWorkspace({
           ) : null}
         </div>
       </header>
+
+      <WorkflowSteps service="attack" status={assessment?.status ?? null} />
 
       {loadError ? (
         <Card>

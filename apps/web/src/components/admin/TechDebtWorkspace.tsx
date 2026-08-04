@@ -39,6 +39,7 @@ import { DiscardDraftButton } from "./DiscardDraftButton";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
+import { WorkflowSteps } from "./WorkflowSteps";
 
 import type { JSX } from "react";
 
@@ -271,6 +272,8 @@ export function TechDebtWorkspace({
           )}
         </div>
       </header>
+
+      <WorkflowSteps service="tech_debt" status={list?.status ?? null} />
 
       <Card>
         <CardHeader>

@@ -39,6 +39,10 @@ import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
 import { AiPreviewButton } from "@/components/admin/AiPreviewButton";
 import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
+import {
+  CLIENT_ANSWER_OWNERSHIP,
+  WorkflowSteps,
+} from "@/components/admin/WorkflowSteps";
 
 import { ZtDeliverableCard } from "./ZtDeliverableCard";
 import { ZtGapList } from "./ZtGapList";
@@ -391,6 +395,13 @@ export function ZtWorkspace({
           ) : null}
         </div>
       </header>
+
+      <div className="flex flex-col gap-2">
+        <WorkflowSteps service="zt" status={assessment?.status ?? null} />
+        <p className="max-w-prose text-xs text-ink-secondary">
+          {CLIENT_ANSWER_OWNERSHIP}
+        </p>
+      </div>
 
       {assessment?.status === "submitted" ? (
         <div className="rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3 text-sm text-status-warning-fg">
