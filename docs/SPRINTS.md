@@ -271,7 +271,7 @@ files S7 and S8 also touch.
     renders `"No evidence attached"`. Evidence: same file, one case per branch.
     Note: `alembic upgrade head` in-container before any later e2e.
 
-- [ ] **S5 · Demo evidence depth: seed, fixtures, tech-debt narrative.**
+- [x] **S5 · Demo evidence depth: seed, fixtures, tech-debt narrative.**
       Scope: `scripts/seed_demo.py`, `app/ai/fixtures.py`, `app/tech_debt/exporters.py`.
       Acceptance criteria:
   - The seed replaces the every-25th hardcoded sentence at `:811-815` with systematic
@@ -593,3 +593,41 @@ absence of gaps.`
   (`schemas/zt.py:173`), but it is pre-existing at `b53b6af`, outside the criterion's named
   class `ZtAssessmentResponse` (which correctly uses `| None = None`), and Pydantic v2
   deep-copies defaults per instance.
+- 2026-08-04 · S5 · `docs/evidence/S5/pin-cycles-and-thin-data.md`,
+  `apps/api/tests/unit/test_ai_runtime_fixtures.py`, `apps/api/tests/unit/test_exporters.py`
+  · `ed639e3`. `gate: shield/push passed (7 steps)`. The four pinning specs green: 8 passed
+  (8.5m), no flake, no standalone re-run needed.
+  **The one sanctioned pin was diffed, not trusted.** `s5-attack.spec.ts:151` changed
+  `assessment` to `evidence` inside the same `page.getByText(/…/)` and the same
+  `toBeVisible()` — alignment at identical strictness. Across all of S5 the only lines removed
+  from any test or spec are that pin and one widened import. `_MITRE_STATUS_CYCLE` is
+  byte-identical at `fixtures.py:98`; no cycle tuple or arithmetic line was removed or
+  modified, and the runner's mutation check confirms the pin goes red when a cycle value moves.
+  Driver re-rendered the tech-debt paragraph four ways (empty list, uncosted rows, no
+  dispositions, mixed): clean in every case, no dollar figure printed without a costed Cut row,
+  lower-bound caveat intact.
+  **S5 found a bug that made the seed unrunnable on a fresh database.** `_zt_stage_for` emitted
+  stage 4 for DoD ZTRA, whose ladder stops at 3, and S1's `graded_hex` raises rather than
+  clamps, so `render_zt_xlsx` died with `ValueError: level must be within 1..3, got 4`. Fixed
+  by clamping per framework via `level_count`. This is FAIL LOUDLY earning its keep: bad seed
+  data that had been silently accepted became a crash the moment a raising helper touched it,
+  and the live demo DB predates S1, which is why nobody had seen it.
+  Three criteria could not fail and were substituted: the cycle regression pin (passes with no
+  work, and re-deriving expected values from the code under test can never fail — replaced with
+  literal pins plus a mutation check), the two-run row-count evidence (no such log line
+  existed and the skip path printed nothing — replaced with `_print_row_census` on both paths,
+  `seed_demo.py:1369` and `:1420`), and the SMOKE re-point (no failure condition — replaced
+  with an explicitly unchecked box naming what proves what). The runner also caught its own
+  prose committing this batch's defect once, claiming "a documented response play exists" for a
+  covered row citing no response tool, and pinned the fix.
+  **Same defect, third service, now at the header layer.** Rescoping a driver check revealed
+  the pre-existing Summary header reads `Total annual cost: $0` when rows carry _unrecorded_
+  costs — asserting zero where the truth is "not recorded". With CSF's unqualified
+  `Overall maturity` and ZT's now-qualified `Overall stage`, that is three of four services with
+  one root cause, found by three independent empty-input runs, and ZT already holds the fix
+  pattern. Wants one consistent absent-versus-zero treatment across all four, not three nits.
+  **Operational gap S9 will hit.** The seed skips when any Service exists, so the live demo
+  database still carries the OLD ATT&CK evidence (`zt_narrated=0` against `services=37`). Only
+  `demo-reset --demo` or a wipe picks up the new seed, and that path is destructive and opt-in
+  per D-033. S9's criteria assume the evidence-rich seed is live, so that reset has to be run
+  deliberately before S9's suite.
