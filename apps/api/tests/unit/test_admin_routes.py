@@ -275,6 +275,15 @@ def test_ai_status_reports_fixture_mode(app_client: TestClient) -> None:
     assert body["ready"] is False
     assert "api_key" not in body and "anthropic_api_key" not in body
 
+    # D-037: the fixture-mode sentence is consultant-facing copy and it has to be
+    # true of the running system. It used to say AI features were "disabled",
+    # which they are not: Run AI returns deterministic fixture drafts. Pinned
+    # verbatim because the web banner renders this string straight off the wire.
+    assert body["detail"] == (
+        "AI runs in offline fixture mode: Run AI returns deterministic demo "
+        "drafts, not live model output"
+    )
+
     # Admin-only.
     assert (
         app_client.get(

@@ -36,6 +36,8 @@ import type {
 
 import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+import { AiStatusBanner } from "@/components/admin/AiStatusBanner";
+import { HowAiWorks } from "@/components/admin/HowAiWorks";
 import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
 import {
   CLIENT_ANSWER_OWNERSHIP,
@@ -304,6 +306,7 @@ export function CsfWorkspace({
 
   return (
     <div className="flex flex-col gap-6">
+      <AiStatusBanner />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
@@ -429,6 +432,7 @@ export function CsfWorkspace({
       ) : (
         <>
           <CsfScoreCard score={score} />
+          <HowAiWorks service="csf" />
           <CsfPlaybookPanel serviceId={serviceId} readOnly={readOnly} />
           <MessageThread serviceId={serviceId} />
           <CsfGapList

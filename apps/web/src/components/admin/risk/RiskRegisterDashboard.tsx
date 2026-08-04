@@ -106,6 +106,29 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
   );
 }
 
+/**
+ * Provenance, consultant-facing only (D-037). `origin` and `trust` are already
+ * first-class on the row; until now nothing rendered them, so a synthesized
+ * entry and one a consultant wrote looked identical. Only AI-origin rows get the
+ * badge; anything else prints its origin as plain text.
+ */
+function OriginCell({ entry }: { entry: RiskEntry }): JSX.Element {
+  if (entry.origin !== "ai_generated") {
+    return (
+      <span className="text-ink-secondary">{titleCase(entry.origin)}</span>
+    );
+  }
+  const trustSuffix = entry.trust ? ` · ${titleCase(entry.trust)}` : "";
+  return (
+    <span
+      className="inline-block rounded-full border border-status-info-border bg-status-info-bg px-2 py-0.5 text-xs font-semibold text-status-info-fg"
+      title={`origin ${entry.origin}${entry.trust ? `, trust ${entry.trust}` : ""}`}
+    >
+      AI-drafted{trustSuffix}
+    </span>
+  );
+}
+
 const COLUMNS: DataTableColumn<RiskEntry>[] = [
   { key: "title", header: "Weakness", cell: (r) => r.title },
   { key: "axis", header: "Axis", cell: (r) => titleCase(r.axis) },
@@ -124,6 +147,11 @@ const COLUMNS: DataTableColumn<RiskEntry>[] = [
     key: "source",
     header: "Source",
     cell: (r) => r.source_id ?? "—",
+  },
+  {
+    key: "origin",
+    header: "Provenance",
+    cell: (r) => <OriginCell entry={r} />,
   },
 ];
 

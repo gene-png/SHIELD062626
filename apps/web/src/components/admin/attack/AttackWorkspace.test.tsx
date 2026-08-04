@@ -43,6 +43,16 @@ vi.mock("@/components/admin/StaleDocsNudge", () => ({
 vi.mock("@/components/admin/AiPreviewButton", () => ({
   AiPreviewButton: () => null,
 }));
+// S8: both consultant-facing AI panels are stubbed with sentinels, so the mount
+// case proves placement without either child's own fetch or its own copy.
+vi.mock("@/components/admin/AiStatusBanner", () => ({
+  AiStatusBanner: () => <div data-testid="ai-status-banner" />,
+}));
+vi.mock("@/components/admin/HowAiWorks", () => ({
+  HowAiWorks: ({ service }: { service: string }) => (
+    <div data-testid="how-ai-works">{service}</div>
+  ),
+}));
 
 const fetchCatalog = vi.mocked(attackClient.fetchCatalog);
 const fetchHeatmap = vi.mocked(attackClient.fetchHeatmap);
@@ -111,6 +121,29 @@ describe("AttackWorkspace reqSeq stale-fetch guard", () => {
     expect(
       screen.queryByText("No coverage assessment yet"),
     ).not.toBeInTheDocument();
+  });
+
+  it("mounts the AI status banner and puts the disclosure beside Run AI", async () => {
+    fetchCatalog.mockResolvedValue(CATALOG);
+    fetchLatestAssessment.mockResolvedValue(draft());
+    fetchHeatmap.mockResolvedValue(HEATMAP);
+
+    render(<AttackWorkspace serviceId="svc-1" serviceTitle="Atlas ATT&CK" />);
+
+    expect(await screen.findByTestId("ai-status-banner")).toBeInTheDocument();
+    const disclosure = await screen.findByTestId("how-ai-works");
+    expect(disclosure).toHaveTextContent("attack");
+
+    // Proximity, asserted structurally: the closest ancestor shared by Run AI
+    // and the disclosure must not also contain the page title, which it would
+    // if the disclosure were parked elsewhere on the page.
+    const runAi = screen.getByRole("button", { name: "Run AI" });
+    let shared: HTMLElement | null = runAi.parentElement;
+    while (shared && !shared.contains(disclosure))
+      shared = shared.parentElement;
+    if (!shared)
+      throw new Error("the disclosure shares no ancestor with Run AI");
+    expect(shared.querySelector("h1")).toBeNull();
   });
 
   it("surfaces a failed catalog load to the error state (fail loudly)", async () => {

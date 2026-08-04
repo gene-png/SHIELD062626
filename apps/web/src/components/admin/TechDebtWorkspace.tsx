@@ -33,6 +33,7 @@ import type {
 } from "@/lib/tech_debt/types";
 
 import { AiStatusBanner } from "./AiStatusBanner";
+import { HowAiWorks } from "./HowAiWorks";
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { DeliverableCard } from "./DeliverableCard";
 import { DiscardDraftButton } from "./DiscardDraftButton";
@@ -286,6 +287,7 @@ export function TechDebtWorkspace({
         </CardHeader>
         <CardBody className="flex flex-col gap-4">
           <RedactionDisclosure />
+          <HowAiWorks service="tech_debt" />
           <Dropzone
             onUploaded={(a) => {
               setDocsReloadKey((k) => k + 1);

@@ -981,3 +981,65 @@ identical.
 `apps/api/app/csf/playbook_export.py`,
 `apps/api/tests/unit/test_export_style.py`,
 `packages/design-system/src/tokens.css`; `docs/SPRINTS.md` S1; PR #50.
+
+## D-037 — AI transparency is consultant-facing; the client screen stays silent
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** The four admin
+workspaces and the Risk Register dashboard now disclose what AI does in SHIELD,
+and the client's signed-in screen still says nothing about it.
+
+The trigger was a banner that lied. `GET /admin/ai-status` answered fixture mode
+with "Running in fixture mode — AI features are disabled. Set SHIELD_LLM_MODE=live
+and ANTHROPIC_API_KEY to enable.", which is false in both halves: Run AI works in
+fixture mode, and what it returns is a registered deterministic fixture per
+purpose. A consultant reading "disabled" and then watching values appear has been
+told the wrong thing about where those values came from. The string is now
+`AI runs in offline fixture mode: Run AI returns deterministic demo drafts, not
+live model output`, pinned verbatim by
+`test_ai_status_reports_fixture_mode` because the web banner renders it straight
+off the wire and keeps no copy of its own.
+
+Four surfaces changed.
+
+1. **The banner mounts in all four workspaces and distinguishes two tones.**
+   ATT&CK, CSF and Zero Trust had no banner at all; only Tech Debt did. Fixture
+   mode is a deliberate configuration and reads as information; a live mode whose
+   readiness check fails is a misconfiguration and reads as a warning. The single
+   warning tone conflated a normal offline stack with a broken live one.
+2. **A `HowAiWorks` disclosure sits beside Run AI in each workspace**, naming the
+   AI job purpose, what the model drafts for that service, what the Python
+   engines compute instead, the redactor in front of every call, and what
+   changes between fixture and live mode. Every sentence in it holds in both
+   modes.
+3. **Risk-register rows show provenance.** `origin` and `trust` have been
+   first-class columns on `risk_register_entries` since the model was written and
+   nothing rendered them, so a synthesized entry and one a consultant wrote
+   looked identical in the admin table. AI-origin rows now carry an `AI-drafted`
+   badge with the trust value; other origins print as plain text.
+4. **No copy claims a person checked anything.** The disclosure says a drafted
+   value carries no sign-off, and that approving an assessment records approval
+   of the version rather than review of each field. That is D-035's discipline:
+   no acceptance or substantiation state exists on any of these rows, so no
+   surface may imply one.
+
+Two boundaries this holds.
+
+1. **The client surface stays silent on AI.** `app/home/page.tsx`,
+   `components/home/*` and `components/self-assessment/*` are untouched, and the
+   §6.4 comment that records the rule is intact. The acceptance criterion was
+   written as "the diff touches no client-surface file", which no test run can
+   fail, so `HowAiWorks.test.tsx` reads those sources with comments stripped and
+   fails on any AI vocabulary reaching rendered markup, in this sprint or a later
+   one.
+2. **The asymmetry with S2 is recorded, not resolved.** S2 put an AI-drafting
+   disclosure into the client's PDF deliverable while this decision keeps the
+   client's screen silent. Both are deliberate as implemented and the difference
+   has not been ruled on: a deliverable is a document a consultant approved and
+   sent, a screen is live state. Whether the two should agree is open.
+
+**Ref:** `apps/api/app/routes/admin.py`,
+`apps/api/tests/unit/test_admin_routes.py`,
+`apps/web/src/components/admin/{AiStatusBanner,HowAiWorks,TechDebtWorkspace}.tsx`,
+`apps/web/src/components/admin/{attack/AttackWorkspace,csf/CsfWorkspace,zt/ZtWorkspace}.tsx`,
+`apps/web/src/components/admin/risk/RiskRegisterDashboard.tsx`,
+`apps/api/app/models/risk_register.py`; `docs/SPRINTS.md` S8; D-035.

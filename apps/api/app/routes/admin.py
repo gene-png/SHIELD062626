@@ -505,9 +505,15 @@ def ai_status(_admin: Annotated[User, _admin_required]) -> AdminAiStatus:
             provider=provider,
             model=model,
             ready=False,
+            # D-037: this sentence is rendered verbatim to the consultant, so it
+            # has to describe what fixture mode actually does. The old copy said
+            # AI features were "disabled", which is false: Run AI works and
+            # returns the registered deterministic fixture for the purpose. What
+            # the consultant needs to know is that the values are demo drafts,
+            # not model output. Pinned verbatim by test_ai_status_reports_fixture_mode.
             detail=(
-                "Running in fixture mode — AI features are disabled. Set "
-                "SHIELD_LLM_MODE=live and ANTHROPIC_API_KEY to enable."
+                "AI runs in offline fixture mode: Run AI returns deterministic demo "
+                "drafts, not live model output"
             ),
         )
     # Reuse the single source of truth the boot preflight enforces (D-026):

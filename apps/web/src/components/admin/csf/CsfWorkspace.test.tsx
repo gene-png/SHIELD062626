@@ -34,7 +34,12 @@ vi.mock("@/lib/csf/client", () => ({
 // Stub the children so no child effect fetches and the test stays focused on
 // the workspace's own reqSeq logic.
 vi.mock("./CsfScoreCard", () => ({ CsfScoreCard: () => null }));
-vi.mock("./CsfPlaybookPanel", () => ({ CsfPlaybookPanel: () => null }));
+// S8 needs a node to measure the disclosure's proximity against: the Run AI
+// button for CSF lives inside this panel, so the stub renders an empty marker
+// instead of null. It still fetches nothing.
+vi.mock("./CsfPlaybookPanel", () => ({
+  CsfPlaybookPanel: () => <div data-testid="csf-playbook-panel" />,
+}));
 vi.mock("./CsfGapList", () => ({ CsfGapList: () => null }));
 vi.mock("./CsfDeliverableCard", () => ({ CsfDeliverableCard: () => null }));
 vi.mock("./CsfQuestionnaire", () => ({ CsfQuestionnaire: () => null }));
@@ -43,6 +48,16 @@ vi.mock("@/components/messages/MessageThread", () => ({
 }));
 vi.mock("@/components/admin/StaleDocsNudge", () => ({
   StaleDocsNudge: () => null,
+}));
+// S8: both consultant-facing AI panels are stubbed with sentinels, so the mount
+// case proves placement without either child's own fetch or its own copy.
+vi.mock("@/components/admin/AiStatusBanner", () => ({
+  AiStatusBanner: () => <div data-testid="ai-status-banner" />,
+}));
+vi.mock("@/components/admin/HowAiWorks", () => ({
+  HowAiWorks: ({ service }: { service: string }) => (
+    <div data-testid="how-ai-works">{service}</div>
+  ),
 }));
 
 const fetchCatalog = vi.mocked(csfClient.fetchCatalog);
@@ -244,5 +259,28 @@ describe("CsfWorkspace discard affordance", () => {
     expect(
       screen.getByRole("button", { name: "Start assessment" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("CsfWorkspace AI transparency (S8)", () => {
+  it("mounts the AI status banner and puts the disclosure beside the Run AI panel", async () => {
+    fetchCatalog.mockResolvedValue(CATALOG);
+    fetchInterviewQuestionnaire.mockResolvedValue(null);
+    fetchLatestAssessment.mockResolvedValue(draft());
+    fetchScore.mockResolvedValue(SCORE);
+    fetchGapAnalysis.mockResolvedValue(GAP);
+
+    render(<CsfWorkspace serviceId="svc-1" serviceTitle="Atlas CSF" />);
+
+    expect(await screen.findByTestId("ai-status-banner")).toBeInTheDocument();
+    const disclosure = await screen.findByTestId("how-ai-works");
+    expect(disclosure).toHaveTextContent("csf");
+
+    // Proximity, asserted structurally. CSF's Run AI button lives inside the
+    // playbook panel, so the disclosure has to be the panel's immediately
+    // preceding sibling: adjacent in reading order, not parked further down the
+    // page and not floated up beside the page title.
+    const panel = screen.getByTestId("csf-playbook-panel");
+    expect(panel.previousElementSibling).toBe(disclosure);
   });
 });

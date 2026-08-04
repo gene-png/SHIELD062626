@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // fileURLToPath rejects the object jsdom's URL returns.
 import { fileURLToPath, URL as NodeUrl } from "node:url";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as riskClient from "@/lib/risk/client";
@@ -141,5 +141,76 @@ describe("RiskRegisterDashboard heatmap", () => {
       screen.getByRole("button", { name: "Export XLSX / PDF / Word" })
         .className,
     ).toContain("hover:bg-surface-sunken");
+  });
+});
+
+/**
+ * S8 / D-037. Provenance is already first-class on the row (`origin`, `trust`)
+ * and the consultant could not see it. The badge is admin-only: nothing here
+ * reaches the client surface. The two fixtures differ in BOTH fields, and the
+ * case asserts in both directions, so a badge painted on every row fails it.
+ */
+function provenanceEntry(
+  id: string,
+  title: string,
+  origin: string,
+  trust: string | null,
+): RiskEntry {
+  return {
+    ...entry("high", "major", "high"),
+    id,
+    title,
+    origin,
+    trust,
+  };
+}
+
+const AI_ROW = provenanceEntry(
+  "risk-ai",
+  "Edge appliance unpatched",
+  "ai_generated",
+  "admin_assisted",
+);
+const CONSULTANT_ROW = provenanceEntry(
+  "risk-consultant",
+  "Backup restore never tested",
+  "consultant_entered",
+  null,
+);
+
+describe("RiskRegisterDashboard provenance badge", () => {
+  beforeEach(() => {
+    vi.mocked(riskClient.fetchRiskRegisterLatest).mockResolvedValue({
+      ...REGISTER,
+      entries: [AI_ROW, CONSULTANT_ROW],
+    });
+  });
+
+  it("badges the AI-origin row and leaves the consultant row unbadged", async () => {
+    render(<RiskRegisterDashboard />);
+
+    const aiCell = await screen.findByText("Edge appliance unpatched");
+    const aiRow = aiCell.closest("tr");
+    if (!aiRow) throw new Error("the AI entry is not inside a table row");
+
+    const badge = within(aiRow).getByText("AI-drafted", { exact: false });
+    expect(badge).toBeInTheDocument();
+    // Both provenance fields are surfaced, not just the origin flag.
+    expect(badge.getAttribute("title")).toContain("ai_generated");
+    expect(badge.getAttribute("title")).toContain("admin_assisted");
+
+    const consultantRow = screen
+      .getByText("Backup restore never tested")
+      .closest("tr");
+    if (!consultantRow) {
+      throw new Error("the consultant entry is not inside a table row");
+    }
+    expect(
+      within(consultantRow).queryByText("AI-drafted", { exact: false }),
+    ).not.toBeInTheDocument();
+    expect(consultantRow).toHaveTextContent("Consultant Entered");
+
+    // Exactly one badge in the whole register: origin drives it, not the column.
+    expect(screen.getAllByText("AI-drafted", { exact: false })).toHaveLength(1);
   });
 });
