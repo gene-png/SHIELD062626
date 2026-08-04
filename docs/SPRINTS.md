@@ -322,7 +322,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     and select-on-Enter contract and the auto-save PATCH-flood guard at
     `TierPicker.tsx:32-37`. Evidence: the diff touches neither file.
 
-- [ ] **S7 · Workspace and platform comprehension.**
+- [x] **S7 · Workspace and platform comprehension.**
       Scope: new `components/admin/WorkflowSteps.tsx`, `CsfPlaybookPanel.tsx`,
       `/admin/management`, `HomeDashboard.tsx`, `CsfSelfAssessment.tsx`. Scheduled before S8,
       which touches the same workspace files.
@@ -665,3 +665,27 @@ absence of gaps.`
   the subcategory is unscored and carries no finding. The newly truthful reporting will
   faithfully describe a gap that a silent save failure created. The client answered and the
   report says they did not.
+- 2026-08-04 · S7 · `docs/evidence/S7/recovered-red-run.md`,
+  `apps/web/src/components/admin/WorkflowSteps.test.tsx`, `CsfPlaybookPanel.test.tsx`,
+  `HomeDashboard.test.tsx`, `CsfSelfAssessment.test.tsx` · `517b4b3`.
+  `gate: shield/push passed (7 steps)`. vitest 79→106 across 17→19 files. Pickers,
+  `ZtSelfAssessment.tsx` and the bare `catch {}` all verified untouched, the last byte-identical
+  at `CsfSelfAssessment.tsx:173` despite S7 working inside that file.
+  **A TDD violation, disclosed by the runner and then recovered.** For the playbook-legend
+  criterion it wrote the component before the test, so no red run was observed; the other three
+  criteria had observed reds. An observed red cannot be recreated after the fact, so the driver
+  reverted `CsfPlaybookPanel.tsx` to `b250c4c` and ran its suite: **2 failed | 2 passed (4)**.
+  The tests cannot pass without the implementation. Recorded as a _recovered check_ rather than
+  an observed red, and deliberately not overstated: one failure is a render assertion, the other
+  is `gapPriorityMeaning is not a function`, so part of what fails is the module surface rather
+  than the behaviour. The disclosure is why this was checkable at all — a runner that quietly
+  reordered its narrative would have produced an identical-looking green sprint.
+  Unrecognised statuses fail loudly instead of defaulting to step 1, and the expectation type is
+  `Record<Status, number>` so tsc rejects a new wire status until it is mapped. The home legend
+  makes an unexplained phase structurally impossible (`phaseFor` returns one of five shared
+  objects) and the Gap chips render their legend from the same map that colours them, raising on
+  a missing reading. All four workspaces proved by name, two at non-trivial statuses.
+  **Plan defect, not a code one: `/admin/management` is named in S7's Scope line but carries no
+  acceptance criterion and no evidence clause anywhere.** The runner left it untouched rather
+  than inventing work, which was correct. Either it needs a criterion in a later sprint or that
+  scope line is stale from an earlier draft.
