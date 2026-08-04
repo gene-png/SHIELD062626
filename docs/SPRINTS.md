@@ -339,7 +339,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     Impact Profile explainer renders where `profileLabel` does at
     `CsfSelfAssessment.tsx:253-261`. Evidence: vitest case asserting all five labels.
 
-- [ ] **S8 · AI transparency, consultant-facing (D-037).**
+- [x] **S8 · AI transparency, consultant-facing (D-037).**
       Scope: `routes/admin.py`, the four workspaces, new `HowAiWorks.tsx`, risk register rows.
       Acceptance criteria:
   - `AiStatusBanner` mounts in the three unbannered workspaces (attack, csf, zt). Evidence:
@@ -721,3 +721,46 @@ absence of gaps.`
   three sequential cold compiles and each retry can re-enter them. S9 and S11 both require a
   green full suite, so this will keep recurring on any cold-start run — real test-infra work,
   small but not trivial, and outside a checkpoint's remit.
+- 2026-08-04 · S8 · `docs/evidence/S8/phantom-token-and-badge.md`,
+  `apps/web/src/components/admin/HowAiWorks.test.tsx`, `AiStatusBanner.test.tsx`,
+  `ZtWorkspace.test.tsx`, `apps/api/tests/unit/test_admin_routes.py` · `56373e2`.
+  **The loop survived a process exit mid-sprint.** The runner was killed with its work
+  uncommitted; HEAD stayed at `4bdc6d8`, the branch stayed in sync, and the work was intact in
+  the tree. Resumed from transcript rather than respawned, since a fresh agent would inherit a
+  half-finished tree it did not write. Finished on attempt 2. Its first gate after resuming
+  correctly reported `BLOCKED` because Docker Desktop had died with the earlier crash; it
+  restarted the stack and re-ran rather than reading five unreachable steps as green.
+  `gate: shield/push passed (7 steps)`. vitest 106→118 across 19→22 files. Client-surface
+  constraint held: `git diff --name-only | grep -E "app/home/|components/home/|
+components/self-assessment/"` returns nothing, and the section 6.4 comment is intact and
+  asserted. The fixture string reassembles to the criterion's text exactly.
+  **A SECOND phantom Tailwind token, and this one matters beyond its seven lines.**
+  `border-border-default` emits nothing: the preset declares `border: { subtle, DEFAULT, strong,
+focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the served
+  stylesheet (41130 bytes) rather than by reasoning — `grep -c "border-border-default"` returns
+  **0** while `border-border-subtle` returns 1. Seven uses across five files against 94 of the
+  working class. S0 existed to sweep this exact class of defect and swept only `surface-muted`,
+  the one instance the design sprint grepped for, so a second phantom survived it. The class was
+  never swept systematically; the general fix is a check that every colour utility resolves to a
+  real generated class, not another one-off grep.
+  **The provenance badge is correct and currently cannot discriminate.** The criterion is met
+  with fixtures differing in both `origin` and `trust`, but nothing writes a non-AI origin:
+  `routes/risk.py:270` is the only `RiskEntry` writer and passes `origin="ai_generated"`, the
+  model defaults to the same, and `consultant_entered` appears nowhere in app code. So every
+  register row badges — honest, since every row really is AI-drafted, but a constant label rather
+  than a distinction. It becomes informative only when a consultant-entered write path exists,
+  which the plan places in the next batch. The runner disclosed this itself instead of letting a
+  passing test speak for it.
+  **Red-run honesty, volunteered.** Observed red: info tone, risk badge, all three banner
+  mounts; `HowAiWorks` content was red as a collection failure rather than an assertion. NOT
+  red and disclosed: the warning-tone and renders-nothing cases both passed pre-change because
+  the old banner was warning-toned for every state; the three client-silence guards could not
+  go red without adding AI vocabulary to a forbidden file, so the runner proved the detector
+  fires against files that do carry it; the pytest red was reconstructed by stashing `admin.py`
+  after a first run raced its own edit and passed spuriously. **One test was edited after seeing
+  implementation behaviour** — the CSF proximity assertion, because CSF's Run AI lives in a child
+  component so the shared-ancestor check used for attack and zt legitimately failed against
+  correct code. Replaced with `previousElementSibling`, a tighter claim, and disclosed.
+  D-037 records the client-PDF-versus-client-screen asymmetry as an open boundary rather than
+  resolving it, on the reasoning that an unrecorded inconsistency is the one silently "fixed" by
+  whoever notices it first.
