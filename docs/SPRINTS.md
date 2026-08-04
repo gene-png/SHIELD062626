@@ -395,7 +395,7 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - The full host e2e suite is green after `--force-recreate web`, `alembic upgrade head`,
     and a re-seed. Evidence: the Playwright run summary pasted into the log line.
 
-- [ ] **S10 · Prose scrub.**
+- [x] **S10 · Prose scrub.**
       First to cut. Load `/writing-style` and sweep UI copy plus export, fixture, and seed
       prose, including everything S2 through S8 authored. Code identifiers, log prefixes, and
       UI glyphs are exempt.
@@ -805,3 +805,37 @@ focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the se
   and every row badges; "management purpose copy" predates Sprint 10 (`0fe1096`); the CSF stepper
   is 5 steps, not 10. Plus a bug correctly left alone: `ZtSelfAssessment.tsx:371` still carries
   the old Notes placeholder although S6's commit message claims both were updated.
+- 2026-08-04 · S10 · `docs/evidence/S10/pins-moved-nothing-loosened.md` · `73ae76b`.
+  `gate: shield/push passed (7 steps)`. Seven pinned literals moved, prose and pin in the same
+  commit at identical strictness.
+  **Nothing was loosened.** The complete deletion set across `apps/api/tests` and `e2e` is eight
+  lines: five substring `in text` checks, one `==` cell equality, one module constant consumed by
+  two `not in` absence checks, and two regexes — and the regexes got **stricter**, losing a `.*`
+  wildcard (`/capped .* no evidence/` → `/capped, no evidence/`). Nothing became a `toContain`,
+  a permissive regex, conditional, or deleted.
+  **Nothing frozen moved.** `apps/api/app/ai/` has an empty diff, so `_MITRE_STATUS_CYCLE` and the
+  ZT/CSF arithmetic are byte-identical; `s4-techdebt`, `s5-attack` and `s6-zt` have no diff at all,
+  so `s4:115/119/134`, `s5:119/131/194` and `s6:186` could not have moved; `s7` changed exactly two
+  lines at 301/309, leaving `s7:238/249` alone.
+  **No honesty claim was re-inflated** — the check that mattered, since five sprints in this batch
+  made sentences narrower and a scrub is the easiest way to reverse that while looking like an
+  improvement. `zt/exporters.py:200,206` still carry "This is an absence of data, not an absence of
+  gaps" and "this statement says nothing about them"; `attack/exporters.py:61` still says "no field
+  here should be read as verified"; `tech_debt/exporters.py` has an **empty diff** so its lower-bound
+  hedges are byte-identical; the D-035 gap-direction string is unchanged.
+  **Driver methodology note:** a single-line grep for those protected strings showed four of nine
+  "missing". All nine were present — Python splits them across f-string continuations, so only a
+  multiline search finds them. A false alarm was one trusted grep away, and anyone auditing prose in
+  this codebase will hit the same trap.
+  61 em-dashes rewritten rather than swapped (41 sentence splits, 12 colons, 5 commas, 3
+  parentheses); rules 2 through 7 produced zero changes, every hype-list hit being a code
+  identifier. Correctly declined: title separators like `"{org} — {label}"`, which are load-bearing
+  (`test_export_style.py:109` parametrizes the separator set, `test_deliverable_release.py:426`
+  asserts an em-dash is _absent_ from a stripped label, `s6-zt.spec.ts:30` pins a service title),
+  and ~180 em-dashes in comments and docstrings. The runner caught its own subagent editing three
+  out-of-scope lines in `ZtSelfAssessment.tsx` and reverted them pre-commit.
+  Also fixed the stale placeholder S6's commit message claimed to have updated:
+  `ZtSelfAssessment.tsx:371` is now byte-identical to the other two questionnaires and the old
+  string is gone from `apps/web/src`. Nothing pinned it.
+  The runner noted unprompted that criterion 2 ("the full push gate is green afterwards") is a
+  floor rather than a proof, and treated it as one.
