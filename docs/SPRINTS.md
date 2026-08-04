@@ -689,3 +689,35 @@ absence of gaps.`
   acceptance criterion and no evidence clause anywhere.** The runner left it untouched rather
   than inventing work, which was correct. Either it needs a criterion in a later sprint or that
   scope line is stale from an earlier draft.
+- 2026-08-04 · checkpoint · pass · gate 7/7 · bandit clean · secrets clean · audits unchanged
+  (5 high + 2 moderate, no lockfile touched) · e2e 50 passed / 6 skipped by design / 1 load
+  flake arbitrated green. Ran at `f58332b` after eight sprints; nothing fixed, nothing
+  committed by the checkpoint.
+  This checkpoint's specific risk was S6 and S7 pouring new copy onto the surfaces the specs
+  drive, where `getByRole` matches by substring — a strict-mode violation would have been a real
+  regression, not a flake. **None occurred.** The single failure
+  (`s7-csf-playbook.spec.ts:312`) was arbitrated as the documented cold-compile flake on four
+  strands: it failed in `signIn`, the test's first action, before any assertion on rendered
+  content; no strict-mode violation or "resolved to N elements" anywhere; **the failure moved**
+  between runs (`:312` failed in-suite then passed standalone while `:150` did the reverse,
+  whereas a selector break is deterministic); and the logs show sign-in succeeding, then the
+  redirect chain paying `/` 10.5s + `/admin` 3.2s + `/admin/queue` 3.4s. Warming those routes
+  and re-running gave `1 passed`, so all 51 runnable tests are green across runs.
+  Driver-verified: the ZT evidence join at `routes/zt.py:1305` carries
+  `Artifact.client_id == client_id` identically to `attack.py:919` and `csf.py:1782`, so no
+  cross-tenant artifact reaches a ZT deliverable; `_persist_run_ai_narratives` needs no
+  client_id predicate because it targets a primary key already authorised by
+  `require_service_in_tenant`.
+  **New finding: CI's bandit never scans `apps/api/scripts`.** `.github/workflows/ci.yml:48`
+  runs `bandit -q -c pyproject.toml -r apps/api/app`, so the whole `scripts/` tree is invisible
+  to it. Scanning it anyway found 7 LOW including `B105` on the documented demo password at
+  `seed_demo.py:129` — harmless and pre-existing from `20afb3d`. The credential is not the
+  finding; the coverage gap is, because a future script could carry a real secret unscanned.
+  **The recorded `evidence_artifact_id` finding has a third instance:** `zt.py:786` joins
+  `attack.py:401` and `csf.py:528`. Same pattern, dating to `fb9c99d`, not a regression.
+  **Correction to how the e2e flake should be fixed.** It is NOT a one-line timeout bump:
+  `e2e/helpers/auth.ts:60-63` already wraps a 15s inner `waitForURL` in
+  `expect(...).toPass({ timeout: 60000 })` and still lost, because the post-login chain pays
+  three sequential cold compiles and each retry can re-enter them. S9 and S11 both require a
+  green full suite, so this will keep recurring on any cold-start run — real test-infra work,
+  small but not trivial, and outside a checkpoint's remit.
