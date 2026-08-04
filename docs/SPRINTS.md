@@ -230,7 +230,7 @@ files S7 and S8 also touch.
   - A zero-actions assessment still renders. Evidence:
     `tests/unit/test_csf_deliverable_routes.py`, the C0-pattern case.
 
-- [ ] **S4 · ZT roadmap and persisted AI narratives, migration `0034_zt_narratives`.**
+- [x] **S4 · ZT roadmap and persisted AI narratives, migration `0034_zt_narratives`.**
       Highest risk in the batch. Scope: the migration, `schemas/zt.py`, `routes/zt.py`,
       `app/zt/exporters.py`, `apps/web/src/lib/zt/types.ts`.
       Acceptance criteria:
@@ -550,3 +550,46 @@ gaps (0 of 0 shown)` on a report that scored nothing. The runner declined to cha
   which is a boolean existence oracle at PATCH. Data-integrity gap rather than privilege
   escalation, since platform admins hold cross-tenant reach by design; the new join is what
   stops it becoming a leak in a deliverable.
+- 2026-08-03 · S4 · `docs/evidence/S4/race-window-and-sparse-render.md`,
+  `apps/api/tests/unit/test_zt_run_ai.py`, `apps/api/tests/unit/test_zt_exporters.py`,
+  `apps/api/tests/unit/test_zt_routes.py` · `3590500`. The highest-risk task in the batch,
+  accepted first time.
+  **The race criterion was verified structurally, not accepted.** The test patches
+  `app.routes.zt.audit`, and that call sits strictly after the status check and strictly
+  before the durable write in BOTH shapes: pre-fix `b53b6af` had check `:510` → audit `:524`
+  → commit `:532`; post-fix has audit `:584` → conditional UPDATE `:596` → commit `:603`. So
+  the injection is genuinely inside the window the criterion names, and the required red run
+  against the pre-fix shape returned **200** with the narrative persisted into a parent that
+  had gone DISCARDED mid-window. The fix is D-031's shape — conditional
+  `UPDATE ... WHERE status IN ('draft','submitted')`, `rowcount != 1` raises typed 409
+  `assessment_not_editable` — not a third mechanism. The test carries
+  `assert fired, "the seam moved out of the window"` so it cannot silently stop biting.
+  Disclosed limitation, the runner's own: the injection is emitted SQL on the request session
+  rather than a second connection, because SQLite already holds a RESERVED write lock there.
+  The criterion asks for a monkeypatch and what it tests is exercised faithfully.
+  Migration `0034` → `down_revision "0033"`, `batch_alter_table`, all three nullable and
+  additive, `JSON().with_variant(JSONB, "postgresql")`; `alembic current` reports
+  `0034 (head)` in-container. `gate: shield/push passed (7 steps)`. Both grep guards empty;
+  the evidence join filters `Artifact.client_id == client_id` in SQL at `zt.py:1305`, matching
+  attack and csf exactly. One line removed from tests: the `_ctx` signature, widened with
+  keyword-only args defaulting to prior behaviour. pytest 796→814.
+  **Fifth consecutive defective evidence clause**, and this one could not fail by
+  construction: criterion 3 asks for `tsc --noEmit` green with the web type consumed, but
+  adding three _optional_ fields to a TS interface cannot make tsc red, and the scope forbade
+  touching any web file that could consume them. The runner substituted wire-level assertions
+  on the real serialized payload, which is where the contract actually lives.
+  **The runner fixed three S3-shaped defects no criterion covered**, after being warned about
+  the pattern: the ZT PDF/DOCX printed `No gaps at target stage 3 (Advanced).` identically
+  whether all 37 capabilities sat at target or none was scored, the XLSX placeholder was a
+  flat string, and the headline printed against 8% coverage unqualified. Driver re-rendered
+  0/37 and 3/37 and both now state their own coverage — `This is an absence of data, not an
+absence of gaps.`
+  **This answers the CSF open item.** ZT's headline reads `Overall stage: Optimal` at 8.1%
+  coverage but follows with a sentence saying unscored capabilities are excluded from every
+  average "so no stage here describes them". CSF's `Overall maturity: Repeatable` at 2.8% has
+  no such qualifier. The remedy already exists one service over, so closing that item is
+  copying an established pattern rather than making a new decision.
+  Noted, not a defect: `ZtRunAiResponse.pillar_narratives` carries a mutable `{}` default
+  (`schemas/zt.py:173`), but it is pre-existing at `b53b6af`, outside the criterion's named
+  class `ZtAssessmentResponse` (which correctly uses `| None = None`), and Pydantic v2
+  deep-copies defaults per instance.
