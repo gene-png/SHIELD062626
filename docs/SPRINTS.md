@@ -515,3 +515,38 @@ gaps (0 of 0 shown)` on a report that scored nothing. The runner declined to cha
   maturity rating computed from 3 of 106 answers is the same class of problem one layer up.
   Predates S3, covered by no criterion. Whether a coverage floor should gate the headline
   rating is a product decision.
+- 2026-08-03 · checkpoint · pass · gate 7/7 · bandit clean · secrets clean · e2e 49 passed /
+  6 skipped by design / 2 load-flakes green standalone · tenant isolation holds.
+  Ran at `9c49382` after four completed sprints. Nothing fixed, nothing committed by the
+  checkpoint itself. The three things the per-sprint gates never cover all ran here: bandit
+  (CI-only), the dependency audits, and the full host e2e suite, which had not run since S0
+  changed how the risk matrix renders. `s8-risk-register:206` exercises that 5x5 matrix and
+  passed even under load, which is the S0 concern cleared end to end. The two e2e failures
+  were both `waitForURL` timeouts in the shared sign-in helper, never a content assertion;
+  `/sign-in` measured 14.4s cold against a 15s budget, and both specs passed standalone.
+  **Driver-verified the security claim rather than accepting it.** Both new evidence joins
+  carry `Artifact.client_id == client_id` in the SQL predicate (`routes/attack.py:919`,
+  `routes/csf.py:1782`), so a foreign artifact never enters the result map; both exporters
+  then raise on an unresolved id rather than degrading into `No evidence attached`
+  (`attack/exporters.py:94`, `csf/exporters.py:115`). A cross-tenant artifact cannot reach a
+  deliverable, and the 409 is not an existence oracle because a foreign id and a nonexistent
+  id take the identical path.
+  **The documented dependency posture is stale and should be corrected.** `CONTEXT.md`
+  records one HIGH (`sharp`) plus one moderate (`postcss`). Actual root `pnpm audit` is
+  **5 high + 2 moderate**: `sharp@0.34.5` HIGH as documented, `postcss@8.4.31` now carrying
+  four advisories of which **two are HIGH** rather than one moderate, and
+  `brace-expansion@1.1.16` **2× HIGH, undocumented anywhere** (transitive via
+  `minimatch@3.1.5`). None is branch-introduced — this branch touches no lockfile or
+  manifest, so `main` audits identically — but the recorded posture understates reality and
+  all three want the same unscheduled lockfile bump. `npm audit` in `e2e/` is clean, and the
+  endpoint did not 410 this time.
+  **Two pre-existing security findings, reported not fixed, neither a branch regression.**
+  (1) XLSX formula injection: openpyxl types a leading `=` as a formula, and free-form
+  `Notes`/`Rationale` cells already carry user text across all six exporters; S2 and S3 add
+  one more user-controlled column to a vector that already existed. A real fix spans six
+  modules and is not a one-pass TDD change. (2) `evidence_artifact_id` is written
+  unvalidated at `attack.py:401` and `csf.py:528`, both admin-gated and both unchanged by
+  this branch: a nonexistent UUID raises IntegrityError while a foreign-tenant UUID commits,
+  which is a boolean existence oracle at PATCH. Data-integrity gap rather than privilege
+  escalation, since platform admins hold cross-tenant reach by design; the new join is what
+  stops it becoming a leak in a deliverable.
