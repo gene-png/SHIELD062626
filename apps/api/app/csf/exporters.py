@@ -198,6 +198,38 @@ def evidence_reference(answer: CsfAnswer | None, names: Mapping[uuid.UUID, str])
         ) from exc
 
 
+def _no_gap_steps(ctx: CsfDeliverableContext) -> list[str]:
+    """What to say when no scored subcategory sits below target.
+
+    `analyze()` only raises a gap for an ANSWERED subcategory below target, so
+    an assessment that scored three of 106 produces zero gaps exactly like one
+    that scored all 106 at target. Reading both as an all-clear would let the
+    deliverable certify 103 subcategories nobody assessed, so the sentence
+    depends on coverage: no finding at all when nothing is scored, the unscored
+    count when coverage is partial, and only at full coverage the line that
+    tells the client to hold their current controls.
+    """
+    answered = ctx.score.answered_subcategories
+    total = ctx.score.total_subcategories
+    target = ctx.gap.target_tier
+    label = ctx.gap.target_label
+    logger.debug("%s _no_gap_steps coverage=%d/%d", _LOG, answered, total)
+    if answered == 0:
+        return [
+            "No subcategory has been scored, so this report records no maturity finding.",
+            f"All {total} subcategories in the NIST CSF 2.0 catalog remain unassessed.",
+        ]
+    if answered < total:
+        return [
+            f"No scored subcategory fell below target T{target} ({label}).",
+            f"{total - answered} of {total} subcategories are unscored and carry no finding.",
+        ]
+    return [
+        f"No subcategory scored below target T{target} ({label}) — maintain the "
+        f"current controls and re-assess on the next cycle."
+    ]
+
+
 def next_steps(ctx: CsfDeliverableContext) -> list[str]:
     """The action plan's next-step sentences, computed from the rows.
 
@@ -208,12 +240,7 @@ def next_steps(ctx: CsfDeliverableContext) -> list[str]:
     target = ctx.gap.target_tier
     label = ctx.gap.target_label
     if not gaps:
-        line = (
-            f"No subcategory scored below target T{target} ({label}) — maintain the "
-            f"current controls and re-assess on the next cycle."
-        )
-        logger.debug("%s next_steps: zero gaps", _LOG)
-        return [line]
+        return _no_gap_steps(ctx)
 
     total = len(gaps)
     widest = max(g.gap_size for g in gaps)

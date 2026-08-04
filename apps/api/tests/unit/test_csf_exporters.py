@@ -382,6 +382,56 @@ def test_next_steps_report_the_zero_gap_state() -> None:
     assert expected in _docx_norm(render_docx(ctx))
 
 
+FULL_COVERAGE_REASSURANCE = "maintain the current controls and re-assess on the next cycle"
+
+
+def _partially_scored_ctx(scored: int, tier: int | None):
+    """`scored` subcategories carry `tier`; the rest are genuinely unscored."""
+    a, answers = _build_inputs(answers_tier=None)
+    for ans in answers[:scored]:
+        ans.maturity_tier = tier
+    tier_map = {ans.subcategory_code: ans.maturity_tier for ans in answers}
+    return build_context(
+        client_legal_name="Atlas Defense Solutions",
+        service_title="NIST CSF 2.0 Assessment",
+        assessment=a,
+        answers=answers,
+        score=compute_score(tier_map),
+        gap=analyze_gaps(tier_map, target_tier=3),
+    )
+
+
+@pytest.mark.unit
+def test_next_steps_record_no_finding_when_nothing_is_scored() -> None:
+    """Zero scored answers produce zero gaps, and a zero-gap all-clear over an
+    unassessed framework is a finding of adequacy the data cannot support."""
+    ctx = _partially_scored_ctx(0, None)
+    assert ctx.score.answered_subcategories == 0
+    assert ctx.gap.total_gap_count == 0
+    for text in (_pdf_norm(render_pdf(ctx)), _docx_norm(render_docx(ctx))):
+        assert "No subcategory has been scored, so this report records no maturity finding." in text
+        assert f"All {len(SUBCATEGORIES)} subcategories in the NIST CSF 2.0 catalog" in text
+        assert "remain unassessed." in text
+        assert FULL_COVERAGE_REASSURANCE not in text
+
+
+@pytest.mark.unit
+def test_next_steps_name_the_unscored_count_when_coverage_is_partial() -> None:
+    """3 of 106 scored, all at target: no scored gap, but 103 subcategories
+    carry no finding and the report must not read as an all-clear."""
+    ctx = _partially_scored_ctx(3, 3)
+    unscored = len(SUBCATEGORIES) - 3
+    assert ctx.score.answered_subcategories == 3
+    assert ctx.gap.total_gap_count == 0
+    for text in (_pdf_norm(render_pdf(ctx)), _docx_norm(render_docx(ctx))):
+        assert "No scored subcategory fell below target T3 (Repeatable)." in text
+        assert (
+            f"{unscored} of {len(SUBCATEGORIES)} subcategories are unscored and carry "
+            f"no finding." in text
+        )
+        assert FULL_COVERAGE_REASSURANCE not in text
+
+
 @pytest.mark.unit
 def test_xlsx_answers_tier_cells_carry_the_graded_fill() -> None:
     from openpyxl import load_workbook
