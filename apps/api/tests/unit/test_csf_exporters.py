@@ -533,3 +533,85 @@ def test_build_context_refuses_an_unresolved_evidence_pointer() -> None:
             gap=analyze_gaps(tier_map, target_tier=4),
             evidence_names={},
         )
+
+
+# ---------------------------------------------------------------------------
+# S9: PDF acceptance contract — section order plus one score/model/action link
+# ---------------------------------------------------------------------------
+
+
+def _assert_section_sequence(text: str, sequence: list[str]) -> None:
+    """Assert every string appears in the rendered text, in exactly this order.
+
+    Each needle is searched for only AFTER the previous match, so this is a true
+    subsequence check rather than a set of `in` checks. A section that renders
+    but lands in the wrong place still reads as a defensible report to `in`, and
+    that is the failure this is here to catch.
+    """
+    last = -1
+    last_needle = "(start of document)"
+    for needle in sequence:
+        found = text.find(needle, last + 1)
+        assert found != -1, (
+            f"{needle!r} does not appear in the rendered PDF after "
+            f"{last_needle!r} (index {last})"
+        )
+        last, last_needle = found, needle
+
+
+@pytest.mark.unit
+def test_pdf_acceptance_contract_orders_sections_and_links_the_tier_to_its_action() -> None:
+    """The CSF PDF's acceptance contract, over real rendered bytes.
+
+    Section order: Maturity summary -> How these tiers are scored -> Per-function
+    rollup -> Top remediation gaps -> Action plan.
+
+    Representative linkage, all on the SAME subcategory: the average tier (the
+    score), the NIST tier definition that says what that tier means (its
+    citation reference — the model the number is read against), the gap row
+    showing its ramp to target, and the action-plan row naming an owner and a
+    deadline (its action). The tier model has to precede the gap list: a reader
+    cannot judge a T3 -> T4 gap before being told what T3 and T4 are.
+    """
+    from datetime import date
+
+    def _tier_def(tier: int):
+        for d in TIER_DEFINITIONS:
+            if int(d.tier) == tier:
+                return d
+        raise AssertionError(f"no tier definition for T{tier}")
+
+    action = _action(
+        "DE.AE-02",
+        owner="Dana Iyer",
+        deadline=date(2026, 11, 30),
+        characterization="Ongoing",
+    )
+    ctx = _ctx_with_actions({"DE.AE-02": action})
+    text = _pdf_norm(render_pdf(ctx))
+    first_gap = ctx.gap.gaps[0]
+    assert first_gap.code == "DE.AE-02", "the action must key the first shown gap"
+
+    _assert_section_sequence(
+        text,
+        [
+            # Section 1, and the score.
+            "Maturity summary",
+            "Overall maturity: Repeatable",
+            "Average tier: 3.00",
+            # Section 2: the model the score is read against, from TIER_DEFINITIONS.
+            "How these tiers are scored",
+            _tier_def(3).description,
+            _tier_def(4).description,
+            # Section 3.
+            "Per-function rollup",
+            # Section 4, and the gap's ramp on the same subcategory.
+            f"Top remediation gaps (target T{ctx.gap.target_tier})",
+            f"{first_gap.code} {first_gap.function.value}",
+            f"T{first_gap.current_tier} → T{first_gap.target_tier}",
+            # Section 5, and the action that closes it, with its owner and date.
+            f"Action plan ({len(ctx.gap.gaps)} of {ctx.gap.total_gap_count} gaps shown)",
+            "Dana Iyer",
+            "2026-11-30",
+        ],
+    )

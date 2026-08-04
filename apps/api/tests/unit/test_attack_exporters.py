@@ -435,3 +435,83 @@ def test_docx_carries_the_citation_stat_and_the_methodology_disclosure() -> None
     assert f"0 of {len(TECHNIQUES)} scored techniques cite at least one tool" in paras
     for clause in _METHODOLOGY_CLAUSES:
         assert clause in paras, f"methodology note lost from the DOCX: {clause!r}"
+
+
+# ---------------------------------------------------------------------------
+# S9: PDF acceptance contract — section order plus one score/citation/gap link
+# ---------------------------------------------------------------------------
+
+
+def _assert_section_sequence(text: str, sequence: list[str]) -> None:
+    """Assert every string appears in the rendered text, in exactly this order.
+
+    Each needle is searched for only AFTER the previous match, so this is a true
+    subsequence check rather than a set of `in` checks. A section that renders
+    but lands in the wrong place still reads as a defensible report to `in`, and
+    that is the failure this is here to catch.
+    """
+    last = -1
+    last_needle = "(start of document)"
+    for needle in sequence:
+        found = text.find(needle, last + 1)
+        assert found != -1, (
+            f"{needle!r} does not appear in the rendered PDF after "
+            f"{last_needle!r} (index {last})"
+        )
+        last, last_needle = found, needle
+
+
+@pytest.mark.unit
+def test_pdf_acceptance_contract_orders_sections_and_links_coverage_to_its_citations() -> None:
+    """The ATT&CK PDF's acceptance contract, over real rendered bytes.
+
+    Section order: Coverage summary -> Methodology -> Per-tactic rollup -> Top
+    remediation gaps.
+
+    Representative linkage: the coverage percentage (the score), the citation
+    stat and the disclosure qualifying it (its citation reference), then the
+    lowest-sorted gapped technique in the gap list (its gap). The citation stat
+    has to sit between the score and the gap list, because it is the only thing
+    in the document that says how much of that percentage rests on a cited tool.
+    """
+    # Every third technique is a Gap; one covered row cites two tools, so the
+    # citation numerator is 1 and computed rather than asserted as a constant.
+    a, coverage, _ = _build_inputs(default_status="covered")
+    for i, row in enumerate(coverage):
+        if i % 3 == 0:
+            row.status = CoverageStatus.GAP.value
+    coverage[1].detection_tools = ["Okta", "CrowdStrike"]
+    rollup = compute_heatmap({c.technique_code: c.status for c in coverage})
+    ctx = build_context(
+        client_legal_name="Atlas Defense Solutions",
+        service_title="MITRE ATT&CK Coverage",
+        assessment=a,
+        coverage=coverage,
+        rollup=rollup,
+    )
+
+    text = _pdf_norm(render_pdf(ctx))
+    first_gap = sorted(c.technique_code for c in coverage if c.status == CoverageStatus.GAP.value)[
+        0
+    ]
+    shown = min(50, rollup.gap)
+
+    _assert_section_sequence(
+        text,
+        [
+            # Section 1, and the score.
+            "Coverage summary",
+            f"Overall coverage: {rollup.coverage_pct}%",
+            f"Gap {rollup.gap}",
+            # The citation reference for that score, computed in Python.
+            f"1 of {rollup.scored_count} scored techniques cite at least one tool",
+            # Section 2: what the citations do and do not establish.
+            "Methodology and what this report does not claim",
+            "no field here should be read as verified",
+            # Section 3.
+            "Per-tactic rollup",
+            # Section 4, and the gap the score implies, named.
+            f"Top remediation gaps ({shown} of {rollup.gap} shown)",
+            first_gap,
+        ],
+    )

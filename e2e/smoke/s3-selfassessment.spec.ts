@@ -234,6 +234,80 @@ test("CSF questionnaire renders the verbatim subcategory outcome prompts (C8)", 
   }
 });
 
+/**
+ * SMOKE_TEST.md section 34: the answering aids S6 put next to the question
+ * itself, proven on the surface a CLIENT actually sees.
+ *
+ * Source of record for the literals below:
+ *   - tier explainer + worked example: apps/web/src/lib/guidance/csf.ts
+ *   - rung labels: apps/web/src/components/csf/TierPicker.tsx TIER_SHORT_LABELS
+ *   - notes placeholder: apps/web/src/components/admin/csf/CsfQuestionnaire.tsx
+ *     NOTES_PLACEHOLDER (the client render mounts that same component with
+ *     promptAudience="client", so the placeholder is shared, not duplicated)
+ *
+ * Scoping matters here. The tier disclosure renders once per subcategory — ~20
+ * of them on the GOVERN tab — so every string inside it repeats. Each assertion
+ * is therefore scoped to `details[data-guidance-for="<code>"]`, which is the
+ * only per-row hook these components expose (there are no data-testids).
+ */
+const TIER1_EXPLAINER =
+  "Someone deals with this when it comes up, and which someone it is decides how well it goes. Nothing is written down, so the work starts over each time.";
+const GV_TIER3_EXAMPLE =
+  "A named executive owns the security policy, every department is in scope, and it is reviewed on the same date each year.";
+const NOTES_PLACEHOLDER =
+  "Name the tool, policy, or process behind this answer: what enforces it, where it is written down, and who runs it.";
+
+test("a client answering CSF gets every tier explained, the impact profile explained, and a note prompt naming what to cite", async ({
+  page,
+}) => {
+  await registerAtlasClient(page);
+  await startAssessment(page, { type: "nist_csf", tier: 3, profile: "LOW" });
+  await expect(
+    page.getByRole("heading", { name: "CSF 2.0 questionnaire" }),
+  ).toBeVisible({ timeout: 30000 });
+
+  // --- Tier guidance, at the question ------------------------------------
+  const guidance = page.locator('details[data-guidance-for="GV.OC-01"]');
+  const guidanceTrigger = guidance.getByText("What do these levels mean?");
+  await expect(guidanceTrigger).toBeVisible({ timeout: 30000 });
+  await guidanceTrigger.click();
+
+  // All four rungs are NAMED, not merely numbered. A client cannot pick a tier
+  // from "3" alone, which is what the picker shows before this opens.
+  for (const rung of [
+    "Tier 1 · Partial",
+    "Tier 2 · Risk Informed",
+    "Tier 3 · Repeatable",
+    "Tier 4 · Adaptive",
+  ]) {
+    await expect(guidance.getByText(rung, { exact: true })).toBeVisible();
+  }
+  // Each rung carries the plain-language explainer AND a worked example keyed to
+  // this function (GOVERN), not a generic one — that is what makes the ladder
+  // self-service. toContainText keeps the "For example:" prefix from splitting
+  // the match across the <span> and the text node beside it.
+  await expect(guidance).toContainText(TIER1_EXPLAINER);
+  await expect(guidance).toContainText(GV_TIER3_EXAMPLE);
+
+  // --- The impact profile that decides what is even in scope --------------
+  const profile = page.locator('details[data-guidance-for="impact-profile"]');
+  const profileTrigger = profile.getByText("What is an impact profile?");
+  await expect(profileTrigger).toBeVisible();
+  await profileTrigger.click();
+  await expect(profile).toContainText(
+    "on the FIPS 199 scale federal programs use",
+  );
+
+  // --- Notes helper copy --------------------------------------------------
+  // The placeholder names what a defensible note has to contain. Asserted as an
+  // attribute because the textarea sits inside a collapsed <details>; its
+  // accessible name ("Notes for <code>") is the per-row anchor.
+  await expect(page.getByLabel("Notes for GV.OC-01")).toHaveAttribute(
+    "placeholder",
+    NOTES_PLACEHOLDER,
+  );
+});
+
 test("DoD Zero Trust self-assessment maturity scale shows exactly 3 levels", async ({
   page,
 }) => {

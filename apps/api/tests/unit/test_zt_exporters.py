@@ -443,3 +443,90 @@ def test_pdf_escapes_ampersand_in_header() -> None:
     )
     text = _pdf_text(render_pdf(ctx))
     assert "Rook&Pawn Security" in text
+
+
+# ---------------------------------------------------------------------------
+# S9: PDF acceptance contract — section order plus one score/gap/roadmap link
+# ---------------------------------------------------------------------------
+
+
+def _assert_section_sequence(text: str, sequence: list[str]) -> None:
+    """Assert every string appears in the rendered text, in exactly this order.
+
+    Each needle is searched for only AFTER the previous match, so this is a true
+    subsequence check rather than a set of `in` checks. A section that renders
+    but lands in the wrong place still reads as a defensible report to `in`, and
+    that is the failure this is here to catch.
+    """
+    last = -1
+    last_needle = "(start of document)"
+    for needle in sequence:
+        found = text.find(needle, last + 1)
+        assert found != -1, (
+            f"{needle!r} does not appear in the rendered PDF after "
+            f"{last_needle!r} (index {last})"
+        )
+        last, last_needle = found, needle
+
+
+@pytest.mark.unit
+def test_pdf_acceptance_contract_orders_sections_and_links_the_stage_to_its_roadmap() -> None:
+    """The Zero Trust PDF's acceptance contract, over real rendered bytes.
+
+    Section order: Maturity summary -> Per-pillar rollup -> Top remediation gaps
+    -> Remediation roadmap -> Assessment narrative -> Consultant summary -> How
+    these narratives were produced.
+
+    Representative linkage, all on the SAME capability: the average stage (the
+    score), the gap row showing its ramp to target, and the roadmap row that
+    schedules the month it gets closed (its action). The narrative attribution is
+    the citation reference, and it has to come LAST — a reader who has already
+    read the prose needs to be told, in the same document, that none of the
+    numbers above came from it.
+    """
+    from app.zt.exporters import (
+        CONSULTANT_HEADING,
+        NARRATIVE_HEADING,
+        ROADMAP_HEADING,
+        roadmap_rows,
+    )
+
+    ctx = _ctx(
+        ZtFrameworkCode.CISA_ZTMM_2_0,
+        stage=1,
+        target=4,
+        narratives={"identity": "Identity is perimeter-shaped today."},
+        executive_summary="Atlas is early on the CISA ladder.",
+        roadmap_summary="Sequence identity first, then devices.",
+    )
+    text = _flat_pdf_text(render_pdf(ctx))
+    gap = ctx.gap.gaps[0]
+    first = roadmap_rows(ctx)[0]
+    assert first.code == gap.code, "the roadmap must open on the top-priority gap"
+
+    _assert_section_sequence(
+        text,
+        [
+            # Section 1, and the score.
+            "Maturity summary",
+            "Overall stage: Traditional",
+            "Average stage: 1.00",
+            # Section 2.
+            "Per-pillar rollup",
+            # Section 3, and the gap's ramp on this capability.
+            f"Top remediation gaps (target S{ctx.gap.target_stage})",
+            f"{gap.code} {gap.pillar_code}",
+            f"S{gap.current_stage} → S{gap.target_stage}",
+            # Section 4, and the month that same capability is scheduled for.
+            ROADMAP_HEADING,
+            f"M{first.month} {first.code}",
+            # Sections 5 and 6: the prose, rendered only because it is persisted.
+            NARRATIVE_HEADING,
+            "Atlas is early on the CISA ladder.",
+            CONSULTANT_HEADING,
+            "Sequence identity first, then devices.",
+            # Section 7: the attribution, after the prose it qualifies.
+            "How these narratives were produced",
+            "No narrative in this report contributes to any of those numbers.",
+        ],
+    )

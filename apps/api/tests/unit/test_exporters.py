@@ -401,3 +401,70 @@ def test_pdf_escapes_ampersand_in_header() -> None:
     )
     text = _pdf_text(render_pdf(ctx))
     assert "Rook&Pawn Security" in text
+
+
+# ---------------------------------------------------------------------------
+# S9: PDF acceptance contract — section order plus one score/evidence/action link
+# ---------------------------------------------------------------------------
+
+
+def _pdf_norm(raw: bytes) -> str:
+    """Extracted PDF text with reportlab's line wraps collapsed to spaces, so a
+    sentence that happens to break across two lines still matches."""
+    return " ".join(_pdf_text(raw).split())
+
+
+def _assert_section_sequence(text: str, sequence: list[str]) -> None:
+    """Assert every string appears in the rendered text, in exactly this order.
+
+    Each needle is searched for only AFTER the previous match, so this is a true
+    subsequence check rather than a set of `in` checks. A section that renders
+    but lands in the wrong place still reads as a defensible report to `in`, and
+    that is the failure this is here to catch. Reports the offending pair rather
+    than a bare False.
+    """
+    last = -1
+    last_needle = "(start of document)"
+    for needle in sequence:
+        found = text.find(needle, last + 1)
+        assert found != -1, (
+            f"{needle!r} does not appear in the rendered PDF after "
+            f"{last_needle!r} (index {last})"
+        )
+        last, last_needle = found, needle
+
+
+@pytest.mark.unit
+def test_pdf_acceptance_contract_orders_sections_and_links_savings_to_its_row(
+    context_with_items,
+) -> None:
+    """The Technical Debt PDF's acceptance contract, over real rendered bytes.
+
+    Section order: Summary -> Portfolio summary -> Capability list.
+
+    Representative linkage, all on the SAME $120,000: the headline savings
+    figure (the score), the narrative sentence saying where it comes from (its
+    evidence), and the capability row carrying the Cut disposition that produces
+    it (its action). A reader has to be able to walk from the number to the row
+    without leaving the document.
+    """
+    text = _pdf_norm(render_pdf(context_with_items))
+    sentences = portfolio_paragraph(context_with_items)
+
+    _assert_section_sequence(
+        text,
+        [
+            # Section 1, and the score it states.
+            "Summary",
+            "Estimated annual savings: $120,000",
+            # Section 2, and the evidence for that exact figure.
+            "Portfolio summary",
+            sentences[2],
+            # Section 3, and the row whose disposition produces it.
+            "Capability list",
+            "Lacework Wiz, Inc. CNAPP $120,000 Cut",
+        ],
+    )
+    # The evidence sentence is the savings sentence, not one of its neighbours —
+    # a reordered paragraph would still satisfy the index walk above.
+    assert "removes $120,000 of annual spend" in sentences[2]
