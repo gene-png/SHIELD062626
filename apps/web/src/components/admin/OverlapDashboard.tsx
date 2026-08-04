@@ -108,7 +108,7 @@ export function OverlapDashboard({
             Overlap analysis
           </h2>
           <p className="text-sm text-ink-secondary">
-            Categories and vendors that show up more than once — consolidation
+            Categories and vendors that show up more than once are consolidation
             candidates. Includes top-cost items so the conversation can start
             with the biggest line items.
           </p>
@@ -153,7 +153,7 @@ export function OverlapDashboard({
           <CardHeader>
             <CardTitle>Overlap by category</CardTitle>
             <CardDescription>
-              Tools serving the same security function — strong consolidation
+              Tools serving the same security function are strong consolidation
               candidates.
             </CardDescription>
           </CardHeader>
@@ -168,7 +168,7 @@ export function OverlapDashboard({
           <CardHeader>
             <CardTitle>Overlap by vendor</CardTitle>
             <CardDescription>
-              Multiple subscriptions from one vendor — volume / consolidation
+              Multiple subscriptions from one vendor are volume / consolidation
               negotiation targets.
             </CardDescription>
           </CardHeader>

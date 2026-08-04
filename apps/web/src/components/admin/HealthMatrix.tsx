@@ -94,7 +94,7 @@ export function HealthMatrix(): JSX.Element {
           <span>All systems ready</span>
         ) : (
           <span>
-            Degraded — offender{data.offenders.length > 1 ? "s" : ""}:{" "}
+            Degraded, offender{data.offenders.length > 1 ? "s" : ""}:{" "}
             {data.offenders.join(", ")}
           </span>
         )}

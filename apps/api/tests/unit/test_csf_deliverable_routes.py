@@ -355,7 +355,7 @@ def test_finalize_with_zero_gap_actions_still_renders(app_client) -> None:
     )
     assert (
         "Start with the 20 subcategory gap(s) sitting 2 tier(s) below target "
-        "T3 (Repeatable) — they carry the largest lift." in text
+        "T3 (Repeatable). They carry the largest lift." in text
     )
     assert "0 of 20 gap(s) in this action plan name an owner; assign the remaining 20." in text
 

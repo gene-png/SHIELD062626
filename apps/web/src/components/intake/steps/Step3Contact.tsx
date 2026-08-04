@@ -44,7 +44,7 @@ export function Step3Contact({
         <Field
           id="email"
           label="Email"
-          hint="Locked — sign in with a different account to change."
+          hint="Locked. Sign in with a different account to change."
         >
           <input
             id="email"

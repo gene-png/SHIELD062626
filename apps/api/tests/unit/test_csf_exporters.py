@@ -337,7 +337,7 @@ def test_pdf_carries_the_tier_model_methodology_and_a_next_step_line() -> None:
     # Computed in Python from the gap rows: 20 shown gaps, all 1 tier short.
     assert (
         "Start with the 20 subcategory gap(s) sitting 1 tier(s) below target "
-        "T4 (Adaptive) — they carry the largest lift." in text
+        "T4 (Adaptive). They carry the largest lift." in text
     )
     assert "0 of 20 gap(s) in this action plan name an owner; assign the remaining 20." in text
 
@@ -355,7 +355,7 @@ def test_docx_carries_the_action_plan_the_tier_model_and_a_next_step_line() -> N
     assert " ".join(TIER_DEFINITIONS[-1].description.split()) in text
     assert (
         "Start with the 20 subcategory gap(s) sitting 1 tier(s) below target "
-        "T4 (Adaptive) — they carry the largest lift." in text
+        "T4 (Adaptive). They carry the largest lift." in text
     )
     assert "1 of 20 gap(s) in this action plan name an owner; assign the remaining 19." in text
     assert "Priya Raman, CISO" in text
@@ -375,14 +375,14 @@ def test_next_steps_report_the_zero_gap_state() -> None:
         gap=analyze_gaps(tier_map, target_tier=3),
     )
     expected = (
-        "No subcategory scored below target T3 (Repeatable) — maintain the current "
+        "No subcategory scored below target T3 (Repeatable). Maintain the current "
         "controls and re-assess on the next cycle."
     )
     assert expected in _pdf_norm(render_pdf(ctx))
     assert expected in _docx_norm(render_docx(ctx))
 
 
-FULL_COVERAGE_REASSURANCE = "maintain the current controls and re-assess on the next cycle"
+FULL_COVERAGE_REASSURANCE = "Maintain the current controls and re-assess on the next cycle"
 
 
 def _partially_scored_ctx(scored: int, tier: int | None):

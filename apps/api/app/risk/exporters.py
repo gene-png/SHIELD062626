@@ -171,9 +171,9 @@ def _summary_lines(ctx: RiskExportContext) -> list[str]:
     return [
         f"Total entries: {len(ctx.entries)}",
         f"Critical + High: {crit_high}",
-        f"By axis — detection {ac['detection']}, prevention "
+        f"By axis: detection {ac['detection']}, prevention "
         f"{ac['prevention']}, response {ac['response']}",
-        "By recommended action — " + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
+        "By recommended action: " + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
     ]
 
 

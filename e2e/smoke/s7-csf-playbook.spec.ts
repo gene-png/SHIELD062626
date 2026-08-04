@@ -298,7 +298,7 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   await expect(totalLine(/Total\s*9\s*·\s*Level\s*L2/)).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText(/capped .* no evidence/)).toBeVisible();
+  await expect(page.getByText(/capped, no evidence/)).toBeVisible();
 
   // Toggle Evidence ON: the cap lifts live -> total 10, level L5.
   await patched(page, () => evidence.click());
@@ -306,7 +306,7 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   await expect(totalLine(/Total\s*10\s*·\s*Level\s*L5/)).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText(/capped .* no evidence/)).toBeHidden();
+  await expect(page.getByText(/capped, no evidence/)).toBeHidden();
 });
 
 test("Enterprise roll-up shows tier levels/rule/target/priority and Export produces 5 downloadable files", async ({

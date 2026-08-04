@@ -39,14 +39,14 @@ export function ZtRoadmapCard({
       <CardHeader>
         <CardTitle>12-month roadmap</CardTitle>
         <CardDescription>
-          Prioritized gaps sequenced across a year — Identity/User and Data
-          weigh heavier, so they land in earlier months.
+          Prioritized gaps sequenced across a year. Identity/User and Data weigh
+          heavier, so they land in earlier months.
         </CardDescription>
       </CardHeader>
       <CardBody>
         {roadmap.length === 0 ? (
           <p className="text-sm text-ink-secondary">
-            No gaps to sequence — every scored capability meets its target.
+            No gaps to sequence. Every scored capability meets its target.
           </p>
         ) : (
           <ol className="flex flex-col gap-4">

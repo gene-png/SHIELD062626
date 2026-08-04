@@ -444,7 +444,7 @@ def render_xlsx(ctx: ZtDeliverableContext) -> bytes:
         scored = ctx.score.answered_capabilities
         total = ctx.score.total_capabilities
         if scored == 0:
-            placeholder = "No capability scored — gaps unknown"
+            placeholder = "No capability scored, so gaps are unknown"
         elif scored < total:
             placeholder = f"No gaps among the {scored} of {total} capabilities scored"
         else:

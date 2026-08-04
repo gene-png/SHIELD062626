@@ -216,9 +216,9 @@ FUNCTION_ORDER = ["GV", "ID", "PR", "DE", "RS", "RC"]
 _PRIORITY_ORDER = {"P1": 0, "P2": 1, "P3": 2}
 
 METHODOLOGY = [
-    "Each subcategory is scored across five dimensions — Governance, Policy & "
-    "Process, Implementation, Monitoring & Measurement, and Continuous "
-    "Improvement — on a 0-2 scale.",
+    "Each subcategory is scored on a 0-2 scale across five dimensions: "
+    "Governance, Policy & Process, Implementation, Monitoring & Measurement, "
+    "and Continuous Improvement.",
     "The five dimension scores sum to a 0-10 total, which maps to a maturity "
     "level: Level 1 (0-2), Level 2 (3-5), Level 3 (6-7), Level 4 (8-9), Level "
     "5 (10).",
@@ -287,7 +287,7 @@ def _overview_sentences(rows: Sequence[Any]) -> list[str]:
         f"This assessment covers {total} in-scope NIST CSF 2.0 subcategories. "
         f"Enterprise maturity, rolled up across the impact tiers in use, "
         f"averages Level {overall} of 5.",
-        f"{gaps} subcategories fall short of their target maturity — "
+        f"{gaps} subcategories fall short of their target maturity: "
         f"{pc['P1']} Priority 1 (critical), {pc['P2']} Priority 2, and "
         f"{pc['P3']} Priority 3.",
     ]
@@ -308,7 +308,7 @@ def _next_steps(rows: Sequence[Any]) -> list[str]:
     steps: list[str] = []
     if pc["P1"]:
         steps.append(
-            f"Remediate the {pc['P1']} Priority 1 gap(s) first — these are "
+            f"Remediate the {pc['P1']} Priority 1 gap(s) first. These are "
             f"Core-metric, high-impact, multi-system weaknesses."
         )
     if pc["P2"]:
@@ -317,7 +317,7 @@ def _next_steps(rows: Sequence[Any]) -> list[str]:
         steps.append(f"Track the {pc['P3']} Priority 3 gap(s) for continuous improvement.")
     if not steps:
         steps.append(
-            "No gaps were identified — maintain current controls and re-assess on the next cycle."
+            "No gaps were identified. Maintain current controls and re-assess on the next cycle."
         )
     return steps
 
@@ -414,7 +414,7 @@ def _cover(
     story.append(Paragraph("Prepared by SHIELD by Kentro.", styles["body"]))
     story.append(
         Paragraph(
-            "Confidential — contains a security assessment of the named "
+            "Confidential: contains a security assessment of the named "
             "organization. Distribute on a need-to-know basis.",
             styles["small"],
         )
@@ -455,7 +455,7 @@ def _gap_table(story: list[Any], styles: dict[str, Any], gaps: Sequence[Any]) ->
 
     if not gaps:
         story.append(
-            Paragraph("No gaps — every in-scope subcategory meets its target.", styles["body"])
+            Paragraph("No gaps: every in-scope subcategory meets its target.", styles["body"])
         )
         return
     body = [
@@ -556,7 +556,7 @@ def render_full_pdf(
             "Maturity scorecard",
             "Function detail",
             "Prioritized roadmap",
-            "Appendix — all subcategories",
+            "Appendix: all subcategories",
         ],
         start=1,
     ):
@@ -620,7 +620,7 @@ def render_full_pdf(
     _gap_table(story, styles, _gap_rows(enterprise_rows))
 
     story.append(PageBreak())
-    story.append(Paragraph("6. Appendix — all subcategories", styles["h2"]))
+    story.append(Paragraph("6. Appendix: all subcategories", styles["h2"]))
     appx = [
         [
             r.subcategory_code,
@@ -683,7 +683,7 @@ def _docx_cover(
         meta.append(f"Generated: {generated_on}")
     meta.append("Prepared by SHIELD by Kentro.")
     meta.append(
-        "Confidential — contains a security assessment of the named "
+        "Confidential: contains a security assessment of the named "
         "organization. Distribute on a need-to-know basis."
     )
     add_paragraphs(doc, meta)
@@ -752,7 +752,7 @@ def render_exec_docx(
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:
-        add_paragraphs(doc, ["No gaps — every in-scope subcategory meets its target."])
+        add_paragraphs(doc, ["No gaps: every in-scope subcategory meets its target."])
 
     add_heading(doc, "Recommended next steps")
     add_paragraphs(doc, [f"• {s}" for s in _next_steps(enterprise_rows)])
@@ -846,10 +846,10 @@ def render_full_docx(
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:
-        add_paragraphs(doc, ["No gaps — every in-scope subcategory meets its target."])
+        add_paragraphs(doc, ["No gaps: every in-scope subcategory meets its target."])
 
     add_page_break(doc)
-    add_heading(doc, "6. Appendix — all subcategories")
+    add_heading(doc, "6. Appendix: all subcategories")
     ordered_rows = sorted(enterprise_rows, key=lambda r: r.subcategory_code)
     table = add_table(
         doc,

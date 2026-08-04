@@ -374,7 +374,7 @@ export function RiskRegisterDashboard(): JSX.Element {
                 rowKey={(r) => r.id}
                 emptyState={
                   <p className="p-4 text-sm text-ink-secondary">
-                    No entries — the synthesis found no open gaps.
+                    No entries. The synthesis found no open gaps.
                   </p>
                 }
               />

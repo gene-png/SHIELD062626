@@ -82,7 +82,7 @@ def send_password_reset_email(*, to: str, token: str) -> None:
         "Open the link below to choose a new password:\n\n"
         f"{link}\n\n"
         "This link expires in 1 hour. If you did not request a reset, you can "
-        "ignore this message — your password will not change."
+        "ignore this message. Your password will not change."
     )
     send_email(to=to, subject="Reset your SHIELD password", body=body)
 

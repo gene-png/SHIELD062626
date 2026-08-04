@@ -15,7 +15,7 @@ export default function AdminAuditPage(): JSX.Element {
         <h1 className="text-2xl font-semibold text-ink-primary">Audit log</h1>
         <p className="mt-1 text-sm text-ink-secondary">
           Every state-changing action and every AI call, newest first. These are
-          append-only records — this view is read-only. Use the correlation link
+          append-only records. This view is read-only. Use the correlation link
           to trace an action to the AI call it triggered.
         </p>
       </div>

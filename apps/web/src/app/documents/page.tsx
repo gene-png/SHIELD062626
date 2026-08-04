@@ -67,7 +67,7 @@ export default async function DocumentsPage(): Promise<JSX.Element> {
         <div>
           <h1 className="text-2xl font-semibold text-ink-primary">Documents</h1>
           <p className="mt-1 max-w-prose text-sm text-ink-secondary">
-            What you&apos;ve received from your SHIELD engagement — reports and
+            What you&apos;ve received from your SHIELD engagement: reports and
             workbooks your analyst has released to you.
           </p>
         </div>

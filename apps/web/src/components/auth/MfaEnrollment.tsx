@@ -170,7 +170,7 @@ export function MfaEnrollment({
             className="rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-3"
           >
             <p className="text-sm font-medium text-status-warning-fg">
-              Save your recovery codes now — they are shown only once.
+              Save your recovery codes now. They are shown only once.
             </p>
             <p className="mt-1 text-xs text-status-warning-fg">
               Each code can be used once if you lose access to your

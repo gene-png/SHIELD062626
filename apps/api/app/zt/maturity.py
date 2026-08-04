@@ -68,8 +68,8 @@ DOD_STAGES: tuple[StageDefinition, ...] = (
     StageDefinition(
         1,
         "Not Started",
-        "Foundational hygiene only — no formal Zero Trust activity adopted yet for this "
-        "capability.",
+        "Foundational hygiene only. No formal Zero Trust activity has been adopted "
+        "yet for this capability.",
     ),
     StageDefinition(
         2,

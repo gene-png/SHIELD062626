@@ -419,7 +419,7 @@ def test_xlsx_gap_placeholder_names_the_unscored_case() -> None:
 
     ctx = _ctx(ZtFrameworkCode.CISA_ZTMM_2_0, stage=None)
     wb = load_workbook(io.BytesIO(render_xlsx(ctx)))
-    assert wb["Gap Plan"].cell(row=2, column=3).value == "No capability scored — gaps unknown"
+    assert wb["Gap Plan"].cell(row=2, column=3).value == "No capability scored, so gaps are unknown"
 
 
 @pytest.mark.unit

@@ -225,7 +225,7 @@ def _no_gap_steps(ctx: CsfDeliverableContext) -> list[str]:
             f"{total - answered} of {total} subcategories are unscored and carry no finding.",
         ]
     return [
-        f"No subcategory scored below target T{target} ({label}) — maintain the "
+        f"No subcategory scored below target T{target} ({label}). Maintain the "
         f"current controls and re-assess on the next cycle."
     ]
 
@@ -247,7 +247,7 @@ def next_steps(ctx: CsfDeliverableContext) -> list[str]:
     widest_count = sum(1 for g in gaps if g.gap_size == widest)
     steps = [
         f"Start with the {widest_count} subcategory gap(s) sitting {widest} tier(s) "
-        f"below target T{target} ({label}) — they carry the largest lift."
+        f"below target T{target} ({label}). They carry the largest lift."
     ]
     for attribute, has_verb, missing_verb in (
         ("owner", "name an owner", "assign"),

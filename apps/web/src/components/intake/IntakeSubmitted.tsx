@@ -76,7 +76,7 @@ export function IntakeSubmitted({ state }: IntakeSubmittedProps): JSX.Element {
       <CardBody>
         <div className="flex flex-col gap-6">
           <p className="text-sm text-ink-secondary">
-            Thanks — we&apos;ve received the assessment intake for{" "}
+            Thanks. We&apos;ve received the assessment intake for{" "}
             <span className="font-medium text-ink-primary">{legalName}</span>
             {submittedAt ? ` on ${submittedAt}` : ""}. A consultant will review
             your submission and reach out with next steps.

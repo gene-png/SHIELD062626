@@ -47,7 +47,7 @@ export default async function HomePage(): Promise<JSX.Element> {
           <p className="mt-2 max-w-2xl text-ink-secondary">
             Mandatory PII redaction on every AI call, append-only audit log,
             short-lived JWT sessions with account lockout, and self-hosted
-            infrastructure — no third-party CDNs.
+            infrastructure (no third-party CDNs).
           </p>
         </div>
       </section>

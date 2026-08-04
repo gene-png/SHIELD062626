@@ -87,8 +87,8 @@ export function Step1Services({
                     <CardTitle>{SERVICE_LABELS[service]}</CardTitle>
                     {isConsultation ? (
                       <CardDescription>
-                        Not ready to pick a service? Start with a consultation —
-                        a Kentro consultant will reach out.
+                        Not ready to pick a service? Start with a consultation.
+                        A Kentro consultant will reach out.
                       </CardDescription>
                     ) : null}
                   </span>

@@ -197,7 +197,7 @@ function ClientRow({ client }: { client: ClientSummary }): JSX.Element {
             <p className="mt-1 text-sm text-ink-tertiary">Loading…</p>
           ) : domains.length === 0 ? (
             <p className="mt-1 text-sm text-ink-secondary">
-              None yet — add one so this client&apos;s team can self-register.
+              None yet. Add one so this client&apos;s team can self-register.
             </p>
           ) : (
             <ul className="mt-1 flex flex-wrap gap-2">

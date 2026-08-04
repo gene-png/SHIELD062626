@@ -362,7 +362,7 @@ _TD_ITEMS = [
         60,
         "cut",
         "Redundant with Wiz; runtime signal is duplicative and the contract lapses "
-        "in Q3 — retire at renewal for a clean $120k/yr saving.",
+        "in Q3. Retire at renewal for a clean $120k/yr saving.",
     ),
     (
         "Prisma Cloud",
@@ -468,7 +468,7 @@ _TD_ITEMS = [
         95_000,
         None,
         "keep",
-        "Sole enterprise secrets broker; no viable overlap — retain and expand "
+        "Sole enterprise secrets broker; no viable overlap. Retain and expand "
         "dynamic-secrets adoption.",
     ),
 ]
@@ -572,7 +572,7 @@ _CSF_EVIDENCE_NOTES = (
     "SSP control narrative.",
     "Evidence: interview with the control owner plus a screenshot of the current "
     "configuration; no periodic review record yet.",
-    "Evidence: ticket queue sampled for the last quarter — the practice runs, but "
+    "Evidence: ticket queue sampled for the last quarter. The practice runs, but "
     "nobody measures it.",
     "Evidence: the policy exists and the tooling is deployed; the gap is that the "
     "output is never reviewed.",
@@ -731,9 +731,9 @@ def _zt_roadmap_summary(score, gap) -> str:
         f"Overall posture is {score.overall_stage_label} across "
         f"{score.answered_capabilities} of {score.total_capabilities} scored "
         f"capabilities, with {gap.total_gap_count} below the S{gap.target_stage} "
-        "target. Sequence the identity and device pillars first — they gate every "
-        "later decision point — then take the remaining pillars one stage at a "
-        "time, re-scoring each capability against its cited evidence before a "
+        "target. Sequence the identity and device pillars first, because they gate "
+        "every later decision point. Then take the remaining pillars one stage at "
+        "a time, re-scoring each capability against its cited evidence before a "
         "target date is committed to the client."
     )
 
@@ -923,7 +923,7 @@ def _attack_evidence(
             response,
             f"{tactic}: {detection[0]} detects the mainline behaviour and "
             f"{prevention[0]} blocks part of it, but {response[0]} handles the "
-            "response generically — there is no technique-specific play, so dwell "
+            "response generically. There is no technique-specific play, so dwell "
             "time is the open question.",
             f"Detection tuned in {detection[0]}; response play still generic.",
         )
