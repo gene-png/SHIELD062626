@@ -502,3 +502,71 @@ def test_unknown_assessment_404(app_client) -> None:
         headers={"Authorization": f"Bearer {bearer}"},
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# S4: persisted narratives on the wire (migration 0034)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_assessment_payload_carries_the_three_narrative_keys_as_null(app_client) -> None:
+    """The C0 pattern: a row written with all three narrative columns NULL parses
+    and serializes unchanged. Every key is present and null — `pillar_narratives`
+    is None, never an empty dict, so 'never drafted' stays distinguishable."""
+    c = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id = _open_service(c, bearer, "zero_trust_cisa")
+    body = _new_assessment(c, bearer, svc_id)
+
+    for key in ("roadmap_summary", "executive_summary", "pillar_narratives"):
+        assert key in body, f"{key} missing from the serialized assessment"
+        assert body[key] is None
+
+    latest = c.get(
+        f"/zt/services/{svc_id}/assessments/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    ).json()
+    assert latest["roadmap_summary"] is None
+    assert latest["executive_summary"] is None
+    assert latest["pillar_narratives"] is None
+
+
+@pytest.mark.unit
+def test_assessment_payload_carries_persisted_narrative_values(app_client) -> None:
+    """The same three keys carry their values out through _serialize_assessment."""
+    from sqlalchemy import select as _select
+
+    from app.db.session import get_db
+    from app.models.zt_assessment import ZtAssessment
+
+    c = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id = _open_service(c, bearer, "zero_trust_cisa")
+    _new_assessment(c, bearer, svc_id)
+
+    db = next(c.app.dependency_overrides[get_db]())
+    row = db.execute(_select(ZtAssessment)).scalar_one()
+    row.roadmap_summary = "Identity first, then network."
+    row.executive_summary = "Mid-transition across four pillars."
+    row.pillar_narratives = {"ID": "Federated, not risk-adaptive."}
+    db.commit()
+
+    latest = c.get(
+        f"/zt/services/{svc_id}/assessments/latest",
+        headers={"Authorization": f"Bearer {bearer}"},
+    ).json()
+    assert latest["roadmap_summary"] == "Identity first, then network."
+    assert latest["executive_summary"] == "Mid-transition across four pillars."
+    assert latest["pillar_narratives"] == {"ID": "Federated, not risk-adaptive."}
+
+
+@pytest.mark.unit
+def test_pillar_narratives_default_is_not_a_shared_mutable(app_client) -> None:
+    """A mutable default would be shared across every response instance."""
+    from app.schemas.zt import ZtAssessmentResponse
+
+    field = ZtAssessmentResponse.model_fields["pillar_narratives"]
+    assert field.default is None

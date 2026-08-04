@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
@@ -28,10 +29,15 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SAEnum,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.models._common import TimestampMixin, UUIDPKMixin
+
+# Portable JSON map (native JSONB on Postgres, generic JSON on SQLite tests),
+# the same pattern as `attack_assessment.py`.
+_JSON_MAP = JSON().with_variant(JSONB, "postgresql")
 
 
 class ZtAssessmentStatus(enum.StrEnum):
@@ -81,6 +87,15 @@ class ZtAssessment(UUIDPKMixin, TimestampMixin, Base):
         default=ZtAssessmentStatus.DRAFT,
         nullable=False,
     )
+
+    # Sprint 10 S4 (migration 0034): AI-drafted narrative the Run-AI persists so
+    # the deliverable can carry it. All three nullable + additive (C0 pattern) —
+    # a row written before 0034 parses with three NULLs and renders no narrative
+    # section at all. Narrative is prose only: no number in this service is ever
+    # derived from it ("AI suggests, code computes").
+    roadmap_summary: Mapped[str | None] = mapped_column(Text)
+    executive_summary: Mapped[str | None] = mapped_column(Text)
+    pillar_narratives: Mapped[dict | None] = mapped_column(_JSON_MAP)
 
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
