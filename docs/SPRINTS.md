@@ -405,6 +405,16 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - The full push gate is green afterwards. Evidence: gate output in the log line.
 
 - [ ] **S11 · Wrap-up.**
+      `needs-human: the "full e2e green on a quiet box" half of the last criterion` — four
+      attempts in this batch, none green. S11's own run at final HEAD, warmed and uncontended,
+      gave `1 failed / 57 passed / 6 skipped (33.2m)`, and the failure arbitrated standalone.
+      **The mechanism is now measured rather than assumed:** after the 33-minute run the
+      pre-warmed routes had gone cold again (`/` back to 6.3s from 0.5s), because next-dev evicts
+      compiled routes under sustained load. The back half of a serialized suite re-pays the cold
+      compiles the front half already paid, so warming cannot fix it and neither can a larger
+      timeout. Sharding or a production build would; both are test-infra work outside this batch.
+      CI's fresh-runner E2E job is the authoritative arbiter per this plan's own loop protocol.
+      The other four criteria are met — see the Log line.
       Acceptance criteria:
   - SMOKE final pass over the section 10 note, section 26, and sections 33 to 35. Every box
     is checked only with its proving spec or test filename beside it. Evidence: the diff.
@@ -839,3 +849,34 @@ focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the se
   string is gone from `apps/web/src`. Nothing pinned it.
   The runner noted unprompted that criterion 2 ("the full push gate is green afterwards") is a
   floor rather than a proof, and treated it as one.
+- 2026-08-04 · S11 · `CHANGELOG.md`, `BUILD_REPORT.md`, `CONTEXT.md`, `SMOKE_TEST.md`,
+  `context/dave.md` · `60d7654`. **BOX LEFT UNCHECKED**: four of five criteria met, the
+  full-e2e-green half carries `needs-human`. `gate: shield/push passed (7 steps)` at final HEAD.
+  Met: CHANGELOG `[3.6.0]` with a per-task entry and commit for S0–S11 (S3 as `19a1fe6` plus fix
+  `d3864f3`); BUILD_REPORT synced with all seven gate steps, 28 spec files / 64 tests, migration
+  0034, and D-035/036/037; `CONTEXT.md` rewritten as the end-of-batch snapshot; `context/dave.md`
+  refreshed and **`context/gene.md` never written**; no live-LLM config committed — no `.env`,
+  manifest, or lockfile anywhere in `git diff main`, and every `SHIELD_LLM_MODE=live` hit is
+  documentation, a refusal message, or the `live` pytest marker.
+  **The e2e mechanism is now measured, not assumed.** S11's run at final HEAD, warmed and quiet,
+  gave `1 failed / 57 passed / 6 skipped (33.2m)`, the failure dying in `signIn` at
+  `helpers/auth.ts:63` before any content assertion, with no strict-mode violation. Arbitrated
+  standalone it passed while `s4:154` then failed having passed in the suite — the failure moves,
+  which is non-determinism rather than a selector break. **The cause: after 33 minutes the
+  pre-warmed routes had gone cold again (`/` back to 6.3s from 0.5s). next-dev evicts compiled
+  routes under sustained load, so the back half of a serialized suite re-pays the front half's
+  cold compiles.** That is why three earlier warmed attempts also failed, and why neither warming
+  nor a bigger timeout can fix it. Sharding or a production build would.
+  Recorded, not diagnosed: standalone `s4:154` failed on a 120s `waitForResponse` with an existing
+  `Draft v37` and an error banner, hinting at order-coupling to the draft `:40` leaves behind. One
+  observation is not a diagnosis and the runner correctly declined to chase it.
+  **All 18 ledger items reached `CONTEXT.md`**, plus four pre-existing deferrals, for 21 total;
+  item 18 (nine of eleven sprints carried a defective acceptance criterion) leads the Lessons
+  section with all five defect shapes named. The runner verified line references rather than
+  copying them, and corrected one of the driver's: the client-write swallow is at
+  `CsfSelfAssessment.tsx:172-174`, not `:173` — `:173` is the comment, whose claim that "a reload
+  reconciles" is itself the part to distrust.
+  Two SMOKE corrections, no box flipped: the §34 ZT box now credits S10's placeholder fix while
+  keeping the guidance half open, and **§28's audit line, which read "0 high / 2 documented
+  moderates carried unchanged from Sprint 5", is corrected to the measured 5 high + 2 moderate**.
+  All four deliberately-unchecked boxes verified still unchecked with their explanations intact.
