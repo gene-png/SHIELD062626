@@ -361,6 +361,17 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - D-037 appended to DECISIONS.md.
 
 - [ ] **S9 · e2e proofs and SMOKE sections 33, 34, 35.**
+      `needs-human: criterion 1's interview-prompt clause` — the prompt cannot render in ANY
+      environment. The `questions` table is empty, `seed_demo.py` never populates it, and the
+      loader `scripts/load_csf_tier_questionnaires.py` is referenced only by a docstring and a
+      SMOKE line; nothing in CI, compose or `demo-reset` invokes it. Running reference data into
+      the shared demo database is a human decision.
+      `needs-human: criterion 5's green full-suite run` — three attempts, none green (checkpoint 1
+      2 failed/49 passed, checkpoint 2 1 failed/50 passed, driver warmed+uncontended 2 failed/56
+      passed). All 58 runnable tests pass across runs, but no single green summary exists. The
+      plan's own loop protocol says CI's fresh-runner E2E job is authoritative; that is the
+      honest arbiter here.
+      Criteria 2, 3 and 4 are met with evidence — see the Log line.
       Scope: extend existing specs, add exactly one new file.
       Acceptance criteria:
   - `s3-selfassessment.spec.ts` proves a client sees tier guidance, an interview prompt,
@@ -764,3 +775,33 @@ focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the se
   D-037 records the client-PDF-versus-client-screen asymmetry as an open boundary rather than
   resolving it, on the reasoning that an unrecorded inconsistency is the one silently "fixed" by
   whoever notices it first.
+- 2026-08-04 · S9 · `docs/evidence/S9/two-unmet-criteria.md`, `e2e/smoke/s27-comprehension.spec.ts`,
+  four PDF acceptance contracts in the existing exporter test files · `718234b`.
+  **BOX LEFT UNCHECKED. Two criteria carry `needs-human`; three are met.**
+  Met: `s27-comprehension.spec.ts` (4 tests) plus the s3/s4/s5/s6/s7 extensions all passed inside
+  the driver's own full-suite run; the four PDF contracts assert section order as a subsequence
+  over real extracted bytes with three mutation-checked; SMOKE 33-35 added with per-box spec
+  filenames and four boxes deliberately left unchecked. `gate: shield/push passed (7 steps)`.
+  No application source touched; zero deletion lines across specs and unit tests.
+  **needs-human 1: the interview prompt has no data path in any environment.** `questions` is
+  empty, `seed_demo.py` contains zero references to it, and `load_csf_tier_questionnaires.py` is
+  invoked by nothing — only a docstring and a SMOKE line mention it. **S6 was credited for this
+  feature on a mocked vitest**: its criterion asked for "a vitest case asserting the client label"
+  and got one, with the fetch mocked. The test is honest; the criterion asked for the wrong proof.
+  This is `CONTEXT.md`'s Sprint-8 lesson verbatim — a flow unit tests call green can be broken for
+  every real user — recurring with a different cause.
+  **needs-human 2: no green full-suite run exists after three attempts** (2/49, 1/50, and the
+  driver's warmed uncontended 2 failed/56 passed/6 skipped in 34.6m). All 58 runnable tests pass
+  across runs; the 2 failures arbitrate standalone at `2 passed (1.3m)`. **Driver correction:**
+  both were `s18-home`, and `:180` had failed in the runner's run too, so the driver first called
+  it a reproducible regression. Wrong — `:180` is a pure timing test with no state dependency,
+  `:125` builds its own isolated tenant, and `s27` mutates nothing. The error was treating "quiet
+  box" as a property of how the run started; after 34 minutes of continuous browser work a 20s
+  redirect budget is the first thing to give out. Same structural fragility checkpoint 2
+  measured. The plan's loop protocol names CI's fresh-runner E2E job as authoritative, which is
+  the honest arbiter. **S11 requires the same green run and will hit the same wall.**
+  Five criteria describing things the system does not do, all verified: the interview prompt; ZT
+  client stage guidance (consultant render only); the badge reads `AI-drafted · Admin Assisted`
+  and every row badges; "management purpose copy" predates Sprint 10 (`0fe1096`); the CSF stepper
+  is 5 steps, not 10. Plus a bug correctly left alone: `ZtSelfAssessment.tsx:371` still carries
+  the old Notes placeholder although S6's commit message claims both were updated.
