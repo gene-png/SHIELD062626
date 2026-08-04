@@ -220,6 +220,146 @@ def test_client_cannot_reach_csf_deliverable(app_client) -> None:
     assert pdf.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# S3: the finalize path loads the POA&M rows and passes them to build_context
+# ---------------------------------------------------------------------------
+
+
+def _seed_approved_with_gaps(c: TestClient, bearer: str) -> tuple[str, str, str]:
+    """Like `_seed_approved` but every answer is tier 1, so the default T3
+    target leaves a full gap list for the action plan to annotate."""
+    sr = c.post(
+        "/csf/services",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={"kind": "nist_csf", "title": "Atlas - CSF"},
+    )
+    svc_id = sr.json()["id"]
+    a = c.post(
+        f"/csf/services/{svc_id}/assessments",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assess = a.json()
+    for ans in assess["answers"]:
+        c.patch(
+            f"/csf/answers/{ans['id']}",
+            headers={"Authorization": f"Bearer {bearer}"},
+            json={"maturity_tier": 1},
+        )
+    first_code = assess["answers"][0]["subcategory_code"]
+    c.post(
+        f"/csf/assessments/{assess['id']}/approve",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    return svc_id, assess["id"], first_code
+
+
+@pytest.mark.unit
+def test_finalize_passes_the_gap_action_rows_into_build_context(app_client, monkeypatch) -> None:
+    c = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, _assess_id, code = _seed_approved_with_gaps(c, bearer)
+    saved = c.put(
+        f"/csf/services/{svc_id}/gap-actions/{code}",
+        headers={"Authorization": f"Bearer {bearer}"},
+        json={
+            "owner": "Priya Raman, CISO",
+            "deadline": "2026-11-30",
+            "priority_override": "P1",
+        },
+    )
+    assert saved.status_code in (200, 201), saved.text
+
+    from app.csf import exporters as csf_exporters
+    from app.routes import csf as csf_routes
+
+    seen: dict = {}
+
+    def _spy(**kwargs):
+        ctx = csf_exporters.build_context(**kwargs)
+        # Snapshot inside the request: the ORM rows detach once it closes.
+        seen["actions"] = {
+            subcat: {
+                "owner": row.owner,
+                "deadline": row.deadline,
+                "priority_override": row.priority_override,
+            }
+            for subcat, row in ctx.actions.items()
+        }
+        return ctx
+
+    monkeypatch.setattr(csf_routes, "build_csf_context", _spy)
+
+    r = c.post(
+        f"/csf/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 201, r.text
+    assert seen["actions"] == {
+        code: {
+            "owner": "Priya Raman, CISO",
+            "deadline": "2026-11-30",
+            "priority_override": "P1",
+        }
+    }
+
+
+@pytest.mark.unit
+def test_finalize_with_zero_gap_actions_still_renders(app_client) -> None:
+    """C0: an assessment that never used the POA&M screen renders unchanged —
+    the Gap Plan carries the new columns as empty cells and the action plan
+    states the computed zero-owner line."""
+    import io
+
+    from openpyxl import load_workbook
+
+    c = app_client
+    admin = _register(c, "admin@example.com")
+    bearer = admin["tokens"]["access_token"]
+    svc_id, _assess_id, _code = _seed_approved_with_gaps(c, bearer)
+    r = c.post(
+        f"/csf/services/{svc_id}/deliverables/finalize",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+
+    xlsx = c.get(
+        f"/artifacts/{body['xlsx_artifact_id']}/download",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    ws = load_workbook(io.BytesIO(xlsx.content))["Gap Plan"]
+    header = [ws.cell(row=1, column=col).value for col in range(1, ws.max_column + 1)]
+    assert header[8:14] == [
+        "Characterization",
+        "Owner",
+        "Deadline",
+        "Resources",
+        "Success criteria",
+        "POA&M ref",
+    ]
+    # Every POA&M cell on the first gap row is blank (openpyxl round-trips the
+    # written empty string back as an empty cell), not a placeholder or a crash.
+    assert [ws.cell(row=2, column=col).value for col in range(9, 15)] == [None] * 6
+    # Priority falls back to the code-computed score, formatted to 2dp.
+    assert ws.cell(row=2, column=8).value == "2.40"
+
+    pdf = c.get(
+        f"/artifacts/{body['pdf_artifact_id']}/download",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    from pypdf import PdfReader
+
+    text = " ".join(
+        "".join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.content)).pages).split()
+    )
+    assert (
+        "Start with the 20 subcategory gap(s) sitting 2 tier(s) below target "
+        "T3 (Repeatable) — they carry the largest lift." in text
+    )
+    assert "0 of 20 gap(s) in this action plan name an owner; assign the remaining 20." in text
+
+
 @pytest.mark.unit
 def test_finalize_404_for_unknown_service(app_client) -> None:
     c = app_client

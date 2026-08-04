@@ -7,31 +7,74 @@ DB/IO). The route layer writes the bytes via the existing
 StorageBackend abstraction.
 
 XLSX sheets:
-  - "Score Summary": overall + per-function maturity rollup
-  - "Answers":       per-subcategory tier + notes
-  - "Gap Plan":      prioritized remediation gaps
+  - "Score Summary": overall + per-function maturity rollup, average-tier cells
+                     shaded on the shared sequential ramp
+  - "Answers":       per-subcategory tier (shaded), notes and evidence reference
+  - "Gap Plan":      prioritized gaps carrying their POA&M annotation
 
-PDF:
-  Executive summary page with overall maturity + per-function bars,
-  followed by the top-N gap table.
+PDF / DOCX:
+  Executive summary page with overall maturity + per-function bars, the
+  four-tier methodology block, then the top-N gap table and the action plan.
+
+S3 note on language. A CSF POA&M is a Plan of Action and Milestones: the
+characterization, owner, deadline, resources and success criteria on a
+`CsfGapAction` row are typed by a consultant, so remediation framing is
+truthful here in a way it is not for the ATT&CK deliverable (D-035). What still
+holds is that every number and every next-step sentence is computed in Python
+from the rows — no model drafts prose into this document.
 """
 
 from __future__ import annotations
 
 import io
-from collections.abc import Iterable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+import logging
+import uuid
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from app import export_style
 from app.csf.catalog import FUNCTIONS, SUBCATEGORIES, FunctionCode, Subcategory
-from app.csf.gap import GapAnalysis
-from app.csf.maturity import tier_label
+from app.csf.gap import Gap, GapAnalysis
+from app.csf.maturity import TIER_DEFINITIONS, tier_label
 from app.csf.scoring import ScoreResult
 
 if TYPE_CHECKING:
     from reportlab.platypus import TableStyle
 from app.models.csf_assessment import CsfAnswer, CsfAssessment
+from app.models.csf_profile import CsfGapAction
+
+logger = logging.getLogger(__name__)
+_LOG = "csf.exporters:"
+
+# Printed when `evidence_artifact_id` is genuinely NULL. An unresolved pointer
+# raises in `build_context`, so this sentence never covers a failed lookup.
+NO_EVIDENCE_REFERENCE = "No evidence attached"
+
+# NIST's CSF 2.0 ladder has four rungs; every graded fill in this module is
+# `graded_hex(tier, TIER_LEVELS)`.
+TIER_LEVELS = len(TIER_DEFINITIONS)
+
+# The methodology block, built from TIER_DEFINITIONS so the report and the
+# engine can never disagree. The playbook's five-dimension METHODOLOGY text is
+# deliberately NOT reused: it describes a different scoring model.
+TIER_MODEL_NOTE: tuple[str, ...] = (
+    "Every subcategory in this assessment is scored on NIST's four-tier CSF 2.0 "
+    "maturity model. Tier averages, gap sizes, priorities and the next steps "
+    "below are computed in code from those scores.",
+    *(f"Tier {int(d.tier)} — {d.short_label}: {d.description}" for d in TIER_DEFINITIONS),
+)
+
+# Columns the Gap Plan carries after the computed ones, mirroring the
+# playbook's Action Plan contract (`playbook_export.py:137-178`).
+POAM_FIELDS: tuple[tuple[str, str], ...] = (
+    ("Characterization", "characterization"),
+    ("Owner", "owner"),
+    ("Deadline", "deadline"),
+    ("Resources", "resources"),
+    ("Success criteria", "success_criteria"),
+    ("POA&M ref", "poam_ref"),
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +87,11 @@ class CsfDeliverableContext:
     answers: list[CsfAnswer]
     score: ScoreResult
     gap: GapAnalysis
+    # subcategory_code -> the consultant's POA&M annotation for that gap.
+    actions: dict[str, CsfGapAction] = field(default_factory=dict)
+    # artifact id -> filename, resolved by the route's join. Every non-NULL
+    # `evidence_artifact_id` on `answers` must appear here.
+    evidence_names: dict[uuid.UUID, str] = field(default_factory=dict)
 
 
 def build_context(
@@ -54,14 +102,39 @@ def build_context(
     answers: Iterable[CsfAnswer],
     score: ScoreResult,
     gap: GapAnalysis,
+    actions: Mapping[str, CsfGapAction] | None = None,
+    evidence_names: Mapping[uuid.UUID, str] | None = None,
 ) -> CsfDeliverableContext:
+    rows = list(answers)
+    names = dict(evidence_names or {})
+    unresolved = sorted(
+        str(a.evidence_artifact_id)
+        for a in rows
+        if a.evidence_artifact_id is not None and a.evidence_artifact_id not in names
+    )
+    if unresolved:
+        raise ValueError(
+            f"{_LOG} evidence_names is missing {len(unresolved)} cited artifact id(s): "
+            f"{unresolved[:5]}. Rendering '{NO_EVIDENCE_REFERENCE}' for an answer that "
+            f"does cite evidence would misstate the record."
+        )
+    plan = dict(actions or {})
+    logger.debug(
+        "%s build_context answers=%d actions=%d evidence_names=%d",
+        _LOG,
+        len(rows),
+        len(plan),
+        len(names),
+    )
     return CsfDeliverableContext(
         client_legal_name=client_legal_name or "Client",
         service_title=service_title,
         assessment=assessment,
-        answers=list(answers),
+        answers=rows,
         score=score,
         gap=gap,
+        actions=plan,
+        evidence_names=names,
     )
 
 
@@ -83,6 +156,136 @@ def _fmt_tier(value: float | None) -> str:
     if value is None:
         return "—"
     return f"{value:.2f}"
+
+
+# ---------------------------------------------------------------------------
+# POA&M annotations (Sprint 5 T5 machinery, adopted by the released deliverable)
+# ---------------------------------------------------------------------------
+
+
+def action_text(action: CsfGapAction | None, attribute: str) -> str:
+    """One POA&M field as the deliverable prints it. Blank when unset."""
+    if action is None:
+        return ""
+    return getattr(action, attribute) or ""
+
+
+def effective_priority(gap: Gap, action: CsfGapAction | None) -> str:
+    """The consultant's `priority_override` where set, else the computed score.
+
+    Mirrors the playbook's `override or (r.priority or "")` contract. The
+    computed side is the weighted gap score, formatted the way the PDF has
+    always printed it, so both branches yield a string and the column never
+    mixes types.
+    """
+    override = action_text(action, "priority_override")
+    if override:
+        logger.debug("%s %s priority override %s wins", _LOG, gap.code, override)
+        return override
+    return f"{gap.priority_score:.2f}"
+
+
+def evidence_reference(answer: CsfAnswer | None, names: Mapping[uuid.UUID, str]) -> str:
+    """The attached artifact's filename, or the NULL sentence. Never a lookup miss."""
+    if answer is None or answer.evidence_artifact_id is None:
+        return NO_EVIDENCE_REFERENCE
+    try:
+        return names[answer.evidence_artifact_id]
+    except KeyError as exc:
+        raise KeyError(
+            f"{_LOG} answer {answer.subcategory_code} cites evidence artifact "
+            f"{answer.evidence_artifact_id} which the route did not resolve"
+        ) from exc
+
+
+def next_steps(ctx: CsfDeliverableContext) -> list[str]:
+    """The action plan's next-step sentences, computed from the rows.
+
+    Code computes, the model never drafts: each sentence is a count taken off
+    `ctx.gap.gaps` and the POA&M annotations attached to them.
+    """
+    gaps: Sequence[Gap] = ctx.gap.gaps
+    target = ctx.gap.target_tier
+    label = ctx.gap.target_label
+    if not gaps:
+        line = (
+            f"No subcategory scored below target T{target} ({label}) — maintain the "
+            f"current controls and re-assess on the next cycle."
+        )
+        logger.debug("%s next_steps: zero gaps", _LOG)
+        return [line]
+
+    total = len(gaps)
+    widest = max(g.gap_size for g in gaps)
+    widest_count = sum(1 for g in gaps if g.gap_size == widest)
+    steps = [
+        f"Start with the {widest_count} subcategory gap(s) sitting {widest} tier(s) "
+        f"below target T{target} ({label}) — they carry the largest lift."
+    ]
+    for attribute, has_verb, missing_verb in (
+        ("owner", "name an owner", "assign"),
+        ("deadline", "carry a deadline", "set"),
+    ):
+        filled = sum(1 for g in gaps if action_text(ctx.actions.get(g.code), attribute))
+        if filled == total:
+            steps.append(f"All {total} gap(s) in this action plan {has_verb}.")
+        else:
+            steps.append(
+                f"{filled} of {total} gap(s) in this action plan {has_verb}; "
+                f"{missing_verb} the remaining {total - filled}."
+            )
+    logger.debug("%s next_steps: %d sentence(s) over %d gap(s)", _LOG, len(steps), total)
+    return steps
+
+
+def action_plan_rows(ctx: CsfDeliverableContext) -> list[list[str]]:
+    """The PDF/DOCX action-plan table body. One row per gap the report lists."""
+    rows: list[list[str]] = []
+    for g in ctx.gap.gaps:
+        action = ctx.actions.get(g.code)
+        rows.append(
+            [
+                g.code,
+                g.name,
+                effective_priority(g, action),
+                action_text(action, "characterization"),
+                action_text(action, "owner"),
+                action_text(action, "deadline"),
+            ]
+        )
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Tier shading (S1's shared sequential ramp)
+# ---------------------------------------------------------------------------
+
+
+def average_tier_level(value: float) -> int:
+    """Nearest whole tier for a computed average. Raises outside 1..4."""
+    if not 1.0 <= value <= float(TIER_LEVELS):
+        raise ValueError(f"{_LOG} average tier must be within 1..{TIER_LEVELS}, got {value!r}")
+    return int(value + 0.5)
+
+
+def _argb(hex_color: str) -> str:
+    """openpyxl wants ARGB. Derived from a brand hex, never hand-copied."""
+    return "FF" + hex_color.lstrip("#").upper()
+
+
+def tier_fill(tier: int) -> Any:
+    """Solid fill for a whole tier, off S1's shared sequential ramp."""
+    from openpyxl.styles import PatternFill
+
+    argb = _argb(export_style.graded_hex(tier, TIER_LEVELS))
+    return PatternFill(start_color=argb, end_color=argb, fill_type="solid")
+
+
+def tier_font(tier: int) -> Any:
+    """AA-safe font to print on `tier_fill(tier)`."""
+    from openpyxl.styles import Font
+
+    return Font(color=_argb(export_style.graded_ink_hex(tier, TIER_LEVELS)))
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +336,12 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
                 _fmt_tier(fs.average_tier),
             ]
         )
+        # Heatmap: the per-function average tier reads as a magnitude.
+        if fs.average_tier is not None:
+            level = average_tier_level(fs.average_tier)
+            avg_cell = ws.cell(row=ws.max_row, column=6)
+            avg_cell.fill = tier_fill(level)
+            avg_cell.font = tier_font(level)
     for w, col in zip([10, 28, 12, 10, 14, 16], range(1, 7), strict=True):
         ws.column_dimensions[get_column_letter(col)].width = w
 
@@ -147,6 +356,7 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
         "Tier",
         "Tier label",
         "Notes",
+        "Evidence",
     ]
     ws2.append(headers)
     for col in range(1, len(headers) + 1):
@@ -172,9 +382,15 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
                 tier if tier is not None else "",
                 tier_label(tier) if tier is not None else "Unscored",
                 notes or "",
+                evidence_reference(ans, ctx.evidence_names),
             ]
         )
-    for w, col in zip([14, 10, 10, 32, 60, 8, 16, 60], range(1, 9), strict=True):
+        # Heatmap: an unscored row stays unfilled, so blank reads as blank.
+        if tier is not None:
+            tier_cell = ws2.cell(row=ws2.max_row, column=6)
+            tier_cell.fill = tier_fill(int(tier))
+            tier_cell.font = tier_font(int(tier))
+    for w, col in zip([14, 10, 10, 32, 60, 8, 16, 60, 34], range(1, 10), strict=True):
         ws2.column_dimensions[get_column_letter(col)].width = w
 
     # --- Sheet 3: Gap Plan ---
@@ -188,6 +404,7 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
         "Target tier",
         "Gap size",
         "Priority",
+        *(label for label, _ in POAM_FIELDS),
         "Notes",
     ]
     ws3.append(headers3)
@@ -196,6 +413,7 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
         cell.font = bold
         cell.fill = header_fill
     for g in ctx.gap.gaps:
+        action = ctx.actions.get(g.code)
         ws3.append(
             [
                 g.code,
@@ -205,7 +423,8 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
                 g.current_tier,
                 g.target_tier,
                 g.gap_size,
-                g.priority_score,
+                effective_priority(g, action),
+                *(action_text(action, attribute) for _, attribute in POAM_FIELDS),
                 g.notes or "",
             ]
         )
@@ -219,12 +438,14 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
                 "",
                 ctx.gap.target_tier,
                 0,
-                0,
+                "0.00",
+                *("" for _ in POAM_FIELDS),
                 "",
             ]
         )
         ws3.cell(row=2, column=4).font = italic
-    for w, col in zip([14, 10, 10, 32, 14, 14, 12, 12, 50], range(1, 10), strict=True):
+    widths3 = [14, 10, 10, 32, 14, 14, 12, 12, 18, 24, 14, 30, 40, 18, 50]
+    for w, col in zip(widths3, range(1, len(headers3) + 1), strict=True):
         ws3.column_dimensions[get_column_letter(col)].width = w
 
     out = io.BytesIO()
@@ -235,6 +456,21 @@ def render_xlsx(ctx: CsfDeliverableContext) -> bytes:
 # ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------
+
+
+_ACTION_PLAN_HEADERS: tuple[str, ...] = (
+    "Code",
+    "Subcategory",
+    "Priority",
+    "Characterization",
+    "Owner",
+    "Deadline",
+)
+
+
+def _action_plan_heading(ctx: CsfDeliverableContext) -> str:
+    """Names the truncation outright — the plan lists the gaps the report shows."""
+    return f"Action plan ({len(ctx.gap.gaps)} of {ctx.gap.total_gap_count} gaps shown)"
 
 
 def render_docx(ctx: CsfDeliverableContext) -> bytes:
@@ -261,6 +497,9 @@ def render_docx(ctx: CsfDeliverableContext) -> bytes:
             f"{ctx.score.total_subcategories} ({ctx.score.coverage_pct}%)",
         ],
     )
+
+    add_heading(doc, "How these tiers are scored")
+    add_paragraphs(doc, list(TIER_MODEL_NOTE))
 
     add_heading(doc, "Per-function rollup")
     add_table(
@@ -298,6 +537,12 @@ def render_docx(ctx: CsfDeliverableContext) -> bytes:
                 for g in ctx.gap.gaps
             ],
         )
+
+    add_heading(doc, _action_plan_heading(ctx))
+    add_paragraphs(doc, next_steps(ctx))
+    rows = action_plan_rows(ctx)
+    if rows:
+        add_table(doc, list(_ACTION_PLAN_HEADERS), rows)
 
     return to_bytes(doc)
 
@@ -341,6 +586,10 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
             body,
         )
     )
+
+    story.append(Paragraph("How these tiers are scored", h2))
+    for line in TIER_MODEL_NOTE:
+        story.append(Paragraph(export_style.escaped_line(line), body))
 
     story.append(Paragraph("Per-function rollup", h2))
     fn_table_data: list[list] = [["Function", "Name", "Average tier", "Coverage"]]
@@ -393,6 +642,21 @@ def render_pdf(ctx: CsfDeliverableContext) -> bytes:
         gap_table.setStyle(_table_style())
         story.append(gap_table)
 
+    story.append(Paragraph(export_style.escaped_line(_action_plan_heading(ctx)), h2))
+    for step in next_steps(ctx):
+        story.append(Paragraph(export_style.escaped_line(f"• {step}"), body))
+    plan_rows = action_plan_rows(ctx)
+    if plan_rows:
+        plan_table_data: list[list] = [list(_ACTION_PLAN_HEADERS)]
+        plan_table_data.extend(plan_rows)
+        plan_table = Table(
+            plan_table_data,
+            colWidths=[0.85 * inch, 2.0 * inch, 0.7 * inch, 1.2 * inch, 1.4 * inch, 1.05 * inch],
+            repeatRows=1,
+        )
+        plan_table.setStyle(_table_style())
+        story.append(plan_table)
+
     doc.build(story)
     return out.getvalue()
 
@@ -415,8 +679,21 @@ def _table_style() -> TableStyle:
 
 
 __all__ = [
+    "NO_EVIDENCE_REFERENCE",
+    "POAM_FIELDS",
+    "TIER_LEVELS",
+    "TIER_MODEL_NOTE",
     "CsfDeliverableContext",
+    "action_plan_rows",
+    "action_text",
+    "average_tier_level",
     "build_context",
+    "effective_priority",
+    "evidence_reference",
+    "next_steps",
+    "render_docx",
     "render_pdf",
     "render_xlsx",
+    "tier_fill",
+    "tier_font",
 ]
