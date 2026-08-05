@@ -66,11 +66,13 @@ backlog with the driver's per-sprint Log lives in `docs/SPRINTS.md`._
   before the planning PR merged; S0 was added after that review and was not part
   of it.
 
-  **S9's box is deliberately unchecked.** Two of its five criteria carry
-  `needs-human`: the interview prompt has no data path in any environment, and no
-  green full-suite e2e run exists on this box. Its other three criteria are met
-  with evidence. Both are carried into the deferred list below rather than
-  papered over.
+  **Two boxes are deliberately unchecked, S9 and S11.** Ten of the twelve are
+  checked. Two of S9's five criteria carry `needs-human`: the interview prompt has
+  no data path in any environment, and no green full-suite e2e run exists on this
+  box. Its other three criteria are met with evidence. S11 carries one
+  `needs-human`: four of its five are met, and the "full e2e green on a quiet box"
+  half of the last one is that same unmet run. All three are carried into the
+  deferred list below rather than papered over.
 
 ### Sprint 10 sprint → commit
 
@@ -91,7 +93,7 @@ primary record of what actually happened, including what the driver rejected.
 | S8     | `AiStatusBanner` in three workspaces, honest fixture copy, tone split, risk provenance badge, `HowAiWorks.tsx`; D-037                                                                     | `56373e2`              | `1191a7e` |
 | S9     | `s27-comprehension.spec.ts`, s3/s4/s5/s6/s7 extensions, four PDF acceptance contracts, SMOKE 33 to 35. **Box left OPEN, two `needs-human` criteria**                                      | `718234b`              | `5f88172` |
 | S10    | Prose scrub, 61 em-dashes rewritten, seven pins moved at identical strictness                                                                                                             | `73ae76b`              | `ca18ce3` |
-| S11    | Wrap-up: SMOKE final pass, CHANGELOG `[3.6.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md`                                                                                       | this commit            | —         |
+| S11    | Wrap-up: SMOKE final pass, CHANGELOG `[3.6.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md`. **Box left OPEN, one `needs-human` criterion**                                       | this commit            | —         |
 
 Two mid-batch verification and security checkpoints ran at `9c49382` (after four
 sprints) and `f58332b` (after eight). Both passed. Neither fixed or committed

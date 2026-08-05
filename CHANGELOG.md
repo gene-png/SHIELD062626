@@ -24,11 +24,12 @@ is tag and CHANGELOG level only; package manifests are untouched. `SPRINT_10.md`
 reviewed read-only by OpenAI Codex before the planning PR merged (findings folded
 into the tasks); S0 was added after that review and was not part of it.
 
-**S9 did not close.** Two of its five acceptance criteria carry `needs-human` and
-are carried forward rather than papered over: the interview prompt has no data path
-in any environment, and no green full-suite e2e run exists on this box. Its other
-three criteria are met with evidence. See `docs/SPRINTS.md` for the per-sprint
-Log the driver kept.
+**Two boxes did not close, S9 and S11.** Ten of the twelve are checked. S9 carries
+two `needs-human` acceptance criteria, carried forward rather than papered over: the
+interview prompt has no data path in any environment, and no green full-suite e2e run
+exists on this box. Its other three criteria are met with evidence. S11 carries one:
+four of its five are met, and the "full e2e green on a quiet box" half of the last is
+that same unmet run. See `docs/SPRINTS.md` for the per-sprint Log the driver kept.
 
 - **Web color moves onto tokens, no visual change (S0, `5b575c3`):** the five risk
   tiers become `--tier-{negligible,low,medium,high,critical}-{bg,fg}` in

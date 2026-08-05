@@ -202,11 +202,11 @@ which no test can assert, stays a human check (the last box).
 > are `pytest -m unit` locked in `test_llm_providers.py`.
 
 - [x] Run the full sweep: `docker compose exec -T api pytest -m live tests/live -q` (with a live `.env`) → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape). *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — 5 passed.)*
-- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
-- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
-- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
-- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
-- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
+- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[csf_score]`.)*
+- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[zt_score]`.)*
+- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[mitre_map]`.)*
+- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[risk_synthesize]`.)*
+- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[tech_debt_extract]`.)*
 
 ## 15. Security headers
 
