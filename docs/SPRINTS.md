@@ -880,3 +880,60 @@ focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the se
   keeping the guidance half open, and **§28's audit line, which read "0 high / 2 documented
   moderates carried unchanged from Sprint 5", is corrected to the measured 5 high + 2 moderate**.
   All four deliberately-unchecked boxes verified still unchecked with their explanations intact.
+- 2026-08-04 · shutdown · fixed · pushed=t · pr=none · `575f17c`.
+  `gate: shield/push passed (7 steps)`. Deep audit, security sweep and a record audit over all 28
+  commits. Five parallel adversarial sub-audits; nothing code-fixed, because no finding is
+  one-pass fixable — each is either a claim change on a client-visible deliverable (D-035's
+  precedent makes those decisions, not scrubs) or a multi-file sweep.
+  **HIGH-1, the most important finding of the batch and the reason this ceremony existed.**
+  `app/csf/playbook_export.py` is a SECOND, SEPARATE CSF exporter producing five client-facing
+  artifacts from `POST /csf/services/{id}/playbook/export`, and **S3's honesty fix never touched
+  it**. Driver-verified: it contains **0** coverage-qualifier phrases against **18** in
+  `csf/exporters.py`. Root cause at `routes/csf.py:1128` —
+  `gap = is_gap(rollup.score, target) if target is not None else False` — so with `target_level`
+  nullable (`Mapped[int | None]`, and `csf.py:1331` writes `None` explicitly) **"no target
+  recorded" and "target met" are the same value.** Rendered with all 106 subcategories scored at
+  Enterprise Level 2 of 5 and no target set, the deliverable says `No gaps: every in-scope
+subcategory meets its target.` and `Maintain current controls and re-assess on the next
+cycle.` while printing `—` in every Target cell. **It triggers on the default state of a real
+  engagement, not a contrived empty input.** Fifth instance of this batch's recurring defect and
+  the largest.
+  HIGH-2: the same file manufactures 91 Priority 1 criticals from unscored rows when targets ARE
+  set, because `maturity_level(0)` returns 1 and an unscored row is indistinguishable from a real
+  Level 1. HIGH-3: a lost Run-AI race — the exact case S4 built the conditional UPDATE for —
+  crashes the ZT workspace instead of showing the typed 409, because `ZtWorkspace.tsx:68-79` casts
+  dict-detail as `detail?: string` and renders an object as a React child; the bad cast is
+  pre-existing at 16 sites across 15 files and this branch adds three more 409s that reach it.
+  HIGH-4: `fixtures.py:209` derives the pillar key as `code.split(".")[0]`, so every ZT code
+  yields `"CISA"` or `"DOD"` — fixture mode, the default, persists and now RENDERS a narrative for
+  a pillar that does not exist, and no `apps/web` surface displays `pillar_narratives` to catch it
+  pre-release. HIGH-5: `seed_demo.py:797` writes Python-computed narratives, which makes the
+  exporter's attribution note ("drafted by Run AI … carried into the report only from an
+  assessment a consultant approved") false for every seeded demo deliverable.
+  Nine MEDIUM including `Overall coverage: 100.0%` on one scored technique of 633
+  (`attack/analytics.py:105` divides by scored-only), two adjacent contradictory sentences in
+  `csf/exporters.py:550`, and **six branch-introduced formula-injectable XLSX columns**
+  (`csf/exporters.py:70-77` `POAM_FIELDS`), correcting the earlier assumption that the batch added
+  none. Seven LOW including a **third phantom Tailwind token** — `bg-surface-default` at
+  `AiPreviewButton.tsx:106`, found by the systematic served-CSS sweep of all 55 colour utilities
+  that deferred item 5 said had never been done. That sweep also re-verified all ten `--tier-*`
+  tokens, independently confirming S0.
+  **Spec compliance holds.** `ai/jobs.py`, `ai/llm.py` and `config.py` have zero-line diffs, all
+  four prompts are byte-identical to `main`, and every scoring engine has a zero-line diff.
+  Deterministic scoring is still entirely in Python and no AI-drafted text influences a number.
+  **Security holds.** 5 high + 2 moderate confirmed exactly and none branch-introduced (no
+  lockfile in a 117-file diff); bandit clean on `app`, 7 LOW on `scripts` all pre-existing; secret
+  scan clean over 14,386 diff lines with positive controls; cross-tenant artifact reachability
+  independently re-verified across six break attempts and the 409 shown non-oracular by structure
+  and by timing. One input the checkpoints never tried does resolve: a **purged** in-tenant
+  artifact still prints its filename. Also corrected a checkpoint's wording — the `client_id` bound
+  IS derived from the caller-controlled `X-Client-Id` for platform admins; the property is real but
+  rests on `require_service_in_tenant` agreeing with it, not on the header being untrusted.
+  **Four false claims found in the records and corrected**, including that no document recorded S11
+  as open — CHANGELOG, BUILD_REPORT and CONTEXT.md all named S9 as the only sprint that did not
+  close. Ten of twelve boxes are checked, not eleven. Also: five checked SMOKE §14.1 boxes carried
+  no proof at all and now cite `tests/live/test_live_ai.py`.
+  Extensive cannot-fail-test findings recorded, including heatmap-fill assertions that pin only
+  "a fill was applied", length-not-value assertions, and an `AiStatusBanner` case that awaits two
+  microtasks where the state needs four, so it measures "not loaded yet" and stays green if the
+  guard is removed.
