@@ -11,6 +11,11 @@
 
 This is the living implementation plan for the remaining SHIELD v2 build, derived from the Developer Work Order and verified against the live code. It is the work order, made executable and tracked. Update the status checkboxes and the Progress Log as items land.
 
+> **Historical, as of 2026-08-05.** The v2 work order (Parts A to F) merged as PR #1
+> in July 2026 and ten sprints have shipped since. This file is kept as the record of
+> that build and is no longer maintained. **The current forward plan is `ROADMAP.md`.**
+> State of the branch is `CONTEXT.md`; the executable backlog is `docs/SPRINTS.md`.
+
 ---
 
 ## Status legend

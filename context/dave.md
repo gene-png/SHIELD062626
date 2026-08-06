@@ -1,26 +1,49 @@
 # Dave: current status
 
 _Owner: Dave (SpearheadAnalytica). Only Dave's sessions write this file._
-_Last updated: 2026-08-04 (Sprint 10 "Reports you can defend" complete on its
-branch through S11; the loop ran S0 through S11 and stopped at push, no PR)._
+_Last updated: 2026-08-05 (Sprint 10 complete on its branch through S11; the loop
+ran S0 through S11 and stopped at push, no PR. The 2026-08-05 pass corrected the
+box count and pulled the shutdown audit's findings forward)._
 
 ## Branch / in flight
 
 - **`feat/defensible-reports-sprint-10` (this branch, targeting `v3.6.0`):** the
   autonomous loop ran twelve sprints (S0 through S11) against `docs/SPRINTS.md`.
-  Eleven boxes are checked. **S9's box is deliberately open** on two `needs-human`
-  criteria. The shutdown ceremony stopped at push because the loop was started
-  without `--pr`, so **opening the PR is yours**.
-- **Nothing else in flight.** `main` is clean; PR #53 (ops pipeline) and the
-  identity self-heal merged before the launch.
+  **Ten boxes are checked, not eleven. Two are open: S9 and S11.** The earlier
+  reading of this file said one, which is the same false claim the shutdown audit
+  found in CHANGELOG, BUILD_REPORT and CONTEXT.md and corrected in `575f17c`. S9
+  carries two `needs-human` criteria, S11 carries one, and all three trace to two
+  facts: the interview prompt has no data path anywhere, and no green full-suite
+  e2e run exists on this box. The shutdown ceremony stopped at push because the loop
+  was started without `--pr`, so **opening the PR is yours**.
+- **This branch is 1 commit behind `origin/main`.** `41f194c` (PR #57, merged
+  2026-08-05) is a one-line change to `.claude/settings.json` that makes the
+  PreToolUse hooks match PowerShell calls as well as Bash. Until it lands here, the
+  guards do not fire on a PowerShell tool call on this branch. Merge it in before
+  opening the PR.
+- **Nothing else in flight.** No open PRs. PR #53 (ops pipeline), the identity
+  self-heal (#56) and the hook matcher (#57) are all merged to `main`.
 
 ## What needs you, in the order I would do it
 
+0. **`app/csf/playbook_export.py` tells a real client they have no gaps when no
+   target has been set.** Shutdown-audit HIGH-1, and it outranks everything below
+   including the old number 1. It is a second CSF exporter that S3's honesty fix
+   never touched: 0 coverage-qualifier phrases against 18 in `csf/exporters.py`. At
+   `routes/csf.py:1128`, `gap = is_gap(rollup.score, target) if target is not None
+   else False` makes "no target recorded" and "target met" the same value, and
+   `target_level` is nullable with `csf.py:1331` writing `None` explicitly. **This
+   fires on the default state of a real engagement, not on an empty input.** The
+   same file also manufactures 91 Priority 1 criticals from unscored rows when
+   targets are set (HIGH-2), because `maturity_level(0)` returns 1. Both are claim
+   changes on a client-visible deliverable, so per D-035 they are your call rather
+   than an agent's scrub. Full finding set in `CONTEXT.md` under H1 to H5.
 1. **Open the Sprint 10 PR.** The body wants: the twelve-sprint task table with
-   commits (it is in `CHANGELOG.md` `[3.6.0]` and `CONTEXT.md` already), the two
-   `needs-human` criteria stated plainly, and the deferred list. Opening it is also
-   what produces the first green CI `e2e` run, which is the honest arbiter for the
-   full-suite question below.
+   commits (it is in `CHANGELOG.md` `[3.6.0]` and `CONTEXT.md` already), the three
+   `needs-human` criteria across S9 and S11 stated plainly, and the deferred list
+   including H1 to H5. Opening it is also what produces the first green CI `e2e`
+   run, which is the honest arbiter for the full-suite question below. Decide first
+   whether H1 blocks the merge; it ships a client-facing false statement.
 2. **Decide what a client sees when their answer fails to save.**
    `CsfSelfAssessment.tsx:173` is a bare `catch {}` around the answer PATCH. It
    predates the batch, and this batch made it worse in effect rather than in code: S3
@@ -125,11 +148,28 @@ branch through S11; the loop ran S0 through S11 and stopped at push, no PR)._
 ## Carried, not scheduled
 
 - The five high and two moderate advisories above, all wanting one lockfile bump.
-- Dependabot **#47** (npm-minor-patch, 6 updates) still open and green.
-- A second phantom Tailwind token, `border-border-default`, 7 uses across 5 files.
-  S0 swept `surface-muted` only, so the class was never swept systematically. The
-  real fix is a check that every colour utility resolves to a class Tailwind actually
-  generates.
+- **Dependabot #47 merged** (`25c0d8a` on `main`, npm-minor-patch, 6 updates). This
+  file previously called it open, which is stale. Its effect on the 5 high and 2
+  moderate count is **unmeasured**: that audit was taken on this branch, which does
+  not carry the bump, so re-run `pnpm audit` on `main` before quoting the number
+  again.
+- **Three phantom Tailwind tokens, and the sweep is now done.** `border-border-default`
+  (7 uses across 5 files) and `bg-surface-default` at `AiPreviewButton.tsx:106`,
+  which the shutdown audit's systematic served-CSS sweep of all 55 colour utilities
+  found after S0 had swept `surface-muted` alone. The sweep that was the recommended
+  fix has therefore happened once by hand; making it a gate step is what stops a
+  fourth.
+- **Shutdown-audit HIGH-3, HIGH-4 and HIGH-5**, none of them one-pass fixes. H3: the
+  dict-detail cast at `ZtWorkspace.tsx:68-79` renders an object as a React child and
+  crashes the workspace on a lost Run-AI race, with the same bad cast at 16 sites
+  across 15 files. H4: `fixtures.py:209` splits ZT codes on `.` so every pillar
+  narrative is filed under `"CISA"` or `"DOD"`, and no web surface renders
+  `pillar_narratives` to catch it. H5: `seed_demo.py:797` writes Python-computed
+  narratives under an exporter note claiming Run AI drafted them.
+- **Cannot-fail tests found across the suite.** Heatmap-fill assertions pinning only
+  that a fill was applied, length-not-value assertions, and an `AiStatusBanner` case
+  awaiting two microtasks where the state needs four. Green tests that would stay
+  green with the guard removed.
 - One consistent absent-versus-zero treatment for the four summary headers. ZT
   already carries the pattern, so this is copying, not deciding.
 - `/admin/management` is named in S7's Scope line with no acceptance criterion

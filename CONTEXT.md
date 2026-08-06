@@ -1,8 +1,10 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-08-04 (Sprint 10 "Reports you can defend" complete on
+_Last updated: 2026-08-05 (Sprint 10 "Reports you can defend" complete on
 `feat/defensible-reports-sprint-10`, targeting `v3.6.0`, PR not yet opened; Sprint 9
-"activate the seam" merged as PR #44, `v3.5.0`). This file describes the project as
+"activate the seam" merged as PR #44, `v3.5.0`. The 2026-08-05 pass folded the
+shutdown deep audit's findings into the deferred list, where they had been recorded
+only in the `docs/SPRINTS.md` Log). This file describes the project as
 of the branch it sits on and is updated ONLY as part of a PR. Durable facts and
 environment gotchas live in `CLAUDE.md`; personal in-flight status lives in
 `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`, and the executable
@@ -158,6 +160,86 @@ consultant-facing, the client screen stays silent, `:985`).
 Nothing in this list is a regression introduced by this batch unless it says so.
 It is recorded here so none of it gets rediscovered as a bug in three months.
 Roughly in priority order.
+
+### Found by the shutdown deep audit, 2026-08-04
+
+Five parallel adversarial sub-audits ran over all 28 commits at the close of the
+batch and recorded 5 HIGH, 9 MEDIUM and 7 LOW. Nothing was code-fixed, because no
+finding is one-pass fixable: each is either a claim change on a client-visible
+deliverable, which D-035's precedent makes a decision rather than a scrub, or a
+multi-file sweep. The full entry is the last Log line in `docs/SPRINTS.md`.
+
+These carry an `H` prefix instead of joining the numbered list below, because that
+list is cross-referenced by number from this file and from `context/dave.md`, and
+renumbering it would break those references. **H1 outranks every item in it,
+including item 1.** None of the five has a pre-existing-versus-new label the audit
+did not give it: H1 through H4 have root causes older than the batch, and what this
+batch changed is how reachable or how visible each one is.
+
+- **H1. A second CSF exporter that S3's honesty fix never reached, and it is wrong
+  on the default state of a real engagement.** `app/csf/playbook_export.py`
+  produces five client-facing artifacts from
+  `POST /csf/services/{id}/playbook/export`, and it carries **0** coverage-qualifier
+  phrases against 18 in `csf/exporters.py`. Root cause at `routes/csf.py:1128`:
+  `gap = is_gap(rollup.score, target) if target is not None else False`. With
+  `target_level` nullable (`Mapped[int | None]`, and `csf.py:1331` writes `None`
+  explicitly), "no target recorded" and "target met" resolve to the same value.
+  Rendered with all 106 subcategories scored at Enterprise Level 2 of 5 and no
+  target set, the deliverable says `No gaps: every in-scope subcategory meets its
+target.` and `Maintain current controls and re-assess on the next cycle.` while
+  every Target cell prints a dash. It fires on the default state of a real
+  engagement rather than on a contrived empty input. Fifth and largest instance of
+  this batch's recurring defect.
+- **H2. The same file manufactures 91 Priority 1 criticals** out of unscored rows
+  when targets ARE set, because `maturity_level(0)` returns 1 and an unscored row is
+  indistinguishable from a real Level 1.
+- **H3. A lost Run-AI race crashes the ZT workspace** rather than showing the typed
+  409, which is the exact case S4 built its conditional UPDATE for.
+  `ZtWorkspace.tsx:68-79` casts dict-detail as `detail?: string` and renders an
+  object as a React child. The bad cast is pre-existing at 16 sites across 15 files,
+  and this branch adds three more 409s that reach it.
+- **H4. Every ZT pillar narrative is filed under a pillar that does not exist.**
+  `fixtures.py:209` derives the pillar key as `code.split(".")[0]`, so every ZT code
+  yields `"CISA"` or `"DOD"`. Fixture mode is the default, so this persists and now
+  renders. No `apps/web` surface displays `pillar_narratives`, so nothing catches it
+  before release.
+- **H5. The demo deliverable's AI attribution note is false.** `seed_demo.py:797`
+  writes Python-computed narratives, while the exporter's note says the text was
+  drafted by Run AI and carried into the report only from an assessment a consultant
+  approved.
+
+MEDIUM and LOW worth carrying, including two corrections to the list below:
+
+- `Overall coverage: 100.0%` on one scored technique of 633, because
+  `attack/analytics.py:105` divides by scored-only.
+- Two adjacent contradictory sentences at `csf/exporters.py:550`.
+- **Item 9 below understates the batch.** It introduced **six** formula-injectable
+  XLSX columns of its own, at `csf/exporters.py:70-77` (`POAM_FIELDS`). The earlier
+  reading was that S2 and S3 added one column to a vector that already existed.
+- **Item 5 below is superseded.** The systematic served-CSS sweep it asks for has
+  now been done across all 55 colour utilities, and it found a **third** phantom
+  token: `bg-surface-default` at `AiPreviewButton.tsx:106`. The same sweep
+  re-verified all ten `--tier-*` tokens and independently confirmed S0.
+- **A purged in-tenant artifact still prints its filename.** No checkpoint had tried
+  that input. Cross-tenant reachability itself was re-verified across six break
+  attempts and holds.
+- **Cannot-fail tests, recorded extensively.** Heatmap-fill assertions that pin only
+  "a fill was applied", length-not-value assertions, and an `AiStatusBanner` case
+  that awaits two microtasks where the state needs four, so it measures "not loaded
+  yet" and stays green if the guard is removed.
+
+Two things the audit confirmed rather than broke. **Spec compliance holds:**
+`ai/jobs.py`, `ai/llm.py` and `config.py` have zero-line diffs, all four prompts are
+byte-identical to `main`, and every scoring engine has a zero-line diff, so
+deterministic scoring is still entirely in Python and no AI-drafted text influences
+a number. **Security holds:** 5 high and 2 moderate confirmed exactly with none
+branch-introduced, bandit clean on `app`, and a secret scan clean over 14,386 diff
+lines with positive controls. One checkpoint's wording was corrected in the process:
+the `client_id` bound IS derived from the caller-controlled `X-Client-Id` for
+platform admins, so the isolation property is real but rests on
+`require_service_in_tenant` agreeing with it, not on the header being untrusted.
+
+### The standing list
 
 1. **A swallowed error on the client's only write path.**
    `CsfSelfAssessment.tsx:172-174` is a bare `catch {}` around the answer PATCH, a
