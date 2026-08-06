@@ -1,8 +1,10 @@
 # Three visual systems for SHIELD
 
-_Produced 2026-07-30 in a design sprint. **Status: no system has been adopted yet.**
-The recommendation at the bottom of this file is a recommendation, not a decision. When
-one is chosen it gets a D-number in `DECISIONS.md` and this line is updated to name it._
+_Produced 2026-07-30 in a design sprint. **Status: Variation 1 "Ledger" was chosen on
+2026-08-06.** The decision is recorded in `ROADMAP.md`; its D-number lands in the sprint
+that applies it, which is where `DECISIONS.md` gets the entry. Cloud Mod
+(`kentro-cloud-modernization`) is retrofitted onto the same tokens in the sprint after,
+retiring `kentro.teal` as a second brand ramp._
 
 _Re-run the contrast evidence with `node docs/design-systems-contrast.mjs` from the repo
 root. It exits non-zero on any failure, so it can become a CI step when a system is

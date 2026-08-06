@@ -156,12 +156,20 @@ mechanism; docs carry only what git can't show.
 | `docs/architecture.md` | Structure | Updated in the PR that changes architecture |
 | `SPRINT_<n>.md` | Per-sprint plan and its rationale (immutable once the sprint closes) | Sprint author |
 | `docs/SPRINTS.md` | The executable backlog the loop runs. Named by `.claude/sprint-plan` | Sprint author, then the loop appends to its Log |
-| `docs/design-systems.md` | Three candidate visual systems with full light/dark token sets. No system adopted yet; the pick takes a D-number. Contrast evidence re-runs via `node docs/design-systems-contrast.mjs` | Design author; update the status line when one is chosen |
+| `docs/design-systems.md` | Three candidate visual systems with full light/dark token sets. **Ledger chosen 2026-08-06**; its D-number lands in the sprint that applies it. Contrast evidence re-runs via `node docs/design-systems-contrast.mjs` | Design author; update the status line when one is chosen |
+| `ROADMAP.md` | The forward plan, one entry per sprint, in English: what we are adding and why it comes where it does. Ends with the five conditions that close the project | Updated in the PR that closes a sprint or disproves an estimate |
+| `docs/PRINCIPLES.md` | The claim contract: what a deliverable is allowed to assert, and the two gates that check it (frozen claim inventory, empty-input render per exporter) | Both; a new claim mechanism is added here before it is built |
 | `SMOKE_TEST.md` | QA checklist — a box is checked ONLY if a green committed spec proves it, annotated with the spec filename | Both, honesty convention enforced |
 
 Rules of the road:
 
 - **Never commit directly to `main`.** Branch + PR, even for small fixes.
+- **A sprint PR merges as a merge commit, never a squash.** `CONTEXT.md` and the
+  `docs/SPRINTS.md` Log cite the per-sprint implementation and verification SHAs by
+  hand, and squashing orphans every one of them, so the record stops resolving. Use
+  `gh pr merge <n> --merge`. Small single-purpose PRs may squash; anything whose SHAs
+  are cited in a committed document may not. Checked after merging: PR #58's cited SHAs
+  are still reachable from `main`.
 - **Write rich PR descriptions** (see PR #16 for the format: summary, task
   table, test plan, known follow-ups). The other person's agents orient from
   `gh pr view` — a good body saves them reading your whole diff.
