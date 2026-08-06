@@ -109,6 +109,20 @@ test("matrix + heatmap render, Run AI reports updated fields, and the panel show
   test.slow();
   await openFreshDraft(page);
 
+  // SMOKE_TEST.md section 33: the fixture-info banner is VISIBLE, and it says
+  // what fixture mode actually does. D-037 replaced copy claiming AI was
+  // "disabled" — false, since Run AI works and returns a registered fixture —
+  // so the whole sentence is pinned, not just the mode word. Source of record:
+  // apps/api/app/routes/admin.py ai_status (the detail is served, not authored
+  // in the web layer). Filtered by text because this workspace also mounts a
+  // role="status" stale-docs nudge, so a bare getByRole would be ambiguous.
+  const aiBanner = page.getByRole("status").filter({ hasText: "AI mode:" });
+  await expect(aiBanner).toBeVisible({ timeout: 30000 });
+  await expect(aiBanner).toContainText("AI mode: fixture.");
+  await expect(aiBanner).toContainText(
+    "AI runs in offline fixture mode: Run AI returns deterministic demo drafts, not live model output",
+  );
+
   // Matrix + coverage-rollup heatmap both render.
   await expect(
     page.getByRole("heading", { name: "ATT&CK matrix" }),
@@ -148,7 +162,7 @@ test("matrix + heatmap render, Run AI reports updated fields, and the panel show
   await expect(page.getByText("Response", { exact: true })).toBeVisible();
   await expect(page.getByText(expectedTool as string).first()).toBeVisible();
   await expect(
-    page.getByText(/Fixture-mode draft coverage assessment for T1001/),
+    page.getByText(/Fixture-mode draft coverage evidence for T1001/),
   ).toBeVisible();
 });
 

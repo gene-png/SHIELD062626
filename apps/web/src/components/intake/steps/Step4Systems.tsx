@@ -17,7 +17,7 @@ export function Step4Systems({
     <div className="flex flex-col gap-5">
       <p className="text-sm text-ink-secondary">
         Give us a one-paragraph picture of the systems in scope. Categorization,
-        ATO status, hosting, and POAM volume can wait — we&apos;ll capture those
+        ATO status, hosting, and POAM volume can wait. We&apos;ll capture those
         in the assessment workspace. For now, a free-text orientation is enough
         to plan the assessment.
       </p>

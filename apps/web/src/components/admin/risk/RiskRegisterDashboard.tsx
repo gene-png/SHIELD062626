@@ -61,7 +61,10 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
   const rows = [...LIKELIHOODS].reverse();
   return (
     <div className="overflow-x-auto">
-      <table className="border-collapse text-center text-xs">
+      {/* Cells are separated by a 1px gap that shows the surface behind the
+          table, not by a literal white border: `border-white` would stay white
+          and glow on a dark canvas. Same 1px seam, theme-following. */}
+      <table className="border-separate border-spacing-px text-center text-xs">
         <thead>
           <tr>
             <th className="p-2" />
@@ -87,7 +90,7 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
                 return (
                   <td
                     key={im}
-                    className="h-12 w-16 border border-white text-sm font-semibold"
+                    className="h-12 w-16 text-sm font-semibold"
                     style={{ backgroundColor: color.bg, color: color.fg }}
                     title={`${titleCase(lk)} × ${titleCase(im)}`}
                   >
@@ -100,6 +103,29 @@ function Matrix({ entries }: { entries: RiskEntry[] }): JSX.Element {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Provenance, consultant-facing only (D-037). `origin` and `trust` are already
+ * first-class on the row; until now nothing rendered them, so a synthesized
+ * entry and one a consultant wrote looked identical. Only AI-origin rows get the
+ * badge; anything else prints its origin as plain text.
+ */
+function OriginCell({ entry }: { entry: RiskEntry }): JSX.Element {
+  if (entry.origin !== "ai_generated") {
+    return (
+      <span className="text-ink-secondary">{titleCase(entry.origin)}</span>
+    );
+  }
+  const trustSuffix = entry.trust ? ` · ${titleCase(entry.trust)}` : "";
+  return (
+    <span
+      className="inline-block rounded-full border border-status-info-border bg-status-info-bg px-2 py-0.5 text-xs font-semibold text-status-info-fg"
+      title={`origin ${entry.origin}${entry.trust ? `, trust ${entry.trust}` : ""}`}
+    >
+      AI-drafted{trustSuffix}
+    </span>
   );
 }
 
@@ -122,6 +148,11 @@ const COLUMNS: DataTableColumn<RiskEntry>[] = [
     header: "Source",
     cell: (r) => r.source_id ?? "—",
   },
+  {
+    key: "origin",
+    header: "Provenance",
+    cell: (r) => <OriginCell entry={r} />,
+  },
 ];
 
 function DownloadLink({
@@ -137,7 +168,7 @@ function DownloadLink({
   return (
     <a
       href={`/api/proxy/artifacts/${id}/download`}
-      className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-muted"
+      className="rounded-md border border-border-default px-3 py-1.5 text-sm font-medium text-ink-primary hover:bg-surface-sunken"
     >
       {label}
       {filename ? (
@@ -278,7 +309,7 @@ export function RiskRegisterDashboard(): JSX.Element {
               type="button"
               onClick={onExport}
               disabled={busy !== null}
-              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-muted disabled:opacity-50"
+              className="rounded-md border border-border-default px-4 py-2 text-sm font-semibold text-ink-primary hover:bg-surface-sunken disabled:opacity-50"
             >
               {busy === "export" ? "Exporting…" : "Export XLSX / PDF / Word"}
             </button>
@@ -343,7 +374,7 @@ export function RiskRegisterDashboard(): JSX.Element {
                 rowKey={(r) => r.id}
                 emptyState={
                   <p className="p-4 text-sm text-ink-secondary">
-                    No entries — the synthesis found no open gaps.
+                    No entries. The synthesis found no open gaps.
                   </p>
                 }
               />

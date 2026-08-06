@@ -201,7 +201,7 @@ export function EmptyArtifactsHint(): JSX.Element {
   return (
     <EmptyState
       title="No documents uploaded yet"
-      description="Drop a file above to attach it to this intake. Optional — you can submit without any uploads."
+      description="Drop a file above to attach it to this intake (optional). You can submit without any uploads."
     />
   );
 }

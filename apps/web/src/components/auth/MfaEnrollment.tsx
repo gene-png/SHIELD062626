@@ -118,7 +118,7 @@ export function MfaEnrollment({
             In your authenticator app, add an account using this setup key, then
             enter the 6-digit code it shows.
           </p>
-          <div className="rounded-md border border-border bg-surface-muted px-3 py-2">
+          <div className="rounded-md border border-border bg-surface-sunken px-3 py-2">
             <span className="text-xs font-medium text-ink-tertiary">
               Setup key
             </span>
@@ -170,7 +170,7 @@ export function MfaEnrollment({
             className="rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-3"
           >
             <p className="text-sm font-medium text-status-warning-fg">
-              Save your recovery codes now — they are shown only once.
+              Save your recovery codes now. They are shown only once.
             </p>
             <p className="mt-1 text-xs text-status-warning-fg">
               Each code can be used once if you lose access to your

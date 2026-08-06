@@ -7,6 +7,9 @@ _Created 2026-07-02. Owner: David Catarious. Sprint docs: `SPRINT_<n>.md`._
 > `docs/SPRINTS.md`, and the `.claude/sprint-queue.json` execution model
 > described below is retired. Pointing the loop back here would run a Sprint-5-era
 > backlog unattended.
+>
+> **The current forward plan is `ROADMAP.md`** (created 2026-08-05), which orders
+> the remaining work by what stands between the repo and a paying client.
 
 ## Where we are
 

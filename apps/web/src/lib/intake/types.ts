@@ -127,7 +127,7 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   zero_trust_dod: "Zero Trust Assessment (DoD ZTRA)",
   nist_csf: "NIST CSF 2.0 Assessment",
   attack_coverage: "MITRE ATT&CK Coverage Mapping",
-  consultation: "I'm not sure — start with a consultation",
+  consultation: "I'm not sure, start with a consultation",
 };
 
 /**

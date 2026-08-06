@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid as _uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -153,6 +154,93 @@ def test_gap_endpoint_respects_per_capability_target_and_returns_roadmap(app_cli
     gap = next(x for x in body["gaps"] if x["code"] == code)
     assert gap["target_stage"] == 4  # per-capability target, not the default 3
     assert any(it["code"] == code for it in body["roadmap"])
+
+
+_NARRATIVE_RESPONSE = (
+    '{"capabilities": [], "pillar_narratives": {"ID": "Identity is partial."},'
+    ' "executive_summary": "Draft executive summary.",'
+    ' "roadmap_summary": "Draft 12-month roadmap."}'
+)
+
+
+@pytest.mark.unit
+def test_zt_run_ai_persists_narratives_and_sets_documents_stale(app_client) -> None:
+    """S4: the three narrative fields survive the run and mark documents stale."""
+    c, provider = app_client
+    h, svc_id, _ = _admin_service(c, "zero_trust_cisa")
+    c.post(f"/zt/services/{svc_id}/assessments", headers=h)
+    provider.register_static("zt_score", LLMResponse(_NARRATIVE_RESPONSE))
+
+    r = c.post(f"/zt/services/{svc_id}/run-ai", headers=h)
+    assert r.status_code == 200, r.text
+
+    latest = c.get(f"/zt/services/{svc_id}/assessments/latest", headers=h).json()
+    assert latest["executive_summary"] == "Draft executive summary."
+    assert latest["roadmap_summary"] == "Draft 12-month roadmap."
+    assert latest["pillar_narratives"] == {"ID": "Identity is partial."}
+    # Every persisted-narrative write marks the rendered documents stale.
+    assert latest["documents_stale"] is True
+
+
+@pytest.mark.unit
+def test_zt_run_ai_persist_loses_to_a_discard_inside_the_write_window(
+    app_client, monkeypatch
+) -> None:
+    """The narrative persist must be atomic against a racing discard.
+
+    The window this guards is the one the pre-S4 route left open: it re-read the
+    parent status, saw an editable value, and only then wrote. The seam used here
+    is `app.routes.zt.audit`, the one call the route makes strictly AFTER that
+    status observation and strictly BEFORE the parent write reaches the database.
+    The hook flips the parent to DISCARDED at that instant, so the write lands in
+    a window where the status the route already observed is stale.
+
+    A discard arranged before the run starts would be caught by the pre-read and
+    proves nothing about this window, so it is deliberately not what happens here.
+    """
+    from sqlalchemy import update
+
+    import app.routes.zt as zt_routes
+    from app.models.zt_assessment import ZtAssessment, ZtAssessmentStatus
+
+    c, provider = app_client
+    h, svc_id, _ = _admin_service(c, "zero_trust_cisa")
+    assessment_id = c.post(f"/zt/services/{svc_id}/assessments", headers=h).json()["id"]
+    provider.register_static("zt_score", LLMResponse(_NARRATIVE_RESPONSE))
+
+    real_audit = zt_routes.audit
+    fired: list[str] = []
+
+    def discard_then_audit(db, **kwargs):
+        # Emitted SQL, so any predicate the route evaluates after this point
+        # reads DISCARDED — exactly what a discard committing in this window
+        # looks like to the write that follows it.
+        if kwargs.get("action") == "zt.run_ai" and not fired:
+            fired.append("yes")
+            db.execute(
+                update(ZtAssessment)
+                .where(ZtAssessment.id == _uuid.UUID(assessment_id))
+                .values(status=ZtAssessmentStatus.DISCARDED)
+                .execution_options(synchronize_session=False)
+            )
+        return real_audit(db, **kwargs)
+
+    monkeypatch.setattr(zt_routes, "audit", discard_then_audit)
+
+    r = c.post(f"/zt/services/{svc_id}/run-ai", headers=h)
+
+    assert fired, "the discard hook never fired — the seam moved out of the window"
+    # Loud, typed, and a failure: never a silent no-op and never a 200.
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["reason"] == "assessment_not_editable"
+
+    # And nothing persisted: the losing write took its narratives with it.
+    monkeypatch.setattr(zt_routes, "audit", real_audit)
+    latest = c.get(f"/zt/services/{svc_id}/assessments/latest", headers=h).json()
+    assert latest["executive_summary"] is None
+    assert latest["roadmap_summary"] is None
+    assert latest["pillar_narratives"] is None
+    assert latest["documents_stale"] is False
 
 
 @pytest.mark.unit

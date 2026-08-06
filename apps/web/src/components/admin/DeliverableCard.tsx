@@ -77,7 +77,7 @@ export function DeliverableCard({
         <CardTitle>Deliverable</CardTitle>
         <CardDescription>
           Render the PDF + XLSX from the approved capability list. Deliverables
-          are admin-only — download and share them outside the app. Re-finalize
+          are admin-only. Download and share them outside the app. Re-finalize
           on the same day appends <code>_v2</code> to the filename.
         </CardDescription>
       </CardHeader>

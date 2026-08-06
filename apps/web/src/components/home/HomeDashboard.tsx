@@ -67,28 +67,80 @@ function serviceLabel(kind: string, fallback: string): string {
   return SERVICE_LABELS[kind as ServiceType] ?? fallback;
 }
 
+interface Phase {
+  label: string;
+  tone: StatusTone;
+  /** What the label means, in the legend under the grid (S7). */
+  meaning: string;
+}
+
 /**
- * A client-safe phase for one engagement, spanning intake → report ready. A
+ * The five phases a client can be shown, and the reading for each. `phaseFor`
+ * returns one of these objects rather than a bare label, so the grid cannot show
+ * a phase the legend does not explain: there is one definition of each.
+ */
+const PHASES: Record<string, Phase> = {
+  gettingStarted: {
+    label: "Getting started",
+    tone: "neutral",
+    meaning: "We have your request. Your analyst is setting the assessment up.",
+  },
+  inProgress: {
+    label: "In progress",
+    tone: "info",
+    meaning:
+      "The assessment is open. Anything that needs you is listed under Waiting on you.",
+  },
+  underReview: {
+    label: "Under review",
+    tone: "warning",
+    meaning:
+      "You have sent your answers in and your analyst is going through them.",
+  },
+  finalizing: {
+    label: "Finalizing your report",
+    tone: "info",
+    meaning:
+      "Your answers are settled and your analyst is writing the report up.",
+  },
+  reportReady: {
+    label: "Report ready",
+    tone: "success",
+    meaning: "The report is released. Open it under your reports.",
+  },
+};
+
+/** The legend rendered under the grid, in lifecycle order. */
+export const SERVICE_PHASE_LEGEND: ReadonlyArray<Phase> = [
+  PHASES.gettingStarted,
+  PHASES.inProgress,
+  PHASES.underReview,
+  PHASES.finalizing,
+  PHASES.reportReady,
+];
+
+/**
+ * A client-safe phase for one engagement, spanning intake to report ready. A
  * released deliverable for the service always wins (the report is out). No
- * scoring is read — only the lifecycle status the client already sees on
+ * scoring is read, only the lifecycle status the client already sees on
  * /assessments.
  */
-function phaseFor(
+export function phaseFor(
   e: AssessmentResponse,
   hasReleasedDeliverable: boolean,
-): { label: string; tone: StatusTone } {
-  if (hasReleasedDeliverable) return { label: "Report ready", tone: "success" };
+): Phase {
+  if (hasReleasedDeliverable) return PHASES.reportReady;
   switch (e.assessment_status) {
     case "approved":
-      return { label: "Finalizing your report", tone: "info" };
+      return PHASES.finalizing;
     case "submitted":
-      return { label: "Under review", tone: "warning" };
+      return PHASES.underReview;
     case "draft":
-      return { label: "In progress", tone: "info" };
+      return PHASES.inProgress;
     default:
       return e.status === "released"
-        ? { label: "Report ready", tone: "success" }
-        : { label: "Getting started", tone: "neutral" };
+        ? PHASES.reportReady
+        : PHASES.gettingStarted;
   }
 }
 
@@ -216,7 +268,10 @@ export function HomeDashboard({
             description="When you start an assessment, its progress will show up here."
           />
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul
+            aria-labelledby="services-heading"
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
             {engagements.map((e) => {
               const phase = phaseFor(e, releasedServiceIds.has(e.service_id));
               return (
@@ -239,6 +294,26 @@ export function HomeDashboard({
             })}
           </ul>
         )}
+        {engagements.length > 0 ? (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-500">
+              What each phase means
+            </summary>
+            <ul
+              aria-label="What each phase means"
+              className="mt-2 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-sunken p-3"
+            >
+              {SERVICE_PHASE_LEGEND.map((phase) => (
+                <li key={phase.label} className="text-xs">
+                  <span className="font-semibold text-ink-primary">
+                    {phase.label}
+                  </span>{" "}
+                  <span className="text-ink-secondary">{phase.meaning}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       {/* Band 4: waiting-on-you + recent activity. */}

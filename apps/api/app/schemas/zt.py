@@ -96,6 +96,13 @@ class ZtAssessmentResponse(BaseModel):
     answers: list[ZtAnswerResponse]
     # Target stage the client picked at intake (2-4), or null if not set.
     client_target_stage: int | None = None
+    # Sprint 10 S4: narratives the zt_score Run-AI drafted and persisted
+    # (migration 0034). All three default to None — never `{}`, so "no narrative
+    # was ever drafted" and "the model drafted an empty map" stay distinguishable
+    # and no caller shares a mutable default.
+    roadmap_summary: str | None = None
+    executive_summary: str | None = None
+    pillar_narratives: dict[str, str] | None = None
 
 
 class ZtAnswerPatch(BaseModel):

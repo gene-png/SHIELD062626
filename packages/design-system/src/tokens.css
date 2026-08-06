@@ -59,6 +59,27 @@
   --status-neutral-fg: #475063;
   --status-neutral-border: #d6dae3;
 
+  /* ----- Risk tiers (NIST 800-30 5x5 heatmap + tier chips) -----
+     Lifted verbatim out of apps/web/src/lib/risk/matrix.ts, where they were
+     hard-coded hexes applied through inline style and therefore invisible to
+     theming. Values are unchanged; a second theme overrides them here.
+     apps/web/src/lib/risk/matrix.test.ts asserts all ten still resolve to the
+     literals they replaced. */
+  --tier-negligible-bg: #f1f5f9;
+  --tier-negligible-fg: #475569;
+
+  --tier-low-bg: #dcfce7;
+  --tier-low-fg: #166534;
+
+  --tier-medium-bg: #fef9c3;
+  --tier-medium-fg: #854d0e;
+
+  --tier-high-bg: #ffedd5;
+  --tier-high-fg: #9a3412;
+
+  --tier-critical-bg: #fee2e2;
+  --tier-critical-fg: #991b1b;
+
   /* ----- Type scale ----- */
   --font-sans:
     "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial,

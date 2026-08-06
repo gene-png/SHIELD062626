@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 
+import { CsfMaturityReference } from "@/components/csf/CsfMaturityReference";
 import type {
   CatalogFunction,
   CsfAnswer,
@@ -13,12 +14,20 @@ import { TierPicker } from "./TierPicker";
 
 import type { JSX } from "react";
 
+/** Placeholder shared by both audiences: a note is only useful if it names the
+ * thing that makes the answer true. */
+const NOTES_PLACEHOLDER =
+  "Name the tool, policy, or process behind this answer: what enforces it, where it is written down, and who runs it.";
+
 export interface CsfQuestionnaireProps {
   catalog: CsfCatalog;
   answersByCode: Record<string, CsfAnswer>;
   /** Interview prompts keyed by the subcategory code each one informs.
    * Supplemental context for the assessor; sparse by design. */
   questionsByCode?: Record<string, CsfInterviewQuestion[]>;
+  /** Who is answering. A consultant reads the prompts as an interview script; a
+   * client reads the same prompts as things to consider (S6). */
+  promptAudience?: "consultant" | "client";
   readOnly?: boolean;
   onAnswerUpdate: (
     answerId: string,
@@ -76,6 +85,7 @@ export function CsfQuestionnaire({
   catalog,
   answersByCode,
   questionsByCode = {},
+  promptAudience = "consultant",
   readOnly = false,
   onAnswerUpdate,
 }: CsfQuestionnaireProps): JSX.Element {
@@ -149,12 +159,19 @@ export function CsfQuestionnaire({
                           ariaLabel={`Maturity tier for ${sub.code}`}
                         />
                       </div>
+                      <CsfMaturityReference
+                        tiers={catalog.tiers}
+                        functionCode={activeFn.code}
+                        subcategoryCode={sub.code}
+                      />
                       {questionsByCode[sub.code]?.length ? (
                         <div className="mt-3 flex flex-col gap-2 rounded-md border border-border-subtle bg-surface-sunken p-2.5">
                           {questionsByCode[sub.code].map((q) => (
                             <div key={q.external_id}>
                               <p className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">
-                                Interview · {q.section_name}
+                                {promptAudience === "client"
+                                  ? "Consider:"
+                                  : `Interview · ${q.section_name}`}
                               </p>
                               <p className="mt-0.5 text-sm text-ink-primary">
                                 {q.stem}
@@ -192,7 +209,7 @@ export function CsfQuestionnaire({
                             void onAnswerUpdate(ans.id, { notes: v });
                           }}
                           className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-hidden"
-                          placeholder="Evidence, references, exceptions…"
+                          placeholder={NOTES_PLACEHOLDER}
                         />
                       </details>
                     </li>

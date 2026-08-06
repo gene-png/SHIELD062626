@@ -101,7 +101,7 @@ function ReadinessItem({
       </span>
       <span className="text-ink-secondary">
         <span className="font-medium text-ink-primary">{label}</span>
-        {ok ? "" : ` — ${missingHint}`}
+        {ok ? "" : ` (${missingHint})`}
       </span>
     </li>
   );
@@ -180,7 +180,7 @@ function ServiceRequestCard({
 
         {isConsultation ? (
           <p className="mt-4 text-sm text-ink-secondary">
-            Consultation request — follow up with the client directly. There is
+            Consultation request. Follow up with the client directly. There is
             nothing to publish for processing.
           </p>
         ) : fulfilled ? (
@@ -204,7 +204,7 @@ function ServiceRequestCard({
             </p>
             <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink-secondary">
               <li>
-                Confirm the inputs above are complete and specific — vague scope
+                Confirm the inputs above are complete and specific. Vague scope
                 makes the AI score from guesses.
               </li>
               <li>Open each uploaded document and remove any raw PII.</li>
@@ -318,7 +318,7 @@ export function IntakeQueue(): JSX.Element {
             </StatusPill>
           ) : hasIntake ? (
             <StatusPill tone="warning" withDot>
-              In progress — not yet submitted
+              In progress, not yet submitted
             </StatusPill>
           ) : (
             <StatusPill tone="neutral" withDot>

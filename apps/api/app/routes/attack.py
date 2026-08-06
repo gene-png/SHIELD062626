@@ -897,6 +897,51 @@ def _write_artifact(
     return art
 
 
+def _evidence_filenames(
+    db: Session,
+    *,
+    client_id: uuid.UUID,
+    rows: Iterable[AttackCoverage],
+) -> dict[uuid.UUID, str]:
+    """Resolve every cited evidence artifact's filename for the deliverable (D-035).
+
+    The Coverage sheet prints "No evidence attached" only where
+    `evidence_artifact_id` is genuinely NULL. A pointer this join cannot resolve
+    inside the tenant therefore raises a typed 409 rather than degrading into
+    that sentence, which would read as a fact about the engagement.
+    """
+    cited = {r.evidence_artifact_id for r in rows if r.evidence_artifact_id is not None}
+    if not cited:
+        _log.debug("attack.evidence: no coverage row cites an evidence artifact")
+        return {}
+    found = db.execute(
+        select(Artifact.id, Artifact.title).where(
+            Artifact.id.in_(cited), Artifact.client_id == client_id
+        )
+    ).all()
+    names = dict(found)
+    unresolved = cited - names.keys()
+    if unresolved:
+        _log.warning(
+            "attack.evidence: %d of %d cited artifacts unresolved for client %s",
+            len(unresolved),
+            len(cited),
+            client_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "evidence_artifact_missing",
+                "message": (
+                    "An evidence attachment cited by this assessment is no longer "
+                    "available. Re-attach or clear it, then finalize again."
+                ),
+            },
+        )
+    _log.debug("attack.evidence: resolved %d cited artifact filenames", len(names))
+    return names
+
+
 @router.post(
     "/services/{service_id}/deliverables/finalize",
     response_model=DeliverableResponse,
@@ -972,6 +1017,7 @@ def finalize_attack_deliverable(
         assessment=assessment,
         coverage=coverage,
         rollup=rollup,
+        evidence_names=_evidence_filenames(db, client_id=client.id, rows=coverage),
     )
     pdf_bytes = render_attack_pdf(ctx)
     xlsx_bytes = render_attack_xlsx(ctx)

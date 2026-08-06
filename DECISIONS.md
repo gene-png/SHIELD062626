@@ -876,3 +876,170 @@ still an instant 401, the ceiling is absolute, and
 `alembic/versions/0033_user_prev_refresh_jti.py`,
 `tests/unit/test_auth_reauth.py`, `apps/web/src/lib/auth/refresh.ts` (+ test),
 `apps/web/src/lib/auth/options.ts`; DECISIONS D-016, D-020.
+
+## D-035 — The ATT&CK deliverable labels citations, never causes or remedies
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** The ATT&CK
+Coverage deliverable now prints the curated tool citations, the rationale, the
+attached evidence filename and a per-tactic coverage heatmap. Every label it
+adds states a citation fact. None of them states why a gap exists or what to do
+about it, and there is no remediation column.
+
+The reason sits in `app/routes/attack.py`. Run AI overwrites `detection_tools`,
+`prevention_tools`, `response_tools` and `rationale` on every unlocked coverage
+row, on every run. A consultant can edit those fields and can lock the row to
+keep the next run out, but nothing records that anyone did: there is no
+acceptance or substantiation state on `attack_coverage`. At render time the code
+cannot tell an AI draft from consultant-verified work. A deliverable that said
+"gap because no EDR agent is deployed" would be presenting an AI draft as a
+finding, on Kentro letterhead, to a client paying for that distinction.
+
+So the Gap Direction column emits exactly two shapes:
+
+- `No detection, prevention, or response tool is cited for this technique`
+- `Cited: <tools> (partial)`
+
+Both are checkable against the row that produced them. The PDF and DOCX carry
+the same discipline in a computed stat, `N of M scored techniques cite at least
+one tool`, and a methodology note that says outright that tools and rationale
+are drafted by Run AI, that a consultant can edit them, that a per-row lock
+exists, and that substantiation states are not recorded yet.
+`tests/unit/test_attack_exporters.py` asserts both strings verbatim and scans
+every Gap Direction cell for causal and remedial vocabulary, so drafting
+inference copy into that column fails a test instead of reaching a client.
+
+Two supporting rules.
+
+1. **The evidence filename comes from a join that raises.**
+   `_evidence_filenames()` resolves each cited `evidence_artifact_id` to
+   `artifacts.title` within the tenant and answers a typed 409
+   (`evidence_artifact_missing`) when it cannot. "No evidence attached" is
+   reserved for a genuinely NULL column, because a failed lookup degrading into
+   that sentence would read as a fact about the engagement.
+2. **The heatmap reuses S1's ramp.** `coverage_hex()` maps a 0 to 100 percentage
+   onto seven bands of `export_style.GRADED_RAMP_HEX`, pairs each with its
+   AA-safe ink, and raises outside that range rather than clamping, per D-036.
+
+**What this deliberately does not do.** No migration: the acceptance state that
+would let the report claim more is its own decision, not a column added in
+passing. No prompt change, so Run AI behaves exactly as before and only the
+deliverable's account of it changed. No remediation column anywhere.
+
+**Known inconsistency left standing.** The PDF and DOCX still head the gap list
+"Top remediation gaps (N of M shown)", inherited from Work Order C4. That is a
+heading rather than a Gap Direction cell, so it falls outside this decision's
+scope; the S10 prose scrub should retitle it.
+
+**Ref:** `apps/api/app/attack/exporters.py`, `apps/api/app/routes/attack.py`,
+`apps/api/tests/unit/test_attack_exporters.py`,
+`apps/api/tests/unit/test_attack_evidence_join.py`; DECISIONS D-016, D-036;
+`docs/SPRINTS.md` S2.
+
+## D-036 — One shared export style module; page geometry stays per-exporter
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** Deliverable
+styling now lives in `apps/api/app/export_style.py`, adopted by all five
+`exporters.py` modules and by `csf/playbook_export.py`. Before this, four brand
+hexes, one openpyxl header fill, one reportlab page setup and PR #50's inline
+`html.escape()` calls were copied across six modules. `risk/exporters.py` was
+already carrying `--surface-sunken` by hand as `"FFEEF2F7"`, which is what a
+palette value written six times looks like after it drifts once.
+
+The module owns the four brand hexes mirrored from
+`packages/design-system/src/tokens.css` (ink `#0e1220`, border `#d6dae3`, sunken
+`#eef2f7`, brand navy `#1b3a7a`), the derived openpyxl ARGB header fill,
+`LEVEL_HEX` relocated from `playbook_export.py` and re-exported there so
+existing importers keep working, and the header helpers `escaped_title()`,
+`escaped_line()` and `metadata_title()` that replace PR #50's scattered escape
+calls. A new sequential ramp, `graded_hex()` with its paired `graded_ink_hex()`,
+is available for future shading: one hue built in OKLCH off the brand navy,
+monotonic light to dark, every step's paired text colour clearing WCAG AA at
+4.5:1 (tightest step 4.78:1). Nothing renders through it yet, because adopting
+it anywhere would change a colour a client has already received.
+
+Two things this deliberately does not do.
+
+1. **Page geometry is not unified.** All five service exporters (the four
+   assessment services plus the Risk Register) render at a 0.6in side margin
+   and the playbook at 0.7in. `new_pdf_doc()` takes the
+   margin as an argument and each caller passes its own constant, because
+   standardising the two values would reflow every deliverable and move page
+   counts for no stated benefit. `tests/unit/test_export_style.py` pins both
+   constants, spies on the margin each exporter actually passes, and pins page
+   counts on fixed contexts.
+2. **`graded_hex()` raises on a level outside `1..n_levels`** rather than
+   clamping to an end of the ramp. A level out of range is a caller bug, and a
+   clamped colour is a lie about the data.
+
+**No rendered text changed.** Every existing exporter content test passes with
+its assertions untouched, and extracted PDF text plus XLSX cell values, fills
+and bold flags were diffed before and after the refactor and came back
+identical.
+
+**Ref:** `apps/api/app/export_style.py`,
+`apps/api/app/{tech_debt,attack,csf,zt,risk}/exporters.py`,
+`apps/api/app/csf/playbook_export.py`,
+`apps/api/tests/unit/test_export_style.py`,
+`packages/design-system/src/tokens.css`; `docs/SPRINTS.md` S1; PR #50.
+
+## D-037 — AI transparency is consultant-facing; the client screen stays silent
+
+**Decision (sprint 10, `feat/defensible-reports-sprint-10`).** The four admin
+workspaces and the Risk Register dashboard now disclose what AI does in SHIELD,
+and the client's signed-in screen still says nothing about it.
+
+The trigger was a banner that lied. `GET /admin/ai-status` answered fixture mode
+with "Running in fixture mode — AI features are disabled. Set SHIELD_LLM_MODE=live
+and ANTHROPIC_API_KEY to enable.", which is false in both halves: Run AI works in
+fixture mode, and what it returns is a registered deterministic fixture per
+purpose. A consultant reading "disabled" and then watching values appear has been
+told the wrong thing about where those values came from. The string is now
+`AI runs in offline fixture mode: Run AI returns deterministic demo drafts, not
+live model output`, pinned verbatim by
+`test_ai_status_reports_fixture_mode` because the web banner renders it straight
+off the wire and keeps no copy of its own.
+
+Four surfaces changed.
+
+1. **The banner mounts in all four workspaces and distinguishes two tones.**
+   ATT&CK, CSF and Zero Trust had no banner at all; only Tech Debt did. Fixture
+   mode is a deliberate configuration and reads as information; a live mode whose
+   readiness check fails is a misconfiguration and reads as a warning. The single
+   warning tone conflated a normal offline stack with a broken live one.
+2. **A `HowAiWorks` disclosure sits beside Run AI in each workspace**, naming the
+   AI job purpose, what the model drafts for that service, what the Python
+   engines compute instead, the redactor in front of every call, and what
+   changes between fixture and live mode. Every sentence in it holds in both
+   modes.
+3. **Risk-register rows show provenance.** `origin` and `trust` have been
+   first-class columns on `risk_register_entries` since the model was written and
+   nothing rendered them, so a synthesized entry and one a consultant wrote
+   looked identical in the admin table. AI-origin rows now carry an `AI-drafted`
+   badge with the trust value; other origins print as plain text.
+4. **No copy claims a person checked anything.** The disclosure says a drafted
+   value carries no sign-off, and that approving an assessment records approval
+   of the version rather than review of each field. That is D-035's discipline:
+   no acceptance or substantiation state exists on any of these rows, so no
+   surface may imply one.
+
+Two boundaries this holds.
+
+1. **The client surface stays silent on AI.** `app/home/page.tsx`,
+   `components/home/*` and `components/self-assessment/*` are untouched, and the
+   §6.4 comment that records the rule is intact. The acceptance criterion was
+   written as "the diff touches no client-surface file", which no test run can
+   fail, so `HowAiWorks.test.tsx` reads those sources with comments stripped and
+   fails on any AI vocabulary reaching rendered markup, in this sprint or a later
+   one.
+2. **The asymmetry with S2 is recorded, not resolved.** S2 put an AI-drafting
+   disclosure into the client's PDF deliverable while this decision keeps the
+   client's screen silent. Both are deliberate as implemented and the difference
+   has not been ruled on: a deliverable is a document a consultant approved and
+   sent, a screen is live state. Whether the two should agree is open.
+
+**Ref:** `apps/api/app/routes/admin.py`,
+`apps/api/tests/unit/test_admin_routes.py`,
+`apps/web/src/components/admin/{AiStatusBanner,HowAiWorks,TechDebtWorkspace}.tsx`,
+`apps/web/src/components/admin/{attack/AttackWorkspace,csf/CsfWorkspace,zt/ZtWorkspace}.tsx`,
+`apps/web/src/components/admin/risk/RiskRegisterDashboard.tsx`,
+`apps/api/app/models/risk_register.py`; `docs/SPRINTS.md` S8; D-035.

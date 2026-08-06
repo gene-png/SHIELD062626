@@ -69,6 +69,7 @@ documents, live AI). Work top-to-bottom in one sitting.
 - [x] **Dimension editor**: pick tier + subcategory, set the five 0/1/2 scores, toggle **Evidence on file** → confirm **total/level/cap** update live (no-evidence caps level ≤ 2). (s7-csf-playbook.spec.ts — evidence-cap math asserted)
 - [x] **Enterprise roll-up** table: each subcategory shows tier levels, enterprise level, **rule #**, target, gap, **P1/P2/P3**. (s7-csf-playbook.spec.ts — 106-row table asserted; the full column contract (rule #, gap_priority P2) is verified end-to-end for one representative row, not per-subcategory)
 - [x] **Export** → 5 files appear (XLSX, exec PDF/Word, full PDF/Word) with download links. (s7-csf-playbook.spec.ts — all 5 downloaded to `e2e/artifacts/`)
+- [ ] **Those 5 files qualify their own coverage, and do not report "no gaps" when no target was ever set.** Shutdown-audit HIGH-1, 2026-08-04: every box above proves the playbook files render with the expected content, and none of them asks whether that content is TRUE. `app/csf/playbook_export.py` says `No gaps were identified. Maintain current controls and re-assess on the next cycle.` (`:320`) and `No gaps: every in-scope subcategory meets its target.` (`:458`, `:755`, `:849`) whenever no `target_level` is recorded, because `routes/csf.py:1129` reads `gap = is_gap(rollup.score, target) if target is not None else False` and `target_level` is nullable (`models/csf_profile.py:62`, with `routes/csf.py:1331` writing `None` explicitly). Measured 2026-08-05: **1 coverage-qualifier phrase in `playbook_export.py` against 27 in `csf/exporters.py`**, which S3 fixed and this file never was. It fires on the default state of a real engagement. The box stays open until a test renders the playbook with subcategories scored and no target set and asserts the deliverable says so.
 
 ## 8. Risk Register (E)
 
@@ -106,7 +107,7 @@ which no test can assert, stays a human check (the last box).
 - [x] Both **CSF .docx** files: title, headings, scorecard table headers, a known maturity cell value. (test_playbook_export_content.py, `test_exec_docx_heading_scorecard_and_maturity_cell`, `test_full_docx_heading_scorecard_and_maturity_cell`)
 - [x] **CSF .xlsx**: Enterprise + per-tier sheets + About cover, plus the Action Plan sheet headers and priority default-vs-override (§19). (test_csf_playbook_export.py + test_playbook_export_content.py)
 - [x] **Risk Register** PDF / Word carry the title, client, and a known entry; XLSX 5x5 matrix + entries + blank governance columns. (test_risk_register.py, `test_pdf_carries_title_client_and_a_known_entry`, `test_docx_carries_title_client_and_a_known_entry`, `test_export_renders_and_stores_three_files`)
-- [ ] **Visual appearance only** (human, optional): maturity/level cell shading, heatmap colors, spacing, and page-breaks. The tests assert values, not layout or color.
+- [ ] **Visual appearance only** (human, optional): spacing, page-breaks, and **heatmap coloring** — the ATT&CK tactic heatmap and Coverage % fills, the CSF tier and per-function average-tier fills, and the ZT stage fills on their framework's ladder (3 rungs for DoD, 4 for CISA). Unit tests pin the fill VALUE each cell carries (`cell.fill.start_color` in test_attack_exporters.py / test_csf_exporters.py / test_zt_exporters.py, and `graded_hex` in test_export_style.py), which is the only part a test can see. Whether the resulting ramp reads as a ramp on a printed page, and whether the text on each fill stays legible, no test can assert. Section 33 covers everything else in a PDF.
 
 ## 11. Auto-versioned docs (C3)
 
@@ -202,11 +203,11 @@ which no test can assert, stays a human check (the last box).
 > are `pytest -m unit` locked in `test_llm_providers.py`.
 
 - [x] Run the full sweep: `docker compose exec -T api pytest -m live tests/live -q` (with a live `.env`) → all five `test_live_purpose_contract[*]` cases pass (each: mode=live / status=completed / tokens set / `redacted_counts == {email:2, name:2, client_org:2}` / no PII / response parses to the documented shape). *(GCP-validated 2026-07-15, vertex/gemini-2.5-flash — 5 passed.)*
-- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object.
-- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object.
-- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object.
-- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object.
-- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows.
+- [x] `csf_score` — real suggestions parse to a `{"scores": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[csf_score]`.)*
+- [x] `zt_score` — real suggestions parse to a `{"capabilities": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[zt_score]`.)*
+- [x] `mitre_map` — real suggestions parse to a `{"techniques": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[mitre_map]`.)*
+- [x] `risk_synthesize` — real suggestions parse to an `{"entries": [...]}` object. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[risk_synthesize]`.)*
+- [x] `tech_debt_extract` — real response parses into `ExtractedCapability` rows. *(`tests/live/test_live_ai.py`, `test_live_purpose_contract[tech_debt_extract]`.)*
 
 ## 15. Security headers
 
@@ -312,14 +313,33 @@ token/flow logic is `pytest -m unit` proven with delivery stubbed.
 - [x] **MailHog end-to-end** — register → read the message out of the MailHog API → extract the token → complete verify / reset. (s21-email-verify.spec.ts — 2 tests) **Now RUNS (not skips) in dev + CI as of Sprint 7 T3 (`d95f5c7`):** `SHIELD_EMAIL_DELIVERY_ENABLED` defaults to `true` in `docker-compose.yml` (SMTP → the `mailhog` service), so both tests execute the real token flow through the wire on every run; T3's full-suite pass confirmed both green. (`SHIELD_AUTH_REQUIRE_EMAIL_VERIFY` deliberately stays `false` — flipping it breaks every e2e sign-in.)
 - [x] Browser-drive the verify-email / forgot-password / reset-password **pages**: register, confirm the address from the emailed token on `/verify-email`, then request a reset on `/forgot-password`, complete it on `/reset-password`, and sign in with the **new** password. (s23-auth-pages.spec.ts, 2 tests.) Opt-in like s21 (SKIPS with delivery off; RUNS in dev/CI where delivery is on since Sprint 7 T3); both tests green standalone and in the full suite (Sprint 8 T3).
 
-## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8)
+## 26. Seed → storage parity + demo data realism (Sprint 6, T2 / T8; Sprint 10 S5)
 
 The seed now writes artifact bytes through `get_storage()` (the SAME backend the
 API reads — MinIO under compose) and releases its deliverables, so a clean seed
 produces a coherent, downloadable Atlas story (before T2 seeded downloads 410'd).
 
+Sprint 10 S5 made that story evidence-rich rather than gesture-rich. Every
+seeded ATT&CK coverage row now carries Detection/Prevention/Response citations
+drawn from the seeded Atlas Tech Debt capability names plus a per-(status,
+tactic) rationale — a gap row cites nothing and says why, an N/A row states the
+scope decision, an unscored row carries no evidence at all. The CSF and ZT
+answers that carry notes now name the artifact, interview, or system a
+consultant would cite, and both seeded ZT assessments carry `roadmap_summary`
+and `pillar_narratives` computed from their own stages. The tech-debt
+deliverable gained a computed portfolio paragraph in all three formats. The seed
+prints a `row census: …` line on BOTH the seeding and the already-seeded path,
+so two consecutive runs are directly comparable.
+
+S5 also fixed a seed that could not run at all on an empty database: the shared
+stage pattern handed DoD ZTRA a stage 4, and S1's `graded_hex` (correctly) raises
+on an out-of-ladder level instead of clamping, so the DoD XLSX render crashed. It
+is clamped per framework now. `e2e/demo/demo-journey.spec.ts` is the spec that
+would have caught it, and it self-skips without `SHIELD_DEMO_SMOKE=1`.
+
 - [x] The real seeded Atlas client (`client@atlas.example`) opens `/documents` and **downloads a seeded released deliverable → 200** with the §15.5 filename and non-zero bytes (410 before the T2 seed→storage fix). (s17-documents.spec.ts — "seeded Atlas client downloads a SEEDED released deliverable (T2 storage parity)")
 - [x] The seeded Atlas **Risk Register** renders on `/admin/risk-register` with **code-derived tiers** (every entry's tier equals `tierFor(likelihood, impact)` — never hard-coded) and its XLSX/PDF/Word exports download 200 with §15.5 filenames. (s8-risk-register.spec.ts — "seeded Atlas Risk Register renders code-derived tiers and its exports download (T8 demo seed)")
+- [ ] The **evidence-rich seed** (S5): seeded ATT&CK rows carry D/P/R citations + a per-(status, tactic) rationale, seeded CSF/ZT notes name their evidence, both ZT assessments carry `roadmap_summary` + `pillar_narratives`, and the tech-debt PDF/DOCX/XLSX carry the computed portfolio paragraph. **Deliberately unchecked, and for two separate reasons.** (1) No committed e2e spec asserts the seeded evidence text. What does exist: `pytest -m unit` (`test_exporters.py` — `test_portfolio_paragraph_counts_dispositions_and_names_cost_drivers`, `test_portfolio_paragraph_reaches_pdf_docx_and_xlsx`, three thin-data cases; `test_ai_runtime_fixtures.py` — `test_frozen_fixture_cycles_and_arithmetic_are_unchanged`, `test_mitre_rationale_names_the_cited_tool`). (2) **The S5 code path has never run against this box's database.** `scripts/seed_demo.py` returns early whenever any `Service` row exists; the S9 run of it printed `Services already present; skipping seeding.` and a census reading `services=50 attack_prevention_cited=0` — zero, against a code path that now cites prevention tools. So the live demo rows still carry the pre-S5 evidence, and a spec written against the new text would fail on data, not on code. Getting the new evidence in needs a fresh database (`demo-reset --demo`, destructive and opt-in per D-033 — a human decision, not an agent's). Check this box when a spec reads the seeded evidence out of the workspace or the deliverable, on a database the S5 path actually seeded.
 - [x] `scripts/demo-reset.(sh|ps1) --demo`: `down -v` → `up -d --build` (production web image) → wait `/ready` full-matrix → seed → **fail-loud** web-wait (a stalled web build now exits non-zero and dumps `docker compose logs web`, closing the old silent-success gap). The post-reset journey is asserted by a committed spec: `/ready` all-green, `/sign-in` serves 200 with the strict CSP (prod-build proof), admin and client both sign in through the standalone build, the client `/home` shows the released-report hero, and a seeded `/documents` deliverable downloads with non-zero bytes. (`e2e/demo/demo-journey.spec.ts` — 4 tests; self-skips unless `SHIELD_DEMO_SMOKE=1`, run right after `demo-reset.sh --demo`. Sprint 9 T8, D-033. Plain no-flag invocation still targets the base compose.)
 
 ## 27. Hosted-demo compose + CI demo job (Sprint 6 T9; Sprint 9 T9)
@@ -340,7 +360,7 @@ findings are re-asserted by the specs above (§23 anonymous `/ready` redaction,
 
 - [x] MFA second-factor guesses feed the account-lockout counter; the counter resets ONLY on a fully successful login. (test_mfa_routes.py — see §24)
 - [x] `/ready` reduces per-dependency `detail` to a generic string for anonymous callers. (test_readiness.py — see §23)
-- [ ] Audit scans (bandit, `pnpm audit` root, `npm audit` e2e, pip-audit, gitleaks) clean or documented; no secret/key committed this sprint. (CI + manual — bandit exit 0, JS audit posture carried unchanged from Sprint 5 [0 high / 2 documented moderates], manual secret-diff scan clean; not a runtime checkbox)
+- [ ] Audit scans (bandit, `pnpm audit` root, `npm audit` e2e, pip-audit, gitleaks) clean or documented; no secret/key committed this sprint. (CI + manual — bandit exit 0, manual secret-diff scan clean; not a runtime checkbox.) **Posture corrected in Sprint 10 S11:** this line previously read "0 high / 2 documented moderates carried unchanged from Sprint 5", which understated reality. Root `pnpm audit` measured twice in this batch (checkpoints at `9c49382` and `f58332b`) is **5 high + 2 moderate**: `sharp@0.34.5` (1 high), `postcss@8.4.31` (4 advisories, 2 of them high, not one moderate), and `brace-expansion@1.1.16` (2 high, previously undocumented anywhere, transitive via `minimatch@3.1.5`). None is branch-introduced: this batch touches no lockfile or manifest, so `main` audits identically. `npm audit` in `e2e/` is clean. All three want the same unscheduled lockfile bump, tracked in `CONTEXT.md`.
 
 ## 29. Client release notification email (Sprint 7, T2 / D-030)
 
@@ -403,6 +423,62 @@ untouched.
 3. Only if `infra/keycloak/shield-realm.json` changed since it was last imported, wipe the keycloak volume so the new realm re-imports: `docker compose stop keycloak && docker volume rm shield-v2_keycloak-data && docker compose up -d keycloak`.
 4. `E2E_OIDC=1 npx playwright test smoke/s26-oidc-login.spec.ts`.
 5. Restore: remove the flag line, `docker compose up -d --force-recreate api web`, then re-run the default suite to confirm the credentials path still signs in.
+
+---
+
+## 33. Defensible deliverables (Sprint 10, S1–S5 / S9 — D-035, D-036)
+
+A deliverable is defensible when a reader can find the number, find what it
+rests on, and find what to do about it, in that order, without leaving the
+document. Sprint 10 built that out per service; S9 pinned the result as an
+acceptance contract over real rendered bytes.
+
+The contracts read the PDF back with `pypdf.PdfReader`, collapse reportlab's
+line wraps, and walk a **subsequence**: each string is searched for only after
+the previous match, so a section that renders in the wrong place fails where a
+set of `in` checks would pass. Verified to bite by reversing pairs of sections
+against real bytes (roadmap before gaps, attribution before narrative, score
+after gap list — all three raise).
+
+Everything below is `pytest -m unit`. None of it is a browser proof, and none of
+it sees color; section 10's one manual line owns that.
+
+- [x] **Shared export style** (S1): `graded_hex()` raises on an out-of-ladder level instead of clamping, `escaped_title()` escapes `&`/`<` without repeating the org name, and per-exporter page geometry is preserved rather than unified (0.6in for the four services, 0.7in for the playbook). (test_export_style.py)
+- [x] **ATT&CK** (S2): the Coverage sheet carries Detection/Prevention/Response tools and Rationale joined with `", "`, an Evidence reference resolving `evidence_artifact_id` to a filename or `"No evidence attached"`, and Gap Direction cells stating citation facts only — never cause or remediation. The PDF carries the `"N of M scored techniques cite at least one tool"` defensibility stat and the methodology note disclosing that tools and rationale are AI-drafted, consultant-editable, per-row lockable, and not verified. (test_attack_exporters.py)
+- [x] **ATT&CK PDF acceptance contract** (S9): section order **Coverage summary → Methodology → Per-tactic rollup → Top remediation gaps**, with the coverage percentage, the citation stat that qualifies it, the "should not be read as verified" line, and the lowest-sorted gapped technique appearing in that sequence. (test_attack_exporters.py, `test_pdf_acceptance_contract_orders_sections_and_links_coverage_to_its_citations`)
+- [x] **CSF** (S3): the XLSX Gap Plan carries Characterization, Owner, Deadline, Resources, Success criteria and POA&M ref with `priority_override` winning over the computed score; the PDF and DOCX carry an Action Plan, a tier-model block built from `TIER_DEFINITIONS`, and computed next-step sentences; an Evidence reference resolves or reads `"No evidence attached"`. (test_csf_exporters.py)
+- [x] **CSF PDF acceptance contract** (S9): section order **Maturity summary → How these tiers are scored → Per-function rollup → Top remediation gaps → Action plan**, with the average tier, the NIST definitions of the tiers it sits between, the gap row's `T3 → T4` ramp, and that same subcategory's action-plan row naming its owner and deadline, in that sequence. The tier model precedes the gap list on purpose: a reader cannot judge a T3 → T4 gap before being told what T3 and T4 are. (test_csf_exporters.py, `test_pdf_acceptance_contract_orders_sections_and_links_the_tier_to_its_action`)
+- [x] **Zero Trust** (S4): the PDF renders a Roadmap section from `build_roadmap(gap.gaps)` carrying month, capability, pillar and ramp; the narrative sections render **only** when persisted, so absent means the header is omitted rather than left empty; the stage heatmap is framework-aware (`graded_hex(stage, level_count(framework))`, DoD 3 rungs and CISA 4); an Evidence reference resolves or reads `"No evidence attached"`. (test_zt_exporters.py)
+- [x] **Zero Trust PDF acceptance contract** (S9): section order **Maturity summary → Per-pillar rollup → Top remediation gaps → Remediation roadmap → Assessment narrative → Consultant summary → How these narratives were produced**, with the average stage, the gap row's `S1 → S4` ramp, the roadmap row scheduling that same capability, and the attribution stating no narrative contributed to any of the numbers, in that sequence. The attribution comes last by design — a reader who has already read the prose is the one who needs telling. (test_zt_exporters.py, `test_pdf_acceptance_contract_orders_sections_and_links_the_stage_to_its_roadmap`)
+- [x] **Technical Debt** (S5): the computed portfolio paragraph counts dispositions, ranks cost drivers by name, keeps the lower-bound caveat when a Cut row has no cost, and states absence explicitly on thin data rather than implying a finding. It reaches PDF, DOCX and XLSX. Fixture prose deepened with `_MITRE_STATUS_CYCLE` and the ZT/CSF arithmetic byte-frozen. (test_exporters.py, test_ai_runtime_fixtures.py)
+- [x] **Technical Debt PDF acceptance contract** (S9): section order **Summary → Portfolio summary → Capability list**, with the `$120,000` savings figure, the narrative sentence saying where that exact figure comes from, and the capability row carrying the Cut disposition that produces it, in that sequence — the same number walked from headline to row. (test_exporters.py, `test_pdf_acceptance_contract_orders_sections_and_links_savings_to_its_row`)
+
+## 34. Questionnaire guidance (Sprint 10, S6 / S9)
+
+Sprint 10 put the explanation of a maturity level next to the question that asks
+for it, rather than in a reference table somewhere else. Every level is
+explained, not only the one the respondent picked.
+
+- [x] **A CSF client sees every tier explained where the question is asked.** The `What do these levels mean?` disclosure on a subcategory names all four rungs (`Tier 1 · Partial` through `Tier 4 · Adaptive`), and each rung carries a plain-language explainer plus a worked example keyed to that CSF function, not a generic one. (s3-selfassessment.spec.ts — "a client answering CSF gets every tier explained, the impact profile explained, and a note prompt naming what to cite")
+- [x] **A CSF client sees the impact profile explained** where it decides what is in scope: the `What is an impact profile?` disclosure names the FIPS 199 scale and says who set theirs. (s3-selfassessment.spec.ts, same test)
+- [x] **The notes helper copy asks for the thing that makes the answer true** — `"Name the tool, policy, or process behind this answer: what enforces it, where it is written down, and who runs it."` — asserted as the textarea's placeholder on the client surface. (s3-selfassessment.spec.ts, same test)
+- [x] **A ZT consultant sees every stage explained, and the DoD ladder is the DoD one by name.** The `What do these levels mean?` disclosure names `Stage 1 · Not Started` / `Stage 2 · Target` / `Stage 3 · Advanced`, carries the FY27 target-phase explainer that only DoD stage 2 has, and leaks no fourth CISA rung. The three radios are pinned to those labels by `title`, not merely counted: serving CISA's first three rungs would satisfy a count of 3 and fail this. (s6-zt.spec.ts — "the DoD questionnaire explains each stage, and the ladder is the DoD one by name")
+- [x] **DoD ZTRA offers exactly 3 maturity levels on both surfaces** — the client self-assessment picker and the consultant questionnaire. (s3-selfassessment.spec.ts — "DoD Zero Trust self-assessment maturity scale shows exactly 3 levels"; s6-zt.spec.ts — "DoD questionnaire renders by pillar and current/target stages are settable")
+- [ ] **A client sees an interview prompt on the question card.** **Deliberately unchecked — the running system cannot show one.** The `Consider:` eyebrow renders only when the tier-resolved questionnaire returns prompts, and the `questions` table is **empty** on this box (`select count(*) from questions` → 0). `scripts/seed_demo.py` never populates it; that needs `scripts/load_csf_tier_questionnaires.py`, a separate idempotent loader that has never been run here. So `questionsByCode` is always `{}`, the eyebrow never renders, and a spec asserting it would fail on missing reference data rather than on the feature. What does exist: the audience switch is pinned at unit level (`CsfSelfAssessment.test.tsx` asserts `Consider:` for a client; `CsfQuestionnaire.test.tsx` asserts its absence for a consultant, who gets `Interview · <section>` instead). Check this box once the loader has been run against the demo database and a spec reads a prompt off a subcategory card.
+- [ ] **A ZT client sees stage guidance.** **Deliberately unchecked — the feature is not on that surface.** S6 put `ZtStageGuidance` in `ZtQuestionnaire.tsx`, which only `ZtWorkspace` (the consultant render) mounts. `ZtSelfAssessment.tsx` mounts `ZtStagePicker` directly and carries no per-capability disclosure, so a ZT client gets only the single `ZtMaturityReference` link to the framework PDF. Closing it is an import plus one element beside the picker, but it is a scope decision, not an agent's. Check this box when `ZtSelfAssessment.tsx` renders the per-capability disclosure and a spec reads it off a client card. **One half of this item closed in S10 (`73ae76b`):** the stale Notes placeholder at `ZtSelfAssessment.tsx:371`, which S6's commit message claimed to have updated and had not, is now byte-identical to the other three questionnaires, and the old `"Evidence, references, exceptions…"` string is gone from `apps/web/src`. Nothing pinned it, so no test caught the gap; a diff did. The guidance half stays open.
+
+## 35. Workspace comprehension and AI transparency (Sprint 10, S7 / S8 / S9 — D-037)
+
+Can the person looking at a surface tell what it is for, what its notation
+means, and where a value came from?
+
+- [x] **The fixture-info banner is visible and honest** on the Tech Debt and ATT&CK workspaces: `role="status"`, reading `AI mode: fixture.` plus the served sentence `"AI runs in offline fixture mode: Run AI returns deterministic demo drafts, not live model output"`. D-037 replaced copy claiming AI was "disabled", which was false — Run AI works and returns the registered fixture — so the whole sentence is pinned, not just the mode word. (s4-techdebt.spec.ts, s5-attack.spec.ts)
+- [x] **The CSF Working Profiles legend defines its own columns.** `What the columns mean` names Tiers, Enterprise, Rule and Gap, says that **code** computes the Enterprise level and the AI only drafts the dimension scores underneath, enumerates all six weighted-floor rules `#1`–`#6` in first-match order, and reads out P1/P2/P3 rather than leaving them as bare chips. (s7-csf-playbook.spec.ts — "the Working Profiles legend defines its columns and the step strip says where the engagement stands")
+- [x] **The step strip says where the engagement stands.** Five CSF steps (Assessment, Scoring, Client answers, Approved, Released), each numbered and captioned, with exactly one marked `data-step-state="current"` **and** `aria-current="step"` so assistive tech gets it too, plus the line stating who owns the quality of what ships. (s7-csf-playbook.spec.ts, same test)
+- [x] **The Management page says what it is for** before it asks for anything: `"Create client companies and approve the email domains their teams use to register."` Nothing asserted this before — s2-management.spec.ts drives the same page and pins the heading, the create form and the domain list, but never the purpose line. (s27-comprehension.spec.ts — "the Management page says what it is for before it asks for anything")
+- [x] **A client can look up what each phase word means.** The `What each phase means` disclosure on `/home` defines all five phases (Getting started, In progress, Under review, Finalizing your report, Report ready) in plain language, each with its meaning and not just its label. (s27-comprehension.spec.ts — "a client can look up what each phase word on their home page means")
+- [x] **Every Risk Register entry carries its provenance on the row.** A `Provenance` column, and an `AI-drafted · Admin Assisted` badge on every data row with `title="origin ai_generated, trust admin_assisted"` carrying the raw wire values. Badge count equals data-row count, so one attributed row among many unattributed ones would fail. **Note on what this does NOT prove:** `routes/risk.py:270` is the only writer of `RiskEntry.origin` and always passes `"ai_generated"` (the model default is the same string), so `OriginCell`'s non-AI branch is unreachable against a real API and no unbadged consultant-entered row can exist yet. The spec deliberately asserts presence only. (s27-comprehension.spec.ts — "every Risk Register entry carries its provenance on the row")
+- [x] **An admin workspace discloses what AI drafts versus what code computes.** The `How AI is used here (mitre_map)` disclosure names this page's AI purpose, is collapsed until opened, and then carries all four terms — What AI drafts here, What code computes, Before a prompt leaves, Fixture mode and live mode — the ATT&CK-specific split of the boundary, the single-redactor guarantee with "only counts of what was removed are recorded, never the text", and the honest limit that "a drafted value carries no sign-off". (s27-comprehension.spec.ts — "an admin workspace discloses what AI drafts, what code computes, and what leaves the API")
 
 ---
 

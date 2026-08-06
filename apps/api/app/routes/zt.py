@@ -169,6 +169,11 @@ def _serialize_assessment(db: Session, a: ZtAssessment) -> ZtAssessmentResponse:
         documents_stale=a.documents_stale,
         answers=_serialize_answers(rows),
         client_target_stage=_client_target_stage(db, a.service_id),
+        # S4: persisted Run-AI narratives (migration 0034). Absent means NULL in
+        # the database, which the deliverable renders as no section at all.
+        roadmap_summary=a.roadmap_summary,
+        executive_summary=a.executive_summary,
+        pillar_narratives=a.pillar_narratives,
     )
 
 
@@ -353,6 +358,75 @@ def _llm_dep() -> LLMClient:
     return LLMClient.from_settings()
 
 
+# A Run-AI may only write into a parent still open for editing. Anything else —
+# discarded, approved, released — means the run lost a race it must not win.
+_RUN_AI_EDITABLE_STATUSES: tuple[ZtAssessmentStatus, ...] = (
+    ZtAssessmentStatus.DRAFT,
+    ZtAssessmentStatus.SUBMITTED,
+)
+
+
+def _persist_run_ai_narratives(
+    db: Session,
+    assessment: ZtAssessment,
+    *,
+    pillar_narratives: dict[str, str],
+    executive_summary: str | None,
+    roadmap_summary: str | None,
+) -> None:
+    """Stamp the run's narratives on the parent, atomically against a discard.
+
+    This replaces a check-then-write: the route used to re-read the parent
+    status, find it editable, and only then write, which left a window a
+    concurrent discard could commit into. The write is now a single conditional
+    ``UPDATE ... WHERE status IN (editable)`` that must affect exactly one row —
+    D-031's concurrency contract, the same shape `discard_assessment` uses. Zero
+    affected rows means the parent moved under us, and the run loses loudly with
+    a typed 409 rather than persisting narrative into a discarded assessment.
+
+    Every persisted-narrative write also sets ``documents_stale`` (Work Order
+    C3): new narrative means any rendered deliverable no longer matches the
+    record. A rerun writes exactly what that run produced, so a run that drafts
+    no narrative clears the previous one — these fields are AI output, not
+    consultant-authored text, and stale prose from an older run would be worse
+    than none.
+    """
+    result = db.execute(
+        update(ZtAssessment)
+        .where(
+            ZtAssessment.id == assessment.id,
+            ZtAssessment.status.in_(_RUN_AI_EDITABLE_STATUSES),
+        )
+        .values(
+            documents_stale=True,
+            pillar_narratives=pillar_narratives or None,
+            executive_summary=executive_summary,
+            roadmap_summary=roadmap_summary,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        _log.warning(
+            "zt_run_ai_narratives_lost_race",
+            assessment_id=str(assessment.id),
+            rowcount=result.rowcount,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "assessment_not_editable",
+                "message": "This assessment was discarded or locked during the run.",
+            },
+        )
+    _log.info(
+        "zt_run_ai_narratives_persisted",
+        assessment_id=str(assessment.id),
+        pillar_count=len(pillar_narratives),
+        has_executive_summary=executive_summary is not None,
+        has_roadmap_summary=roadmap_summary is not None,
+    )
+
+
 @dataclass(frozen=True)
 class ZtAiRequest:
     """Loaded state + outbound payload for the ZT zt_score run-ai job.
@@ -498,29 +572,15 @@ def run_ai(
         for d in diffs
         for ch in d.changes
     ]
-    narratives = data.get("pillar_narratives")
-    narratives = narratives if isinstance(narratives, dict) else {}
+    raw_narratives = data.get("pillar_narratives")
+    narratives = (
+        {str(k): str(v) for k, v in raw_narratives.items()}
+        if isinstance(raw_narratives, dict)
+        else {}
+    )
+    executive_summary = data.get("executive_summary") or None
+    roadmap_summary = data.get("roadmap_summary") or None
 
-    # D-031 concurrency: a discard racing this run must win. Re-read the parent
-    # status before committing so suggestions never land in a discarded (or
-    # newly locked) assessment.
-    current_status = db.execute(
-        select(ZtAssessment.status).where(ZtAssessment.id == a.id)
-    ).scalar_one()
-    if current_status in (
-        ZtAssessmentStatus.DISCARDED,
-        ZtAssessmentStatus.APPROVED,
-        ZtAssessmentStatus.RELEASED,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "reason": "assessment_not_editable",
-                "message": "This assessment was discarded or locked during the run.",
-            },
-        )
-
-    a.documents_stale = True  # Work Order C3
     audit(
         db,
         action="zt.run_ai",
@@ -528,6 +588,17 @@ def run_ai(
         target_id=a.id,
         actor_user_id=user.id,
         details={"changed_rows": len(diffs)},
+    )
+    # The parent write is the LAST statement before the commit, and it is
+    # conditional, so nothing this run did survives a discard that landed while
+    # it was running. Everything above (the suggestions, the LLM call row, the
+    # audit row) rolls back with it.
+    _persist_run_ai_narratives(
+        db,
+        a,
+        pillar_narratives=narratives,
+        executive_summary=executive_summary,
+        roadmap_summary=roadmap_summary,
     )
     db.commit()
 
@@ -538,9 +609,9 @@ def run_ai(
     return ZtRunAiResponse(
         changed=changes,
         answers=answers_out,
-        pillar_narratives={str(k): str(v) for k, v in narratives.items()},
-        executive_summary=(data.get("executive_summary") or None),
-        roadmap_summary=(data.get("roadmap_summary") or None),
+        pillar_narratives=narratives,
+        executive_summary=executive_summary,
+        roadmap_summary=roadmap_summary,
     )
 
 
@@ -1210,6 +1281,53 @@ def _write_artifact(
     return art
 
 
+def _answer_evidence_filenames(
+    db: Session,
+    *,
+    client_id: uuid.UUID,
+    answers: Iterable[ZtAnswer],
+) -> dict[uuid.UUID, str]:
+    """Resolve every cited evidence artifact's filename for the deliverable.
+
+    The Answers sheet prints "No evidence attached" only where
+    `evidence_artifact_id` is genuinely NULL. A pointer this join cannot resolve
+    inside the tenant raises a typed 409 rather than degrading into that
+    sentence, which would read as a fact about the engagement (the shape
+    `routes/attack.py` and `routes/csf.py` already use). The `client_id` filter
+    is in the SQL, so a cross-tenant artifact id is unresolved, never rendered.
+    """
+    cited = {a.evidence_artifact_id for a in answers if a.evidence_artifact_id is not None}
+    if not cited:
+        _log.debug("zt.evidence: no answer cites an evidence artifact")
+        return {}
+    found = db.execute(
+        select(Artifact.id, Artifact.title).where(
+            Artifact.id.in_(cited), Artifact.client_id == client_id
+        )
+    ).all()
+    names = dict(found)
+    unresolved = cited - names.keys()
+    if unresolved:
+        _log.warning(
+            "zt.evidence: %d of %d cited artifacts unresolved for client %s",
+            len(unresolved),
+            len(cited),
+            client_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "evidence_artifact_missing",
+                "message": (
+                    "An evidence attachment cited by this assessment is no longer "
+                    "available. Re-attach or clear it, then finalize again."
+                ),
+            },
+        )
+    _log.debug("zt.evidence: resolved %d cited artifact filenames", len(names))
+    return names
+
+
 @router.post(
     "/services/{service_id}/deliverables/finalize",
     response_model=DeliverableResponse,
@@ -1296,6 +1414,7 @@ def finalize_zt_deliverable(
         answers=answers,
         score=score,
         gap=gap,
+        evidence_names=_answer_evidence_filenames(db, client_id=client.id, answers=answers),
     )
     pdf_bytes = render_zt_pdf(ctx)
     xlsx_bytes = render_zt_xlsx(ctx)

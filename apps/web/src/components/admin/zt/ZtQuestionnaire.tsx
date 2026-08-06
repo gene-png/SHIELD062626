@@ -3,16 +3,23 @@ import * as React from "react";
 
 import type {
   CatalogPillar,
+  CatalogStage,
   ZtAnswer,
   ZtAnswerPatch,
   ZtCatalog,
+  ZtFramework,
 } from "@/lib/zt/types";
 
 import { ZtMaturityReference } from "@/components/zt/ZtMaturityReference";
+import { ztStageGuidance } from "@/lib/guidance";
 
 import { ZtStagePicker } from "./ZtStagePicker";
 
 import type { JSX } from "react";
+
+/** A note is only useful if it names the thing that makes the answer true. */
+const NOTES_PLACEHOLDER =
+  "Name the tool, policy, or process behind this answer: what enforces it, where it is written down, and who runs it.";
 
 export interface ZtQuestionnaireProps {
   catalog: ZtCatalog;
@@ -63,6 +70,62 @@ function PillarTabBar({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Per-question answering aid for a Zero Trust capability (S6). Stage labels and
+ * descriptions come from the catalog payload the API builds from `CISA_STAGES`
+ * and `DOD_STAGES`, so only the explainer and the worked example are local. The
+ * disclosure sits beside the stage picker and touches none of its internals.
+ */
+function ZtStageGuidance({
+  stages,
+  framework,
+  capabilityCode,
+}: {
+  stages: CatalogStage[];
+  framework: ZtFramework;
+  capabilityCode: string;
+}): JSX.Element {
+  if (stages.length === 0) {
+    // An empty ladder would render a disclosure that reads as "no guidance
+    // exists". Say what actually went wrong instead.
+    throw new Error(
+      `[ZtQuestionnaire] the catalog carried no stage definitions, so the levels for ${capabilityCode} cannot be explained`,
+    );
+  }
+  return (
+    <details className="mt-2" data-guidance-for={capabilityCode}>
+      <summary className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700">
+        What do these levels mean?
+      </summary>
+      <dl className="mt-2 flex flex-col gap-2.5 rounded-md border border-border-subtle bg-surface-sunken p-2.5">
+        {stages.map((stage) => {
+          const { explainer, example } = ztStageGuidance(
+            framework,
+            stage.stage,
+          );
+          return (
+            <div key={stage.stage}>
+              <dt className="text-xs font-semibold text-ink-primary">
+                Stage {stage.stage} · {stage.label}
+              </dt>
+              <dd className="mt-0.5 text-xs text-ink-secondary">
+                <p>{stage.description}</p>
+                <p className="mt-1">{explainer}</p>
+                <p className="mt-1">
+                  <span className="font-semibold text-ink-primary">
+                    For example:
+                  </span>{" "}
+                  {example}
+                </p>
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </details>
   );
 }
 
@@ -159,6 +222,11 @@ export function ZtQuestionnaire({
                       </label>
                     </div>
                   </div>
+                  <ZtStageGuidance
+                    stages={catalog.stages}
+                    framework={catalog.framework}
+                    capabilityCode={cap.code}
+                  />
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-medium text-ink-tertiary hover:text-ink-secondary">
                       Notes {ans.notes ? "·" : ""}{" "}
@@ -181,7 +249,7 @@ export function ZtQuestionnaire({
                         void onAnswerUpdate(ans.id, { notes: v });
                       }}
                       className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-hidden"
-                      placeholder="Evidence, references, exceptions…"
+                      placeholder={NOTES_PLACEHOLDER}
                     />
                   </details>
                 </li>

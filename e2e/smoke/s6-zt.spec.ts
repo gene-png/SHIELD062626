@@ -210,3 +210,73 @@ test("Run AI clamps DoD suggestions to <= 3 and the roadmap groups gaps by month
     timeout: 30000,
   });
 });
+
+/**
+ * SMOKE_TEST.md section 34: the ZT stage guidance S6 added, plus the DoD ladder
+ * pinned by NAME rather than by length.
+ *
+ * Two notes on where this is proven and why.
+ *
+ * 1. The consultant render. S6 put `ZtStageGuidance` in `ZtQuestionnaire.tsx`,
+ *    which only `ZtWorkspace` mounts. `ZtSelfAssessment.tsx` mounts
+ *    `ZtStagePicker` directly and carries no per-capability disclosure, so a ZT
+ *    *client* sees no stage guidance at all. That gap is a recorded open item;
+ *    this spec proves the surface that has it rather than pretending otherwise.
+ *
+ * 2. Ladder identity, not just its length. Line 83 above already asserts three
+ *    radios, so a bare count cannot fail. This pins which three: serving CISA's
+ *    first three rungs (Traditional / Initial / Advanced) to a DoD assessment
+ *    would satisfy the count and fail here. Source of record for the labels is
+ *    apps/api/app/zt/maturity.py DOD_STAGES; the explainer is
+ *    apps/web/src/lib/guidance/zt.ts.
+ */
+const DOD_LADDER = ["Not Started", "Target", "Advanced"] as const;
+const DOD_STAGE2_EXPLAINER =
+  "The foundational Zero Trust activities for this capability are implemented, which is what the DoD strategy sets as the FY27 target phase.";
+
+test("the DoD questionnaire explains each stage, and the ladder is the DoD one by name", async ({
+  page,
+}) => {
+  test.slow();
+  await openFreshDraft(page);
+  await expect(
+    page.getByRole("heading", { name: "Zero Trust questionnaire" }),
+  ).toBeVisible({ timeout: 30000 });
+
+  // --- The ladder, by name ------------------------------------------------
+  // ZtStagePicker puts the stage label in `title` as well as in a span that CSS
+  // hides below the sm breakpoint; the attribute is the viewport-independent
+  // anchor.
+  const picker = page
+    .getByRole("radiogroup", { name: /Maturity stage for/i })
+    .first();
+  await expect(picker.getByRole("radio")).toHaveCount(DOD_LADDER.length);
+  for (const [i, label] of DOD_LADDER.entries()) {
+    await expect(picker.getByRole("radio").nth(i)).toHaveAttribute(
+      "title",
+      label,
+    );
+  }
+
+  // --- Stage guidance -----------------------------------------------------
+  // One disclosure per capability, so scope to the first inside the
+  // questionnaire section; every string in it repeats down the pillar.
+  const guidance = page
+    .locator('section[aria-labelledby="zt-questionnaire-heading"]')
+    .locator("details[data-guidance-for]")
+    .first();
+  const trigger = guidance.getByText("What do these levels mean?");
+  await expect(trigger).toBeVisible({ timeout: 30000 });
+  await trigger.click();
+
+  for (const [i, label] of DOD_LADDER.entries()) {
+    await expect(
+      guidance.getByText(`Stage ${i + 1} · ${label}`, { exact: true }),
+    ).toBeVisible();
+  }
+  // The FY27 target phase is the whole point of DoD stage 2, and it is the line
+  // that would go missing if the guidance fell back to the CISA copy.
+  await expect(guidance).toContainText(DOD_STAGE2_EXPLAINER);
+  // And no fourth rung leaks in from the CISA ladder.
+  await expect(guidance.getByText(/^Stage 4 · /)).toHaveCount(0);
+});

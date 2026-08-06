@@ -36,8 +36,11 @@ import type {
 
 import { MessageThread } from "@/components/messages/MessageThread";
 import { StaleDocsNudge } from "@/components/admin/StaleDocsNudge";
+import { AiStatusBanner } from "@/components/admin/AiStatusBanner";
+import { HowAiWorks } from "@/components/admin/HowAiWorks";
 import { AiPreviewButton } from "@/components/admin/AiPreviewButton";
 import { DiscardDraftButton } from "@/components/admin/DiscardDraftButton";
+import { WorkflowSteps } from "@/components/admin/WorkflowSteps";
 
 import { AttackDeliverableCard } from "./AttackDeliverableCard";
 import { AttackHeatmapCard } from "./AttackHeatmapCard";
@@ -296,6 +299,7 @@ export function AttackWorkspace({
 
   return (
     <div className="flex flex-col gap-6">
+      <AiStatusBanner />
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-500">
@@ -368,6 +372,8 @@ export function AttackWorkspace({
         </div>
       </header>
 
+      <WorkflowSteps service="attack" status={assessment?.status ?? null} />
+
       {loadError ? (
         <Card>
           <CardHeader>
@@ -415,6 +421,7 @@ export function AttackWorkspace({
                 </button>
               </div>
               <AiPreviewButton serviceId={serviceId} disabled={busy !== null} />
+              <HowAiWorks service="attack" />
               {runResult ? (
                 <p className="text-sm text-ink-secondary" aria-live="polite">
                   Updated{" "}

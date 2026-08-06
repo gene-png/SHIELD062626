@@ -56,6 +56,20 @@ test("tech-debt extract builds the dashboard, and editing a cell clears the AI-c
     page.getByRole("heading", { name: "Tech Debt Review" }),
   ).toBeVisible({ timeout: 30000 });
 
+  // SMOKE_TEST.md section 33: the fixture-info banner is VISIBLE, and it says
+  // what fixture mode actually does. D-037 replaced copy claiming AI was
+  // "disabled" — false, since Run AI works and returns a registered fixture —
+  // so the whole sentence is pinned, not just the mode word. Source of record:
+  // apps/api/app/routes/admin.py ai_status (the detail is served, not authored
+  // in the web layer). Filtered by text because ATT&CK/CSF/ZT also mount a
+  // role="status" nudge; this keeps the four banner assertions identical.
+  const aiBanner = page.getByRole("status").filter({ hasText: "AI mode:" });
+  await expect(aiBanner).toBeVisible({ timeout: 30000 });
+  await expect(aiBanner).toContainText("AI mode: fixture.");
+  await expect(aiBanner).toContainText(
+    "AI runs in offline fixture mode: Run AI returns deterministic demo drafts, not live model output",
+  );
+
   // Discard any open draft first. Sprint 8 T1 (tech_debt.py:184) added a
   // draft-exists guard: a POST to /extract while a DRAFT is open REUSES that
   // draft (idempotent 200) instead of minting a new version, so a plain upload

@@ -1759,6 +1759,52 @@ def _write_artifact(
     return art
 
 
+def _answer_evidence_filenames(
+    db: Session,
+    *,
+    client_id: uuid.UUID,
+    answers: Iterable[CsfAnswer],
+) -> dict[uuid.UUID, str]:
+    """Resolve every cited evidence artifact's filename for the deliverable.
+
+    The Answers sheet prints "No evidence attached" only where
+    `evidence_artifact_id` is genuinely NULL. A pointer this join cannot resolve
+    inside the tenant raises a typed 409 rather than degrading into that
+    sentence, which would read as a fact about the engagement (the D-035 shape
+    `routes/attack.py` already uses).
+    """
+    cited = {a.evidence_artifact_id for a in answers if a.evidence_artifact_id is not None}
+    if not cited:
+        _log.debug("csf.evidence: no answer cites an evidence artifact")
+        return {}
+    found = db.execute(
+        select(Artifact.id, Artifact.title).where(
+            Artifact.id.in_(cited), Artifact.client_id == client_id
+        )
+    ).all()
+    names = dict(found)
+    unresolved = cited - names.keys()
+    if unresolved:
+        _log.warning(
+            "csf.evidence: %d of %d cited artifacts unresolved for client %s",
+            len(unresolved),
+            len(cited),
+            client_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "evidence_artifact_missing",
+                "message": (
+                    "An evidence attachment cited by this assessment is no longer "
+                    "available. Re-attach or clear it, then finalize again."
+                ),
+            },
+        )
+    _log.debug("csf.evidence: resolved %d cited artifact filenames", len(names))
+    return names
+
+
 @router.post(
     "/services/{service_id}/deliverables/finalize",
     response_model=DeliverableResponse,
@@ -1833,6 +1879,17 @@ def finalize_csf_deliverable(
         version=next_version,
     )
 
+    # The POA&M annotations the consultant typed on the gap-actions screen ride
+    # into the released deliverable; a zero-action assessment renders unchanged.
+    gap_actions = _load_gap_actions(db, assessment.id)
+    evidence_names = _answer_evidence_filenames(db, client_id=client.id, answers=answers)
+    _log.info(
+        "csf.deliverable.render assessment=%s gap_actions=%d evidence=%d",
+        assessment.id,
+        len(gap_actions),
+        len(evidence_names),
+    )
+
     ctx = build_csf_context(
         client_legal_name=client_name,
         service_title=service_display_label(svc.kind),
@@ -1840,6 +1897,8 @@ def finalize_csf_deliverable(
         answers=answers,
         score=score,
         gap=gap,
+        actions=gap_actions,
+        evidence_names=evidence_names,
     )
     pdf_bytes = render_csf_pdf(ctx)
     xlsx_bytes = render_csf_xlsx(ctx)

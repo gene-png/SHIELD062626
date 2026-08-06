@@ -48,9 +48,9 @@ function statusTone(
 function statusLabel(e: AssessmentResponse): string {
   switch (e.assessment_status) {
     case "draft":
-      return "In progress — not submitted";
+      return "In progress, not submitted";
     case "submitted":
-      return "Submitted — under review";
+      return "Submitted, under review";
     case "approved":
       return "Approved";
     case "released":
@@ -133,7 +133,7 @@ export function AssessmentsView(): JSX.Element {
           </h1>
           <p className="max-w-prose text-sm text-ink-secondary">
             Each assessment is its own project and workspace. You can run as
-            many as you need in parallel — even more than one of the same
+            many as you need in parallel, even more than one of the same
             assessment type.
           </p>
         </div>
@@ -185,7 +185,7 @@ export function AssessmentsView(): JSX.Element {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Cloud Platform — Q3 review"
+                placeholder="e.g. Cloud Platform Q3 review"
                 className="rounded-md border border-border bg-surface-card px-3 py-2 text-ink-primary focus:border-brand-500 focus:outline-hidden"
               />
             </label>

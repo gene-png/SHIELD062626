@@ -38,7 +38,7 @@ export function RedactionDisclosure(): JSX.Element {
           </li>
           <li>
             Every AI call writes an audit row with the count of items removed by
-            the redactor — no payload contents.
+            the redactor. No payload contents.
           </li>
         </ul>
       </CardBody>

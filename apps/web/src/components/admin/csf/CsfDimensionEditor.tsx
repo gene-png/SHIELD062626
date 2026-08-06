@@ -212,7 +212,7 @@ export function CsfDimensionEditor({
                 </span>
                 {row.evidence_capped ? (
                   <span className="ml-2 text-status-warning-fg">
-                    (capped — no evidence)
+                    (capped, no evidence)
                   </span>
                 ) : null}
               </span>

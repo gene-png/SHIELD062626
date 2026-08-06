@@ -1,11 +1,14 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-07-22 (Sprint 9 "activate the seam" complete on
-`feat/sso-discard-demo-sprint-9`, targeting `v3.5.0`, PR not yet opened; Sprint 8
-"prove it in the browser" merged as PR #42, `v3.4.1`). This file describes the
-project as of the branch it sits on and is updated ONLY as part of a PR. Durable
-facts and environment gotchas live in `CLAUDE.md`; personal in-flight status
-lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
+_Last updated: 2026-08-05 (Sprint 10 "Reports you can defend" complete on
+`feat/defensible-reports-sprint-10`, targeting `v3.6.0`, PR not yet opened; Sprint 9
+"activate the seam" merged as PR #44, `v3.5.0`. The 2026-08-05 pass folded the
+shutdown deep audit's findings into the deferred list, where they had been recorded
+only in the `docs/SPRINTS.md` Log). This file describes the project as
+of the branch it sits on and is updated ONLY as part of a PR. Durable facts and
+environment gotchas live in `CLAUDE.md`; personal in-flight status lives in
+`context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`, and the executable
+backlog with the driver's per-sprint Log lives in `docs/SPRINTS.md`._
 
 ## Current state
 
@@ -23,268 +26,484 @@ lives in `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`._
   web stack moved to Next 15 / React 19 / Tailwind 4 / ESLint 9 / Node 22, and
   multi-provider LLM egress (OpenAI + Gemini beside Anthropic, D-024) landed
   below the unchanged redacting seam.
-- **Sprint 5 "client value loop"** (PR #31, `v3.2.0`): consultant output now
-  delivers visible value to the CLIENT role — deliverable release flow (D-025),
-  `/home` executive dashboard + §2.5 value-loop card, `/documents`, a CSF POA&M
-  step, a pre-egress redaction preview, and the first read surface over the
-  append-only audit stores (`/admin/audit`).
-- **Sprint 6 "real demo"** (PR #33, `v3.3.0`): the platform became a real,
-  self-standing demo — runnable live-AI path with boot-time fail-loud (D-026),
-  seed→MinIO storage parity, real TOTP MFA (D-027) + real email verification /
-  password reset (D-028) on the custom-JWT stack (D-020 boot-refusals gone, flags
-  now gate enforcement), a full-matrix `/ready` + `/admin/health` operator view,
-  a coherent downloadable Atlas demo seed with one-command reset, and a
-  hosted-demo production compose. Migrations 0030 (MFA TOTP) + 0031 (email
-  tokens).
-- **Sprint 7 "GCP live path + close the client loop" MERGED** (PR #36,
-  `v3.4.0`): the live-AI path is now **proven against
-  a real provider with no static key** — Vertex AI via Application Default
-  Credentials (D-029), validated end-to-end across all five AI purposes on Dave's
-  box (2026-07-15). The client loop is closed with a best-effort release
-  notification email (D-030); dev/CI email delivery is on by default so the
-  MailHog register/verify/reset loop is real every run (s21 runs, not skips); the
-  Sprint-5 `reqSeq` stale-fetch guard sweep is finished; and the web auth stack
-  migrated from next-auth v4 to Auth.js v5, clearing the `uuid@8.3.2` moderate
-  advisory. No new migrations. New user-facing surface (release notification) + a
-  real GCP live path justify the **minor** bump. Full exit gate set green — full
-  Playwright e2e, `pytest -m unit`, web `tsc`, in-container web vitest (12/12),
-  in-container web eslint (0 errors), host prettier `--check` (3.9.5), and
-  in-container ruff/black.
+- **Sprint 5 "client value loop"** (PR #31, `v3.2.0`): deliverable release flow
+  (D-025), `/home` executive dashboard, `/documents`, a CSF POA&M step, a
+  pre-egress redaction preview, and the first read surface over the append-only
+  audit stores (`/admin/audit`).
+- **Sprint 6 "real demo"** (PR #33, `v3.3.0`): runnable live-AI path with
+  boot-time fail-loud (D-026), seed to MinIO storage parity, real TOTP MFA
+  (D-027) and real email verification / password reset (D-028), a full-matrix
+  `/ready` plus `/admin/health`, a coherent downloadable Atlas demo seed, and a
+  hosted-demo production compose. Migrations 0030 and 0031.
+- **Sprint 7 "GCP live path + close the client loop"** (PR #36, `v3.4.0`): the
+  live-AI path proven against a real provider with no static key, Vertex AI via
+  Application Default Credentials (D-029), validated across all five AI purposes
+  on Dave's box (2026-07-15). Client release notification email (D-030); the web
+  auth stack migrated to Auth.js v5.
+- **Sprint 8 "prove it in the browser"** (PR #42, `v3.4.1`): eight tasks
+  converting human-eyeball SMOKE debt into committed Playwright specs. Headline
+  was an out-of-plan product fix: MFA sign-in never revealed the TOTP field in a
+  browser because `SignInForm` sent `totp: undefined`, which `URLSearchParams`
+  coerced to the string `"undefined"` (fixed in `f10b803`).
+- **Sprint 9 "activate the seam"** (PR #44, `v3.5.0`): hybrid Keycloak OIDC
+  sign-in beside the credentials form, flag-gated and default off (D-032,
+  migration 0032); a first-class draft-discard affordance in all four services
+  (D-031); the demo compose and export eyeball debt under committed automation
+  (D-033). Migration 0032.
+- **Sprint 10 "Reports you can defend" COMPLETE on its branch**
+  (`feat/defensible-reports-sprint-10`, targeting `v3.6.0`): twelve sprints (S0
+  through S11) run by the autonomous loop against `docs/SPRINTS.md`. A
+  deliverable is defensible when a reader can find the number, find what it rests
+  on, and find what to do about it, in that order, without leaving the document.
+  This batch builds that out per service. It renders the ATT&CK citations the AI
+  already produced (D-035), puts the CSF POA&M into the released report, gives
+  Zero Trust a roadmap and persisted narratives (migration 0034), moves
+  deliverable styling into one module (D-036), makes the demo seed evidence-rich,
+  explains every maturity level where the question is asked, tells the person
+  looking at a workspace what its notation means, and stops the AI-status copy
+  claiming AI is disabled when Run AI works (D-037). Minor bump for the new
+  sections in four client-visible deliverables and the new consultant-facing
+  guidance and transparency surfaces; tag and CHANGELOG level only, package
+  manifests untouched. `SPRINT_10.md` was reviewed read-only by OpenAI Codex
+  before the planning PR merged; S0 was added after that review and was not part
+  of it.
 
-### Sprint 7 task → commit
+  **Two boxes are deliberately unchecked, S9 and S11.** Ten of the twelve are
+  checked. Two of S9's five criteria carry `needs-human`: the interview prompt has
+  no data path in any environment, and no green full-suite e2e run exists on this
+  box. Its other three criteria are met with evidence. S11 carries one
+  `needs-human`: four of its five are met, and the "full e2e green on a quiet box"
+  half of the last one is that same unmet run. All three are carried into the
+  deferred list below rather than papered over.
 
-| Task | What shipped | Commit |
-| --- | --- | --- |
-| T0 | Vertex AI provider adapter via ADC — `VertexProvider` on `{region}-aiplatform.googleapis.com` generateContent, Bearer ADC (no static key), shared body-build/parse with `gemini`, token never logged, `live_llm_readiness()` boot preflight; D-029 | `7dcf159` |
-| T1 | GCP live validation sweep (opt-in) — all five purposes live on `vertex`/`gemini-2.5-flash` (ADC-only) through the redaction seam; found+fixed 2 adapter defects (`google-auth[requests]`; loud `finishReason` guard + cap 4096→8192 + `thinkingBudget` for 2.5+); SMOKE §14/§14.1 GCP-annotated | `329f9a5` |
-| T2 | Client release notification email — shared release helper emails the tenant's active client users on release (best-effort, release is source of truth); D-030 | `4420b53` |
-| T3 | Email delivery on by default in dev/CI compose (MailHog); s21 email-verify now RUNS instead of self-skipping; REQUIRE_EMAIL_VERIFY stays off | `d95f5c7` |
-| T4 | reqSeq stale-fetch guard sweep remainder (Sprint-5 carry-over) across admin workspaces/panels; guards only where a stale mount-fetch clobbers newer state; two vitest guards | `37f9bd6` |
-| T5 | Auth.js (next-auth) v5 migration — `getServerSession`→`auth()` at 34 sites, MFA code-signal re-wired, behavior-identical; clears the `uuid@8.3.2` moderate | `3de0626` |
-| T6 | Wrap-up: SMOKE §14 GCP annotation / §25 checked / new §29 release-notification, CHANGELOG `[3.4.0]`, BUILD_REPORT sync, DECISIONS D-029/D-030 verify, full gates, this snapshot | `4796429` (PR #36 squash) |
+### Sprint 10 sprint → commit
 
-No new migrations this sprint. New DECISIONS: **D-029** (Vertex AI via ADC as the
-GCP live path) + **D-030** (client release notification, best-effort notify).
+Each sprint carries an implementation commit and a driver verification commit
+that checks the box and appends the Log line. The Log in `docs/SPRINTS.md` is the
+primary record of what actually happened, including what the driver rejected.
 
-- **Sprint 8 "prove it in the browser" MERGED** (PR #42,
-  `v3.4.1`): eight tasks (T0 through T7) that convert
-  human-eyeball SMOKE debt into committed Playwright specs and pay the last
-  mint-route debt. The release notification is now eyeballed in MailHog (§29,
-  s22), the verify/forgot/reset pages and the MFA enrollment / TOTP / recovery-code
-  UI are browser-driven (s23, s24), `/admin/health` and the `/documents` empty
-  state have specs (s25, s17), and a double-POST to the tech-debt extract route
-  reuses the open draft instead of burning a second LLM call (T1). The sprint's
-  headline was an out-of-plan product fix: **MFA sign-in never revealed the TOTP
-  field in the browser** because `SignInForm` sent `totp: undefined`, which
-  next-auth coerced through `URLSearchParams` into the string `"undefined"`,
-  defeating the backend `!totp` guard (fixed in `f10b803`; the new T4 browser spec
-  caught what the Sprint-7 vitest could not). No migrations, no new DECISIONS.
-  Version is tag/CHANGELOG level only; package manifests untouched. Plan was
-  reviewed read-only by OpenAI Codex pre-merge (findings table in PR #37).
+| Sprint | What shipped                                                                                                                                                                             | Impl                   | Verify    |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | --------- |
+| S0     | Web risk-tier color onto `--tier-*` tokens; the phantom `surface-muted` utility removed; the 5x5 matrix separates cells with a surface gap instead of `border-white`. Provably colorless   | `5b575c3`              | `87c6df7` |
+| S1     | `app/export_style.py` as the single home for deliverable styling, adopted by six exporters; `graded_hex` raises rather than clamps; page geometry stays per-exporter; D-036                | `57068f3`              | `777f1f1` |
+| S2     | ATT&CK deliverable renders curated citations, an evidence reference, a citation-phrased defensibility stat, a methodology note, and a tactic heatmap; D-035                                | `e7cd945`              | `2fc9af0` |
+| S3     | CSF deliverable adopts the POA&M rows, a tier-model methodology block, computed next steps, and a tier heatmap                                                                            | `19a1fe6` + `d3864f3`  | `9c49382` |
+| S4     | Migration `0034_zt_narratives`; the check-then-write race replaced by a conditional UPDATE; ZT roadmap and narratives; framework-aware stage heatmap                                      | `3590500`              | `2861df0` |
+| S5     | Seed evidence depth; deepened fixture prose with the cycles frozen; computed tech-debt portfolio paragraph; DoD stage clamp fix                                                           | `ed639e3`              | `729fb9a` |
+| S6     | `lib/guidance/`, `CsfMaturityReference.tsx`, per-question level disclosures, client interview labels                                                                                      | `1251a18`              | `b250c4c` |
+| S7     | `WorkflowSteps.tsx` in all four workspaces, playbook column legend, home phase legend, Impact Profile explainer                                                                           | `517b4b3`              | `f58332b` |
+| S8     | `AiStatusBanner` in three workspaces, honest fixture copy, tone split, risk provenance badge, `HowAiWorks.tsx`; D-037                                                                     | `56373e2`              | `1191a7e` |
+| S9     | `s27-comprehension.spec.ts`, s3/s4/s5/s6/s7 extensions, four PDF acceptance contracts, SMOKE 33 to 35. **Box left OPEN, two `needs-human` criteria**                                      | `718234b`              | `5f88172` |
+| S10    | Prose scrub, 61 em-dashes rewritten, seven pins moved at identical strictness                                                                                                             | `73ae76b`              | `ca18ce3` |
+| S11    | Wrap-up: SMOKE final pass, CHANGELOG `[3.6.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md`. **Box left OPEN, one `needs-human` criterion**                                       | this commit            | —         |
 
-### Sprint 8 task → commit
+Two mid-batch verification and security checkpoints ran at `9c49382` (after four
+sprints) and `f58332b` (after eight). Both passed. Neither fixed or committed
+anything itself; both produced findings, which are in the deferred list below.
 
-| Task | What shipped | Commit |
-| --- | --- | --- |
-| T0 | Shared MailHog reader helper (`e2e/helpers/mailhog.ts`): `fetchLatestMessage` / `extractToken` / `subjectOf`, polls by recipient plus subject; s21 consumes it with zero behavior change | `3b7bfb7` |
-| T1 | Tech-debt extract draft-exists guard: a second POST while a draft is open returns it idempotent-200 before the LLM call (no re-extract, consultant edits survive), matching CSF/attack/zt; `test_extract_versions_subsequent_lists` re-contracted to the APPROVED/RELEASED boundary | `4396f60` (+ e2e realign `b4fe0ba`) |
-| T2 | `s22-release-notify.spec.ts`: isolated tenant + unique-email client, release a CSF deliverable, assert the notification in MailHog by recipient + subject + `/documents` link (SMOKE §29) | `d023226` |
-| T3 | `s23-auth-pages.spec.ts`: browser-drive verify-email / forgot-password / reset-password pages end to end, then sign in with the new password | `442fca5` |
-| T4 | `s24-mfa.spec.ts` part A: enroll on `/account` with a generated TOTP (otpauth dep), assert shown-once recovery codes, sign in through the UI TOTP step. **Surfaced the MFA sign-in browser bug** | `f70a8cc` (fix `f10b803`) |
-| T5 | `s24-mfa.spec.ts` part B: redeem a recovery code at sign-in, prove it single-use on reuse. T4+T5 retire the manual MFA walkthrough | `1e782de` |
-| T6 | `s25-admin-health.spec.ts` asserts the all-green `/admin/health` matrix on the live stack; `s17-documents.spec.ts` gains a `/documents` empty-state assertion in a fresh throwaway tenant | `57277ea` |
-| T7 | Wrap-up: SMOKE annotations, CHANGELOG `[3.4.1]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh | `b7d482d` |
-
-No new migrations and no new DECISIONS this sprint: T1 applies the existing
-CSF/attack/zt idempotency pattern, and MFA (D-027), email verify/reset (D-028),
-and the release notification (D-030) all shipped earlier and were only proven in
-the browser here.
-
-- **Sprint 9 "activate the seam" COMPLETE on its branch** (`feat/sso-discard-demo-sprint-9`,
-  targeting `v3.5.0`): eleven tasks (T0 through T10) across three themes. The
-  long-dormant Keycloak seam is now a working hybrid OIDC sign-in beside the
-  credentials form, flag-gated behind `SHIELD_AUTH_OIDC_ENABLED` and default off
-  (D-032, migration 0032 `users.keycloak_sub`). The browser round trip ends at
-  `POST /auth/oidc/exchange`, which verifies the Keycloak access token against the
-  realm JWKS (RS256-only, `iss`/`aud`/`azp` pinned) and mints a native SHIELD HS256
-  pair only for an already-active local account. A Keycloak token is never accepted
-  as an API bearer; the backend keeps minting its own JWTs (D-020 stays
-  authoritative); there is no JIT provisioning. With the flag off the provider does
-  not exist and zero Keycloak network calls happen. Every service also gained a
-  first-class draft-discard affordance (D-031): a draft-only admin `POST .../discard`,
-  the app's first destructive-confirm dialog, the version trap closed, and the
-  hidden latest-consumers (risk synthesis, engagement cards) skipping discarded
-  rows. The demo compose and the export eyeball debt are now under committed
-  automation (D-033): the five SMOKE §10 export checks are unit assertions over real
-  PDF/DOCX/XLSX bytes, and `demo-reset --demo` plus `e2e/demo/demo-journey.spec.ts`
-  and a new CI `demo` job prove the hosted-demo bring-up. Minor bump for the two new
-  flag-gated user-facing surfaces; tag/CHANGELOG level only, package manifests
-  untouched. Plan was reviewed read-only by OpenAI Codex pre-merge (verdict
-  "rework" on 12 findings, 2 blockers, all folded into the tasks).
-
-### Sprint 9 task → commit
-
-| Task | What shipped | Commit |
-| --- | --- | --- |
-| T0 | Backend draft discard ×4 + `DISCARDED` status; version trap closed (`_latest_*` skip discarded, mint reads unfiltered `max(version)`); risk synthesis + intake cards skip discarded; conditional-UPDATE concurrency contract; D-031 | `638710c` |
-| T1 | Web discard UI: 4 proxies, client fns, shared `DiscardDraftButton` + design-system Modal (first destructive-confirm dialog), `reqSeq` bump before post-discard refetch | `578a98a` |
-| T2 | Export-content unit assertions over real bytes (pypdf test dep; PDF/DOCX/XLSX readers); SMOKE §10 re-pointed + one manual aesthetics line; §19 closed | `af4dcf3` |
-| T3 | e2e: the three approve-first preambles (s4/s5/s11) now discard via proxy, post-preamble assertions byte-identical; s4 drives the UI discard once; SMOKE §31 | `56bcfce` |
-| T4 | Backend OIDC: flag + `oidc_readiness()`, JWKS verifier (RS256-only, cache/TTL/lock), `POST /auth/oidc/exchange` typed-failure matrix, TOFU sub binding, migration 0032; D-032 | `60d2abb` |
-| T5 | Infra: dual-horizon Keycloak (`KC_HOSTNAME` + backchannel-dynamic, one canonical iss), realm drift fixes, env plumbing, real flag-gated `/ready` probe | `4c9ab64` |
-| T6 | Web OIDC: conditional secret-less PKCE provider, jwt-callback exchange branch, sign-in button, `SessionExpiryGuard` failure path; flag off is a behavioral no-op | `ca0093b` |
-| T7 | Opt-in `s26-oidc-login.spec.ts` (positive + negative through the real Keycloak form, self-skips unless `E2E_OIDC=1`); SMOKE §32 | `1e3e64e` |
-| T8 | Demo-reset `--demo`/`-Demo` mode (sh/ps1 parity) + fail-loud web-wait; opt-in `e2e/demo/demo-journey.spec.ts`; SMOKE §26; D-033 | `8b5e68a` |
-| T9 | CI `demo` job on its own isolated runner (compose-version floor, `demo-reset --demo`, `SHIELD_DEMO_SMOKE=1` playwright, always-run diagnostics + artifact upload); SMOKE §27 | `00d970e` |
-| T10 | Wrap-up: SMOKE final pass (§10/§19/§26/§27/§31/§32), CHANGELOG `[3.5.0]`, BUILD_REPORT sync, this snapshot, `context/dave.md` refresh, full gates + full e2e | `ee8bf23` |
-
-One migration this sprint: **0032** (`users.keycloak_sub` String(64) nullable
-unique, additive/SQLite-safe, C0). New DECISIONS: **D-031** (draft discard as an
-admin-only soft-delete state transition), **D-032** (hybrid Keycloak SSO as a
-flag-gated exchange, never a bearer), **D-033** (destructive-by-design automation
-is opt-in-gated).
+One migration this batch: **0034** (`zt_assessment.roadmap_summary`,
+`executive_summary`, `pillar_narratives`, all nullable, `batch_alter_table`,
+`JSON().with_variant(JSONB, "postgresql")`, additive and SQLite-safe, C0). New
+DECISIONS: **D-035** (the ATT&CK deliverable labels citations, never causes or
+remedies, `DECISIONS.md:880`), **D-036** (one shared export style module, page
+geometry stays per-exporter, `:938`), **D-037** (AI transparency is
+consultant-facing, the client screen stays silent, `:985`).
 
 ## Machine-local facts (this box)
 
 - **Web runs on port 3001**, not 3000: root `.env` `WEB_PORT=3001` /
   `NEXTAUTH_URL=:3001` (a separate next-dev holds `:3000`). Playwright resolves
-  the port via `e2e/helpers/baseUrl.ts` — never hardcode `:3000` in new specs.
+  the port via `e2e/helpers/baseUrl.ts`. Never hardcode `:3000` in a new spec.
   Canonical/CI stays `:3000`.
 - **gh CLI has two accounts:** active `SpearheadAnalytica` (full write) and
-  `david-catarious_kentro` (Kentro EMU — reads only; GitHub blocks EMU writes
-  outside its enterprise). `gh auth switch --user <name>` to flip; `git push`
-  authenticates as SpearheadAnalytica via GCM regardless.
-- **Tooling not on default PATH:** `node.exe` + `gh.exe` live under
-  `%LOCALAPPDATA%\Microsoft\WinGet\Packages`. Run e2e via that `node.exe` +
-  `e2e/node_modules/@playwright/test/cli.js`. Docker CLI needs
-  `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"` per shell.
-  Host Node LTS is 22 (matches the container after Sprint 4 T4).
-- **Six queue gates:** `pytest -m unit`, web `tsc`, host prettier 3.9.5
-  `--check`, in-container ruff/black (root-config parity), in-container web vitest
-  (`pnpm -F web test`), in-container web eslint (`pnpm -F web lint`). Bandit is
-  CI-only (a ruff `# noqa` does NOT suppress it — a flagged string needs its own
-  `# nosec`).
-- **GCP live path (Sprint 7):** live Vertex needs `SHIELD_LLM_MODE=live`,
-  `SHIELD_LLM_PROVIDER=vertex`, `SHIELD_LLM_MODEL=gemini-2.5-flash`,
-  `GCP_PROJECT_ID=kentro-cloudmod-dev`, `GCP_REGION=us-central1`, and host gcloud
-  ADC bind-mounted read-only (`GCLOUD_CONFIG_DIR`, `%APPDATA%\gcloud` on this box)
-  with `GOOGLE_APPLICATION_CREDENTIALS` pointing at the mounted file — all in the
-  **gitignored** `.env`, reverted to fixture after validation. There is NO static
-  Google API key anywhere. Adding `google-auth` (T0) required
-  `docker compose build api` — a plain restart won't install it.
+  `david-catarious_kentro` (Kentro EMU, reads only). `gh auth switch --user <name>`
+  to flip; `git push` authenticates as SpearheadAnalytica via GCM regardless.
+  `.claude/setup.sh` re-checks the active account at every SessionStart and
+  switches back if the expected one is already authenticated, so a stale account
+  self-heals instead of halting the loop at its first push.
+- **Tooling not on default PATH:** `node.exe` and `gh.exe` live under
+  `%LOCALAPPDATA%\Microsoft\WinGet\Packages`; the host binary this batch ran e2e
+  with is `node-v24.18.0-win-x64`, which is the host only and not container parity.
+  Run e2e via that `node.exe` plus `e2e/node_modules/@playwright/test/cli.js`.
+  Docker CLI may need `export PATH="$PATH:/c/Program Files/Docker/Docker/resources/bin"`
+  per shell.
+- **Seven gate steps, one runner.** `bash .claude/hooks/run-gate.sh push` reads
+  `.claude/profile` (`shield`) and sources `.claude/profiles/shield.sh`, which is
+  the single place the commands are written down. Green prints
+  `gate: shield/push passed (7 steps)`; a smaller step count means the gate is
+  broken, never that it passed. Bandit stays CI-only, and a ruff `# noqa` does not
+  suppress it (a flagged string needs its own `# nosec`).
+- **The LLM stayed in fixture mode for the entire batch.** Root `.env` is
+  `SHIELD_LLM_MODE=fixture`, compose defaults to `fixture`, and `.env` is
+  gitignored. No live-AI or cloud credential was needed by any sprint. Live
+  Vertex needs `SHIELD_LLM_MODE=live`, `SHIELD_LLM_PROVIDER=vertex`,
+  `SHIELD_LLM_MODEL=gemini-2.5-flash`, `GCP_PROJECT_ID=kentro-cloudmod-dev`,
+  `GCP_REGION=us-central1`, and host gcloud ADC bind-mounted read-only, all in
+  the gitignored `.env` and reverted after validation. There is NO static Google
+  API key anywhere.
 - **Framework/module reinstall dance:** after editing any `apps/web` source,
-  `docker compose up -d --force-recreate web` before any e2e (next-dev hot-reload
-  does not fire through the Windows bind mount). After `apps/web/package.json`
-  changes (Sprint 7 Auth.js v5), reinstall INSIDE the web container. A NEW python
-  module under `app/` needs `docker compose restart api`; NEVER restart api while an
-  in-container pytest is running (SIGKILL 137).
-- **Hybrid OIDC flag is default OFF and must never be committed on** (Sprint 9,
-  D-032). `SHIELD_AUTH_OIDC_ENABLED=true` in the repo-root `.env` plus
-  `docker compose up -d --force-recreate api web` (web reads it at provider
-  registration, api at boot readiness) turns it on; a realm-export change since the
-  last import also needs a keycloak volume wipe
-  (`docker compose stop keycloak && docker volume rm shield-v2_keycloak-data && docker compose up -d keycloak`).
+  `docker compose up -d --force-recreate web` before any e2e (next-dev
+  hot-reload does not fire through the Windows bind mount). A NEW python module
+  under `app/` needs `docker compose restart api`; S1 added `app/export_style.py`
+  and needed exactly that. NEVER restart api while an in-container pytest is
+  running (SIGKILL 137). Migration 0034 applies in-container with
+  `alembic upgrade head`; `alembic current` reports `0034 (head)`.
+- **Hybrid OIDC flag is default OFF and must never be committed on** (D-032).
   The `s26-oidc-login` opt-in spec runs with `E2E_OIDC=1`; always restore the flag
-  off and re-prove one credentials sign-in afterward. The realm now pins one
-  canonical issuer (`http://localhost:8080/realms/shield`) for browser and
-  containers via `KC_HOSTNAME` + backchannel-dynamic; the api fetches JWKS on the
-  `keycloak:8080` horizon.
+  off afterward and re-prove one credentials sign-in.
+- **`demo-reset --demo` is destructive and opt-in** (D-033). Never run it
+  implicitly. It is currently the only way to get S5's evidence-rich seed into
+  this box's database (see the deferred list).
 
 ## Deferred / needs a human
 
-- **SMOKE_TEST §14 / §14.1 — GCP-validated 2026-07-15 (Sprint 7 T1):** the
-  opt-in `@pytest.mark.live` specs were run for real against Vertex (ADC-only)
-  across all five purposes; still self-skip keyless so CI/loop stay green without
-  credentials. Re-verify with a keyed/ADC run.
-- **SMOKE_TEST §29 (release notification), done in Sprint 8 T2:**
-  `s22-release-notify.spec.ts` now reads the notification out of MailHog for a real
-  registered client of an isolated tenant, matching on recipient, subject, and the
-  `/documents` link, on top of the four `test_release_notification.py` unit tests.
-- **SMOKE_TEST §10 (export content) closed in Sprint 9 T2:** the five eyeball
-  boxes are now unit assertions over real bytes (PDF via `pypdf.PdfReader`, DOCX via
-  `docx.Document`, XLSX via openpyxl). One explicitly-manual line remains, deferred
-  by design: visual aesthetics only (cell shading, heatmap colors, spacing,
-  page-breaks), which no test can assert.
-- **CI `demo` job green-run pending the first PR (Sprint 9 T9):** the `demo` job
-  in `.github/workflows/ci.yml` is green locally (T8's destructive proving run) and
-  YAML-validated, but this repo's CI triggers only on push/PR to `main`, so its
-  first green CI run is cited when the dev opens the sprint PR. SMOKE §27's CI-job
-  box stays annotated "pending first PR run". Same posture as the `e2e` job.
-- **`sharp <0.35.0` HIGH advisory (needs Dependabot / a human):** a new root
-  advisory (libvips CVEs), transitive via next@15's image optimizer, NOT introduced
-  by this branch and not exploitable in our use (no untrusted image processing). Not
-  fixable without a lockfile bump, which Sprint 9 deliberately did not touch.
-  Recommend a Dependabot bump or a root pnpm override on `main`.
-- **MFA / email web UI eyeball, done in Sprint 8 (T3 through T5):** the sign-in
-  MFA step, the enrollment section, and the verify/forgot/reset pages are now
-  browser-driven (`s24-mfa.spec.ts`, `s23-auth-pages.spec.ts`); the manual MFA
-  walkthrough is retired.
-- **Hosted-demo + demo-reset, automated in Sprint 9 (T8/T9):**
-  `demo-reset --demo`/`-Demo` plus the opt-in `e2e/demo/demo-journey.spec.ts` and
-  the CI `demo` job now drive the hosted-demo bring-up; the manual-only note is
-  retired (the destructive proving run is opt-in-gated per D-033).
-- **ESLint 10** — deferred upstream (D-018 dated deferral): no published Next lint
-  stack runs on it today.
-- **One documented moderate audit finding** left deliberately open: `postcss`
-  8.4.31 (pinned in `next@15`; XSS-stringify path N/A at build). Clears on the next
-  upstream Next bump. The npm audit HTTP endpoint 410s upstream; posture verified
-  from the lockfile dependency graph.
-- **Needs David (cloud infra + full federation):** `infra/terraform`
-  (cloud/account/region/network) and DR runbooks are stubs; FedRAMP-authorized LLM
-  connector; `azure_openai`/`bedrock`/`local` LLM adapters stay loud
-  not-implemented. The Keycloak SSO deferral is LIFTED at hybrid depth (Sprint 9
-  D-032): OIDC sign-in works flag-gated. Full token federation (the backend
-  accepting Keycloak tokens as API bearers), JIT user provisioning, migrating
-  register/MFA/email flows into Keycloak, an un-discard/recovery endpoint (DISCARDED
-  is terminal in v1; rows stay DB-recoverable), and stamping local
-  `email_verified_at` from a Keycloak claim all stay out of scope. Dave's 2026-07-13
-  call: local containers for now.
+Nothing in this list is a regression introduced by this batch unless it says so.
+It is recorded here so none of it gets rediscovered as a bug in three months.
+Roughly in priority order.
+
+### Found by the shutdown deep audit, 2026-08-04
+
+Five parallel adversarial sub-audits ran over all 28 commits at the close of the
+batch and recorded 5 HIGH, 9 MEDIUM and 7 LOW. Nothing was code-fixed, because no
+finding is one-pass fixable: each is either a claim change on a client-visible
+deliverable, which D-035's precedent makes a decision rather than a scrub, or a
+multi-file sweep. The full entry is the last Log line in `docs/SPRINTS.md`.
+
+These carry an `H` prefix instead of joining the numbered list below, because that
+list is cross-referenced by number from this file and from `context/dave.md`, and
+renumbering it would break those references. **H1 outranks every item in it,
+including item 1.** None of the five has a pre-existing-versus-new label the audit
+did not give it: H1 through H4 have root causes older than the batch, and what this
+batch changed is how reachable or how visible each one is.
+
+- **H1. A second CSF exporter that S3's honesty fix never reached, and it is wrong
+  on the default state of a real engagement.** `app/csf/playbook_export.py`
+  produces five client-facing artifacts from
+  `POST /csf/services/{id}/playbook/export`, and it carries **0** coverage-qualifier
+  phrases against 18 in `csf/exporters.py`. Root cause at `routes/csf.py:1128`:
+  `gap = is_gap(rollup.score, target) if target is not None else False`. With
+  `target_level` nullable (`Mapped[int | None]`, and `csf.py:1331` writes `None`
+  explicitly), "no target recorded" and "target met" resolve to the same value.
+  Rendered with all 106 subcategories scored at Enterprise Level 2 of 5 and no
+  target set, the deliverable says `No gaps: every in-scope subcategory meets its
+target.` and `Maintain current controls and re-assess on the next cycle.` while
+  every Target cell prints a dash. It fires on the default state of a real
+  engagement rather than on a contrived empty input. Fifth and largest instance of
+  this batch's recurring defect.
+- **H2. The same file manufactures 91 Priority 1 criticals** out of unscored rows
+  when targets ARE set, because `maturity_level(0)` returns 1 and an unscored row is
+  indistinguishable from a real Level 1.
+- **H3. A lost Run-AI race crashes the ZT workspace** rather than showing the typed
+  409, which is the exact case S4 built its conditional UPDATE for.
+  `ZtWorkspace.tsx:68-79` casts dict-detail as `detail?: string` and renders an
+  object as a React child. The bad cast is pre-existing at 16 sites across 15 files,
+  and this branch adds three more 409s that reach it.
+- **H4. Every ZT pillar narrative is filed under a pillar that does not exist.**
+  `fixtures.py:209` derives the pillar key as `code.split(".")[0]`, so every ZT code
+  yields `"CISA"` or `"DOD"`. Fixture mode is the default, so this persists and now
+  renders. No `apps/web` surface displays `pillar_narratives`, so nothing catches it
+  before release.
+- **H5. The demo deliverable's AI attribution note is false.** `seed_demo.py:797`
+  writes Python-computed narratives, while the exporter's note says the text was
+  drafted by Run AI and carried into the report only from an assessment a consultant
+  approved.
+
+MEDIUM and LOW worth carrying, including two corrections to the list below:
+
+- `Overall coverage: 100.0%` on one scored technique of 633, because
+  `attack/analytics.py:105` divides by scored-only.
+- Two adjacent contradictory sentences at `csf/exporters.py:550`.
+- **Item 9 below understates the batch.** It introduced **six** formula-injectable
+  XLSX columns of its own, at `csf/exporters.py:70-77` (`POAM_FIELDS`). The earlier
+  reading was that S2 and S3 added one column to a vector that already existed.
+- **Item 5 below is superseded.** The systematic served-CSS sweep it asks for has
+  now been done across all 55 colour utilities, and it found a **third** phantom
+  token: `bg-surface-default` at `AiPreviewButton.tsx:106`. The same sweep
+  re-verified all ten `--tier-*` tokens and independently confirmed S0.
+- **A purged in-tenant artifact still prints its filename.** No checkpoint had tried
+  that input. Cross-tenant reachability itself was re-verified across six break
+  attempts and holds.
+- **Cannot-fail tests, recorded extensively.** Heatmap-fill assertions that pin only
+  "a fill was applied", length-not-value assertions, and an `AiStatusBanner` case
+  that awaits two microtasks where the state needs four, so it measures "not loaded
+  yet" and stays green if the guard is removed.
+
+Two things the audit confirmed rather than broke. **Spec compliance holds:**
+`ai/jobs.py`, `ai/llm.py` and `config.py` have zero-line diffs, all four prompts are
+byte-identical to `main`, and every scoring engine has a zero-line diff, so
+deterministic scoring is still entirely in Python and no AI-drafted text influences
+a number. **Security holds:** 5 high and 2 moderate confirmed exactly with none
+branch-introduced, bandit clean on `app`, and a secret scan clean over 14,386 diff
+lines with positive controls. One checkpoint's wording was corrected in the process:
+the `client_id` bound IS derived from the caller-controlled `X-Client-Id` for
+platform admins, so the isolation property is real but rests on
+`require_service_in_tenant` agreeing with it, not on the header being untrusted.
+
+### The standing list
+
+1. **A swallowed error on the client's only write path.**
+   `CsfSelfAssessment.tsx:172-174` is a bare `catch {}` around the answer PATCH, a
+   direct violation of `CLAUDE.md` principle 2, and it predates this batch. Its
+   comment reads "Best-effort optimistic save; a reload reconciles if it failed",
+   which is the part to distrust: nothing forces the client to reload, and if they do
+   not, the lost answer is indistinguishable from an unanswered one. The consequence compounds with what
+   this batch built: a client picks a tier, the optimistic UI shows it saved, the
+   PATCH fails silently, the answer is lost, and the deliverable then reports
+   honestly (thanks to S3) that the subcategory is unscored and carries no
+   finding. The newly truthful reporting faithfully describes a gap that a silent
+   save failure created. The client answered and the report says they did not.
+   Fixing it means deciding what a client sees on failure, which is a product
+   decision, not an agent's. **Highest-value item in this list.**
+2. **The interview prompt has no data path in any environment.** The `questions`
+   table is empty, `seed_demo.py` never populates it, and the loader
+   `scripts/load_csf_tier_questionnaires.py` is invoked by nothing: not CI, not
+   compose, not `demo-reset`. Only a docstring and a SMOKE line mention it. So
+   `questionsByCode` is always `{}` and the `Consider:` eyebrow never renders.
+   **S6 was credited for this feature on a mocked vitest**, whose criterion asked
+   for "a vitest case asserting the client label" and got one, with the fetch
+   mocked. The test is honest; the criterion asked for the wrong proof. This is
+   the Sprint-8 lesson recurring with a different cause. Running reference data
+   into the shared demo database is a human decision. SMOKE §34 carries the
+   unchecked box.
+3. **No green full-suite e2e run exists on this box, after four attempts.**
+   Checkpoint 1 (2 failed / 49 passed), checkpoint 2 (1 failed / 50 passed), the S9
+   driver's warmed and uncontended run (2 failed / 56 passed / 6 skipped in 34.6m),
+   and S11's own warmed quiet-box run: **1 failed / 57 passed / 6 skipped in 33.2m**,
+   failing at `s4-techdebt.spec.ts:40` inside `signIn` at `auth.ts:63`, the test's
+   first action, before any content assertion. That test passes standalone. **This is
+   not a timeout bump:** `e2e/helpers/auth.ts:60-63` already wraps a 15s
+   `waitForURL` in `toPass({ timeout: 60000 })` and still loses, because the
+   post-login chain pays three sequential cold compiles and each retry can re-enter
+   them. Measured directly in S11: after 33 minutes of continuous browser work the
+   four warmed routes had gone cold again (`/` back to 6.3s from 0.5s), so next-dev
+   evicts compiled routes under sustained load and the back half of the suite pays
+   cold-compile costs the front half already paid. Warming belongs in the harness.
+   **A second, weaker observation worth keeping:** the standalone arbitration passed
+   `:40` and failed `:154`, which had passed in the full run, on a 120s
+   `waitForResponse` for the extract POST with an existing `Draft v37` on the page
+   and an error banner showing. The failure moving between runs is the
+   non-deterministic signature rather than a selector or logic break, but `:154` may
+   also carry an order-coupling to the draft `:40` leaves behind. One observation is
+   not a diagnosis; it was deliberately not chased, since re-running a suite hoping
+   for green is what the protocol forbids. Real test-infra work, small but not
+   trivial. The loop protocol names CI's fresh-runner E2E job as authoritative, and
+   that is the honest arbiter.
+4. **Absent versus zero at the summary-header layer, in three of four services.**
+   One root cause, found by three independent empty-input runs. Tech-debt prints
+   `Total annual cost: $0` for rows whose cost is unrecorded, asserting zero where
+   the truth is "not recorded". CSF headlines `Overall maturity: Repeatable` at
+   2.8% coverage with no qualifier. ZT does qualify, since S4: unscored
+   capabilities are excluded from every average, "so no stage here describes
+   them". The fix pattern therefore already exists one service over, which makes
+   this copying an established pattern rather than making a new decision. Wants
+   one consistent treatment across all four, not three separate nits.
+5. **A second phantom Tailwind token.** `border-border-default` emits nothing: the
+   preset declares `border: { subtle, DEFAULT, strong, focus }` and Tailwind
+   flattens `DEFAULT` to the bare name. Proven against the served stylesheet
+   rather than by reasoning, 0 occurrences against 1 for `border-border-subtle`.
+   Seven uses across five files: `AiPreviewButton.tsx`, `csf/CsfPlaybookPanel.tsx`,
+   `DiscardDraftButton.tsx`, `risk/RiskRegisterDashboard.tsx`,
+   `messages/MessageThread.tsx`. **S0 existed to sweep this exact class of defect
+   and swept only `surface-muted`**, the one instance the design sprint had
+   grepped for, so a second phantom survived it. The general fix is a check that
+   every color utility resolves to a class Tailwind actually generates, not
+   another one-off grep.
+6. **CI's bandit never scans `apps/api/scripts`.** `.github/workflows/ci.yml:48`
+   targets `apps/api/app` only, so the whole `scripts/` tree is invisible to it.
+   Scanning it anyway finds 7 LOW including `B105` on the documented demo password
+   at `seed_demo.py:129`, harmless and pre-existing. The credential is not the
+   finding; the blind spot is, because a future script could carry a real secret
+   unscanned.
+7. **Dependency posture, corrected.** This file previously recorded one HIGH plus
+   one moderate. Root `pnpm audit`, measured at both checkpoints, is **5 high + 2
+   moderate**: `sharp@0.34.5` (1 high, libvips CVEs, transitive via next@15's
+   image optimizer, not exploitable in our use since we process no untrusted
+   images), `postcss@8.4.31` (**4 advisories, 2 of them high**, not the one
+   moderate previously recorded), and `brace-expansion@1.1.16` (**2 high,
+   previously undocumented anywhere**, transitive via `minimatch@3.1.5`). None is
+   branch-introduced: this batch touches no lockfile or manifest, so `main` audits
+   identically. `npm audit` in `e2e/` is clean. All three want the same
+   unscheduled lockfile bump, a Dependabot run or a root pnpm override on `main`.
+   SMOKE §28's stale line was corrected in this sprint.
+8. **Unvalidated `evidence_artifact_id` write at three sites**, not the two
+   previously recorded: `attack.py:401`, `csf.py:528`, `zt.py:786`. A nonexistent
+   UUID raises IntegrityError while a foreign-tenant UUID commits, which is a
+   boolean existence oracle at PATCH. Admin-gated and dating to `fb9c99d`, so a
+   data-integrity gap rather than privilege escalation, since platform admins hold
+   cross-tenant reach by design. What stops it leaking into a deliverable is the
+   read join, which filters `Artifact.client_id == client_id` in SQL at all three
+   services (`attack.py:919`, `csf.py:1782`, `zt.py:1305`) and raises on an
+   unresolved id rather than degrading into `No evidence attached`.
+9. **XLSX formula injection**, pre-existing across all six exporters. openpyxl
+   types a leading `=` as a formula, and free-form Notes and Rationale cells
+   already carry user text. S2 and S3 add one more user-controlled column to a
+   vector that already existed. A real fix spans six modules and is not a
+   one-pass TDD change.
+10. **The demo database still carries pre-S5 ATT&CK evidence.** `seed_demo.py`
+    returns early whenever any `Service` row exists and prints
+    `Services already present; skipping seeding.`, so S5's richer evidence is in
+    code only. The S9 run's census read `attack_prevention_cited=0` against a code
+    path that now cites prevention tools. Only `demo-reset --demo` or a wipe picks
+    it up, and that path is destructive and opt-in per D-033. SMOKE §26 carries the
+    unchecked box, and it is unchecked for this reason as well as for having no
+    spec.
+11. **Zero Trust clients get no guidance.** `ZtSelfAssessment.tsx` mounts
+    `ZtStagePicker` directly rather than `ZtQuestionnaire`, and that file was
+    absent from S6's scope list. CSF's questionnaire is shared, so one disclosure
+    serves both audiences; ZT's is not. All seven stages of guidance data exist and
+    are tested, but nothing client-side consumes them. Closing it is an import plus
+    one element beside the picker. SMOKE §34 carries the unchecked box. The other
+    half of that box closed in S10: the stale `ZtSelfAssessment.tsx:371` Notes
+    placeholder, which S6's commit message claimed to have updated and had not, is
+    now byte-identical to the other three questionnaires.
+12. **The risk provenance badge cannot discriminate.** `routes/risk.py:270` is the
+    only writer of `RiskEntry.origin` and always passes `"ai_generated"`, the model
+    default is the same string, and `consultant_entered` appears nowhere in app
+    code. So every register row badges. Honest, since every row really is
+    AI-drafted, but a constant rather than a distinction until a consultant-entered
+    write path exists, which the plan places in the next batch. The spec asserts
+    presence only, deliberately.
+13. **`/admin/management` is named in S7's Scope line with no acceptance criterion
+    and no evidence clause anywhere.** A plan defect, not a code one. The runner
+    left it untouched rather than inventing work, which was correct. Either it needs
+    a criterion in a later sprint or that scope line is stale from an earlier draft.
+14. **The ATT&CK PDF and DOCX still head the gap list `Top remediation gaps (N of M
+    shown)`** (`attack/exporters.py:435` and `:540`). It predates the batch (Work
+    Order C4) and is a heading rather than a Gap Direction cell, so it sat outside
+    S2's criteria, but it frames gaps as remediation targets immediately above cells
+    D-035 forbids from doing so. The empty-input render showed it reading
+    `Top remediation gaps (0 of 0 shown)` on a report that scored nothing. Recorded
+    in D-035; S10's scrub did not take it because it is a claim change, not a prose
+    one.
+15. **The client-PDF-versus-client-screen AI asymmetry.** S2 put an AI-drafting
+    disclosure in the client's deliverable; S8 keeps the client's screen silent.
+    D-037 records it as an open boundary rather than resolving it, on the reasoning
+    that an unrecorded inconsistency is the one silently "fixed" by whoever notices
+    it first.
+16. **Two gate gaps.** `.css` is outside the prettier glob in both
+    `.claude/profiles/shield.sh` and CI, so `tokens.css` formatting is unenforced by
+    any gate. And `packages/design-system/src/tailwind-preset.ts` cannot be
+    typechecked outside `apps/web`, because `tailwindcss` resolves only there;
+    fixing it needs a devDependency, so a lockfile change.
+17. **The CSF stepper is 5 steps, not 10.** "10-step Playbook" survives only as
+    intake marketing prose. The engine and the workspace both model five.
+18. **SMOKE §14 / §14.1 live-AI boxes** stay opt-in and self-skip keyless. They
+    were run for real against Vertex via ADC across all five purposes on
+    2026-07-15 (Sprint 7 T1). Re-verify with a keyed or ADC run.
+19. **CI `demo` and `e2e` job green runs** are cited on the sprint PR open, because
+    this repo's CI triggers only on push or PR to `main`. SMOKE §27's CI-job box
+    carries its first green run (PR #44, run 29939798138).
+20. **ESLint 10** stays deferred upstream (D-018 dated deferral): no published Next
+    lint stack runs on it today.
+21. **Needs David (cloud infra + full federation):** `infra/terraform`
+    (cloud/account/region/network) and DR runbooks are stubs; the FedRAMP-authorized
+    LLM connector is unbuilt; `azure_openai`/`bedrock`/`local` LLM adapters stay
+    loud not-implemented. Keycloak SSO stays at hybrid depth (D-032): full token
+    federation (the backend accepting Keycloak tokens as API bearers), JIT
+    provisioning, migrating register/MFA/email flows into Keycloak, and an
+    un-discard endpoint (DISCARDED is terminal in v1; rows stay DB-recoverable) all
+    stay out of scope. Dave's 2026-07-13 call: local containers for now.
 
 ## Test coverage status
 
-- Backend: full `pytest -m unit` green in-container. Sprint 9 added
-  `test_discard_draft.py` (the four-service discard contract: draft-only 200 +
-  single audit row, idempotent re-discard, 409 on SUBMITTED/APPROVED/RELEASED, 403
-  client, 404 cross-tenant, the version-trap regression, the hidden latest-consumers
-  in `risk.py`/`intake.py`, and the discard-then-stale-write concurrency contracts —
-  the end-of-sprint audit pass rounded the file out to full four-service symmetry:
-  tech-debt child-mutation-after-discard 409, plus csf/zt idempotent re-discard);
-  `test_oidc_exchange.py` (an in-test RSA keypair signs Keycloak-shaped tokens, a
-  monkeypatched `_fetch_jwks` returns the matching JWKS, and the full rejection
-  matrix plus TOFU sub-binding is exercised); the export-content tests (T2, real
-  PDF/DOCX/XLSX bytes); and the readiness-probe cases (T5, flag-off dormant /
-  flag-on ok/down, `ready` never gated by keycloak). Sprint 7's Vertex adapter and
-  release-notification suites and the opt-in `tests/live/test_live_ai.py`
-  (`@pytest.mark.live`, excluded from `-m unit`, GCP-validated 2026-07-15) are
-  unchanged.
-- Web unit tests: `pnpm -F web test` (vitest) 37/37 across 10 files. Sprint 9 T1
-  added `DiscardDraftButton.test.tsx` (renders only for a draft, opens the Modal,
-  confirm invokes the callback, cancel/ESC/backdrop are no-ops) and `CsfWorkspace`
-  discard tests (the answered-count warning line, plus the end-of-sprint audit pass's
-  onDiscard main-path test: confirm → `discardAssessment` → guarded refetch clears the
-  workspace to the empty state); T6 added `oidc.test.ts` (isOidcEnabled truth table + rewrite/passthrough),
-  `KeycloakSignInButton.test.tsx`, and `SessionExpiryGuard.test.tsx` (signs out on
-  `OIDC_EXCHANGE_ERROR`). The Sprint-8 `SignInForm` omit-totp guard and the reqSeq
-  guards remain.
-- Web `tsc --noEmit` clean on Next 15 / React 19 / Tailwind 4 / Auth.js v5. ESLint
-  0 errors (1 pre-existing postcss warning). In-container `pnpm -F web build` was
-  proven green in T6 (the standalone prod image the demo compose runs).
-- e2e: 27 spec files (host, resolves `:3001`). Sprint 9 added `s26-oidc-login`
-  (opt-in, self-skips unless `E2E_OIDC=1`) and `demo/demo-journey` (opt-in,
-  self-skips unless `SHIELD_DEMO_SMOKE=1`), so the default suite count is unchanged.
-  The T10 exit run was green on the flag-off dev stack: 51 passed / 6 skipped (2
-  s26 + 4 demo-journey), zero failures/flakes, across six foreground sub-9-min
-  shards. Known cold-compile flake under load documented in `CLAUDE.md`; per-spec
-  standalone is the flake arbiter.
+- Backend: full `pytest -m unit` green in-container. This batch added
+  `test_export_style.py` (S1: the `graded_hex` raise on both out-of-range ends,
+  `escaped_title` escaping without org-name repetition, per-exporter margin parity
+  contracts), `test_attack_evidence_join.py` (S2), and substantial additions to
+  `test_attack_exporters.py`, `test_csf_exporters.py`, `test_csf_deliverable_routes.py`,
+  `test_zt_exporters.py`, `test_zt_routes.py`, `test_zt_run_ai.py` (S4's race case
+  injects a discard strictly between the status check and the durable write, and
+  carries `assert fired, "the seam moved out of the window"` so it cannot silently
+  stop biting), `test_ai_runtime_fixtures.py` and `test_exporters.py` (S5), and
+  `test_admin_routes.py` (S8). S9 added four PDF acceptance contracts, one per
+  service, which assert section order as a **subsequence** over real extracted
+  bytes: each string is searched for only after the previous match, so a section
+  rendering in the wrong place fails where a set of `in` checks would pass.
+  Verified to bite by reversing pairs of sections against real bytes.
+- Web unit tests: `pnpm -F web test` (vitest) green in-container, grown from 47 to
+  118 across 22 files over the batch (S0 +9, S6 +23, S7 +27, S8 +12). The guidance
+  suite iterates the full 6x4 CSF set plus CISA 4 and DoD 3 rather than sampling,
+  and asserts the lookups raise on a missing entry.
+- Web `tsc --noEmit` clean; eslint 0 errors (1 pre-existing postcss warning).
+- e2e: **28 spec files** (host, resolves `:3001`), 64 tests, of which 6 skip by
+  design (4 `e2e/demo/*` need `SHIELD_DEMO_SMOKE=1`, 2 `s26-oidc-login` need
+  `E2E_OIDC=1`), leaving 58 runnable. S9 added `s27-comprehension.spec.ts` (4
+  tests) and extended s3/s4/s5/s6/s7. **S11's exit run: 1 failed / 57 passed / 6
+  skipped in 33.2m**, warmed and uncontended, the single failure being a sign-in
+  cold-compile timeout at `s4-techdebt.spec.ts:40` that passes standalone. **No green
+  full-suite run exists on this box** after four attempts; see deferred item 3 for
+  each attempt, the arbitration, the measured route-cache eviction, and why it is not
+  a timeout bump. Per-spec standalone is the flake arbiter here: a spec that dies at
+  `auth.ts` sign-in under load is a documented cold-compile flake, never a logic bug.
 - Format: repo-wide prettier `--check` clean at 3.9.5. Python ruff/black clean
-  (root-config parity).
-- Audit: bandit CI-only, exit 0. Root `pnpm audit` posture: one new documented
-  `sharp <0.35.0` HIGH (libvips CVEs, transitive via next@15's image optimizer, not
-  branch-introduced, not exploitable in our use) plus the standing `postcss`
-  moderate; both blocked on a lockfile bump this sprint did not touch (Dependabot /
-  root override on `main`). The `uuid@8.3.2` moderate cleared in Sprint 7 T5. No
-  secret / token committed this sprint (the secret-less PKCE client meant the T6
-  dev-realm fallback secret was never needed).
+  (root-config parity). Note that `.css` is outside the prettier glob (deferred
+  item 16).
+- Audit: bandit CI-only, exit 0 over `apps/api/app`, which does not include
+  `scripts/` (deferred item 6). Root `pnpm audit` is 5 high + 2 moderate, none
+  branch-introduced (deferred item 7); `e2e/` npm audit clean. No secret or token
+  committed this batch, and no live-LLM configuration reached a committed file.
+
+## Lessons learned (Sprint 10)
+
+- **Nine of eleven executed sprints had at least one defective acceptance
+  criterion, and the defects had a shape.** One was structurally unrunnable (S6
+  asked for a vitest pin against Python constants in a directory the web container
+  does not mount). One was already satisfied before the work began (S1's
+  `grep -c 'html.escape'` returned 0 on the pre-S1 tree too, because the hotfix had
+  written `from html import escape` and called bare `escape(...)`). One named two
+  surfaces and could only fail on one (S2 required the stat in PDF **and** DOCX but
+  named only extracted PDF text as evidence). One could not fail by construction
+  (S4's `tsc --noEmit` green after adding three *optional* interface fields).
+  Several passed on a bare no-exception. S0's criterion listed the tier tokens in
+  one order and their hexes starting from a different tier, so a positional reading
+  would have inverted the whole ramp with every frozen-table test still passing.
+  The transferable rule: **an evidence command that passes before the work begins
+  certifies nothing.** Write the criterion so that it is red on the tree you are
+  starting from, and check that it is, before trusting it. Every one of these was
+  caught by a runner reading its own criterion sceptically and substituting a check
+  that bites, then saying so.
+- **A truthful report can faithfully describe a gap that a silent failure created.**
+  S3 made the CSF deliverable honest about unscored subcategories. The client's
+  answer PATCH swallows its error. Those two correct-looking behaviours compose
+  into a report that tells a client they never answered a question they did answer.
+  Honesty at the reporting layer is not a substitute for failing loudly at the
+  write, and improving one can make the absence of the other harder to see.
+- **An empty-input render is the cheapest way to find a false reassurance.** Three
+  of the four services printed something untrue when given nothing to say: CSF
+  advised maintaining current controls at 3 of 106 subcategories scored, ZT
+  reported no gaps at target when nothing had been scored, and tech-debt asserted
+  `$0` where the cost was unrecorded. Each passed every test it had, because every
+  zero-gap case those tests exercised used a fully scored assessment. The branch
+  was correct for the only input it was ever given. Render the report from nothing
+  and read what it says.
+- **A raising helper turns silently-bad data into a crash, which is the point.**
+  S1 made `graded_hex` raise instead of clamp. S5 then found the seed could not run
+  on an empty database at all, because the shared stage pattern handed DoD ZTRA a
+  stage 4 on a 3-rung ladder. That bad data had been accepted silently for months
+  and nobody had seen it, because the live demo database predates S1. FAIL LOUDLY
+  earning its keep on a schedule of its own choosing.
+- **A phantom utility class is invisible to every gate the repo has.** Tailwind
+  emits nothing for a class naming a token that does not exist, and no build step
+  complains. S0 swept `bg-surface-muted`; S8 found `border-border-default` doing
+  the same thing seven more times, because the preset flattens `DEFAULT` to the
+  bare name. Both were proven against the **served stylesheet** rather than by
+  reading the config, which is the only check that distinguishes a class that
+  exists from one that merely looks right. Grepping for the instance you already
+  know about does not sweep a class of defect.
+- **Disclosure is what makes a sprint checkable.** S7's runner reported that it had
+  written one component before its test, so no red run was observed. The driver
+  reverted that component and re-ran the suite (2 failed of 4), recording a
+  recovered check rather than an observed red and deliberately not overstating it,
+  since one of the two failures was a missing module export rather than behaviour.
+  A runner that had quietly reordered its narrative would have produced an
+  identical-looking green sprint. The same is true of S8 volunteering which of its
+  reds were collection failures, and of S9 leaving its own box unchecked.
+- **Grepping prose in this codebase needs a multiline search.** Nine protected
+  honesty strings were checked with a single-line grep and four came back
+  "missing". All nine were present: Python splits them across adjacent string
+  literals, so `"...read as "` `"verified..."` never matches `read as verified` on
+  one line. A false alarm was one trusted grep away, and the same trap catches
+  anyone auditing the export prose.
 
 ## Lessons learned (Sprint 9)
 
@@ -293,92 +512,43 @@ is opt-in-gated).
   the risk-register synthesis has its own `_latest()` that would have read a
   discarded highest-version assessment straight into the gate, and the intake
   engagement cards reported the raw latest version. A dormant status is only as safe
-  as the query that forgot about it. The rule that fell out: when a new row state
-  goes live, grep for every "latest" and every parent-state guard across the whole
-  codebase, not just the four route files that mint the state.
+  as the query that forgot about it.
 - **The version trap is a real IntegrityError, not a hypothetical.** The
-  `_latest_*` helpers must skip `DISCARDED` (so a discarded draft is invisible to
-  consumers) while the mint's next-version computation must read `max(version)`
-  unfiltered (so it does not reuse the discarded version's number and collide on the
-  `(service_id, version)` unique constraint). Getting the second half wrong throws
-  on the first re-extract after discarding a non-v1 draft. The regression test runs
-  on an alembic-upgraded SQLite fixture precisely so the unique constraint is real,
-  not mocked away.
-- **A mocked unit test cannot prove a flag-off no-op or a beta integration.** T6's
-  hardest promise was that flag-off changes nothing, and the only honest proof is a
-  vitest trap that fails on an unexpected Keycloak fetch. The throwaway auth-code
-  spike then caught a bug no unit mock could: a rejected exchange left the token
-  without an access token, so the next `jwt` call fell into `refreshAccessToken()`
-  and clobbered `OIDC_EXCHANGE_ERROR` into `RefreshAccessTokenError`, and the guard
-  never fired. Making the error terminal in the callback fixed it. Beta-sensitive
-  seams need a real round trip before the full wiring, so the verdict lands early.
+  `_latest_*` helpers must skip `DISCARDED` while the mint's next-version
+  computation must read `max(version)` unfiltered, so it does not reuse the
+  discarded version's number and collide on the `(service_id, version)` unique
+  constraint.
+- **A mocked unit test cannot prove a flag-off no-op or a beta integration.** The
+  only honest proof that flag-off changes nothing is a vitest trap that fails on an
+  unexpected Keycloak fetch. Beta-sensitive seams need a real round trip before the
+  full wiring, so the verdict lands early.
 - **Fail loudly at the wait, not at the far-downstream death.** The demo-reset web
   poll printed its success banner even on a 120s timeout, so a stalled production
-  build looked like a clean reset until Playwright died opaquely much later. Moving
-  the failure to the wait (non-zero exit plus a `docker compose logs web` dump)
-  turns a confusing downstream symptom into an obvious local cause.
+  build looked like a clean reset until Playwright died opaquely much later.
 - **Changing a shared default in one task silently breaks another task's hardcoded
   fixture, and the final full-suite gate is where it surfaces.** T5 flipped the
-  canonical Keycloak issuer to `http://localhost:8080/realms/shield`; T4's
-  `test_oidc_exchange.py` had baked in the pre-T5 `keycloak:8080` issuer and leaned
-  on the config default, so every happy-path case started failing with an issuer
-  mismatch the catch-all message masked. The running system stayed correct
-  throughout (T7's live `s26` exchange proved it end to end); only the unit fixture
-  lagged. Fixing it was correcting a stale constant, not weakening a check. The
-  lesson: when a task changes a default other tests read implicitly, re-run the full
-  `-m unit` suite, not just the touched file, and the wrap-up exit run is the
-  backstop that catches what per-task gates missed.
+  canonical Keycloak issuer; T4's test had baked in the pre-T5 value and leaned on
+  the config default. The running system stayed correct throughout; only the unit
+  fixture lagged.
 
 ## Lessons learned (Sprint 8)
 
 - **A flow that unit tests call green can be broken for every real user.** MFA
   sign-in passed `pytest -m unit` and a Sprint-7 vitest, yet the TOTP field never
-  appeared in a browser. The cause sat three layers deep: `SignInForm` sent
-  `totp: undefined`, next-auth serializes credentials through `URLSearchParams`,
-  and `URLSearchParams` stringifies `undefined` to `"undefined"`, so the backend
-  `!totp` guard saw a truthy value and verified a bogus code. The vitest could not
-  catch it because it mocks `signIn()` and never runs the real serialization. Only
-  a spec driving the actual browser through the real client library exposed it.
-  That is the thesis of this sprint, proven the hard way.
-- **Send the key only when you have a value.** The fix was one line,
-  `...(totp ? { totp } : {})` in place of always passing `totp`. A default of
-  `undefined` is not the absence of a field once it crosses a string-serializing
-  boundary; the silent coercion made a broken auth path look like a routine
-  bad-password rejection.
-- **Idempotency belongs before the expensive side effect, not at the write.** The
-  tech-debt extract guard had to sit before `extract_capabilities()`, not at the
-  version-mint site, or a double-click would still fire the LLM call it was meant
-  to prevent. Guarding at the cheapest correct point is the difference between a
-  fix and a half-fix (Codex flagged exactly this in the plan review).
-- **On an overload-prone box, the per-spec standalone run is the flake arbiter.**
-  Full-suite e2e here repeatedly failed on cold-compile sign-in timeouts under
-  load while every spec passed alone. A spec that dies at `auth.ts` sign-in under
-  load is a documented load flake, never a logic bug; the authoritative full run
-  is the quiet-box shutdown checkpoint.
-
-## Lessons learned (Sprint 7)
-
-- **"Feasible with curl" is not "works through the adapter."** T0's Vertex path
-  was proven by a raw ADC `generateContent` curl, but the first live sweep (T1)
-  still found two defects a keyless unit test could never hit: `google-auth`'s
-  token-refresh transport needs the `[requests]` extra (the unit test mocked
-  `_bearer_token`, so it never exercised the real transport), and gemini-2.5
-  "thinking" ate the output budget and truncated JSON. A real end-to-end sweep is
-  the only thing that exercises the transport and the model's real output shape.
-- **A silent "completed" on a truncated response is a lie.** `_parse_generate_content`
-  returned a half-JSON draft as "completed" and it died downstream as an opaque
-  `JSONDecodeError`. The fix is to fail LOUDLY at the seam: any non-`STOP`
-  `finishReason` now raises and marks the `llm_call` failed with the real reason.
-- **The token rides the header, not the URL.** The Vertex bearer token is sent as
-  an `Authorization` header so an `HTTPStatusError` (which embeds only the request
-  URL) cannot leak it into logs or `llm_calls.error_message` — mirroring the
-  Gemini key-in-header lesson, and unit-locked.
-- **Best-effort side effects must not roll back durable state.** A
-  release-notification SMTP failure is logged loudly but the release still stands
-  — the release is the source of truth. "Fail loudly" means surface the failure,
-  not undo the thing the user already asked for.
-- **A major auth dep bump is behavior-preservation work, not a feature.** The
-  Auth.js v5 migration touched 34 call sites and re-wired the MFA signal (v5
-  normalizes every credentials failure to `CredentialsSignin`, so the MFA branch
-  surfaces via `signIn(...).code`, not `.error`). The bar was every auth e2e green
-  and not one weakened test.
+  appeared in a browser. `SignInForm` sent `totp: undefined`, next-auth serializes
+  credentials through `URLSearchParams`, and `URLSearchParams` stringifies
+  `undefined` to `"undefined"`, so the backend `!totp` guard saw a truthy value.
+  The vitest could not catch it because it mocks `signIn()` and never runs the real
+  serialization. **This lesson recurred in Sprint 10** as deferred item 2: the
+  interview prompt is credited to a mocked vitest and cannot render for any real
+  user.
+- **Send the key only when you have a value.** A default of `undefined` is not the
+  absence of a field once it crosses a string-serializing boundary.
+- **Idempotency belongs before the expensive side effect, not at the write.**
+  Guarding at the cheapest correct point is the difference between a fix and a
+  half-fix.
+- **On an overload-prone box, the per-spec standalone run is the flake arbiter.** A
+  spec that dies at `auth.ts` sign-in under load is a documented load flake, never
+  a logic bug; the authoritative full run is the quiet-box shutdown checkpoint,
+  and failing that, CI's fresh runner.
+</content>

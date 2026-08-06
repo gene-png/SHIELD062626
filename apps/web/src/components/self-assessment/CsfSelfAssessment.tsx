@@ -13,6 +13,7 @@ import { CsfQuestionnaire } from "@/components/admin/csf/CsfQuestionnaire";
 import { SelfAssessmentSubmitted } from "@/components/self-assessment/SelfAssessmentSubmitted";
 import {
   fetchCatalog,
+  fetchInterviewQuestionnaire,
   fetchSelfAssessment,
   patchSelfAssessmentAnswer,
   submitSelfAssessment,
@@ -23,6 +24,7 @@ import type {
   CsfAnswerPatch,
   CsfAssessment,
   CsfCatalog,
+  CsfInterviewQuestion,
 } from "@/lib/csf/types";
 
 import type { JSX } from "react";
@@ -66,6 +68,19 @@ function filterCatalogByProfile(
   return { ...catalog, functions, total_subcategories: total };
 }
 
+/** Index the tier-resolved interview prompts by the subcategory each informs. */
+function indexPromptsByCode(
+  questions: CsfInterviewQuestion[],
+): Record<string, CsfInterviewQuestion[]> {
+  const map: Record<string, CsfInterviewQuestion[]> = {};
+  for (const question of questions) {
+    for (const code of question.csf_subcategories) {
+      (map[code] ??= []).push(question);
+    }
+  }
+  return map;
+}
+
 export function CsfSelfAssessment({
   serviceId,
 }: {
@@ -80,14 +95,27 @@ export function CsfSelfAssessment({
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [submitted, setSubmitted] = React.useState(false);
+  const [promptsByCode, setPromptsByCode] = React.useState<
+    Record<string, CsfInterviewQuestion[]>
+  >({});
 
   React.useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchCatalog(), fetchSelfAssessment(serviceId)])
-      .then(([cat, a]) => {
+    // The interview prompts are what turn a bare outcome into a question a
+    // client can answer, so a failed fetch goes to the error state with the two
+    // other loads rather than leaving the questions bare (S6).
+    Promise.all([
+      fetchCatalog(),
+      fetchSelfAssessment(serviceId),
+      fetchInterviewQuestionnaire(serviceId),
+    ])
+      .then(([cat, a, questionnaire]) => {
         if (cancelled) return;
         setCatalog(cat);
         setAssessment(a);
+        setPromptsByCode(
+          questionnaire ? indexPromptsByCode(questionnaire.questions) : {},
+        );
         if (a?.client_target_tier) setTarget(a.client_target_tier);
         if (a && a.status !== "draft") setSubmitted(true);
       })
@@ -251,17 +279,33 @@ export function CsfSelfAssessment({
             everything before anything is processed.
           </p>
           {profileLabel ? (
-            <p className="mb-4 text-xs text-ink-tertiary">
-              Showing the {total} outcomes that apply to your{" "}
-              <span className="font-medium text-ink-secondary">
-                {profileLabel} impact
-              </span>{" "}
-              profile.
-            </p>
+            <div className="mb-4">
+              <p className="text-xs text-ink-tertiary">
+                Showing the {total} outcomes that apply to your{" "}
+                <span className="font-medium text-ink-secondary">
+                  {profileLabel} impact
+                </span>{" "}
+                profile.
+              </p>
+              <details className="mt-1" data-guidance-for="impact-profile">
+                <summary className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700">
+                  What is an impact profile?
+                </summary>
+                <p className="mt-1 rounded-md border border-border-subtle bg-surface-sunken p-2.5 text-xs text-ink-secondary">
+                  It is how sensitive the systems in this assessment are, on the
+                  FIPS 199 scale federal programs use. The higher the profile,
+                  the more outcomes are in scope, because a higher profile
+                  covers everything a lower one does and more. Your analyst set
+                  yours during intake, so tell them if it looks wrong.
+                </p>
+              </details>
+            </div>
           ) : null}
           <CsfQuestionnaire
             catalog={filteredCatalog}
             answersByCode={answersByCode}
+            questionsByCode={promptsByCode}
+            promptAudience="client"
             onAnswerUpdate={onAnswerUpdate}
           />
         </CardBody>

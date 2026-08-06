@@ -161,7 +161,7 @@ export function Step5Notes({
               svc === "zero_trust_dod" ? (
                 <div className="mt-3 rounded-md border border-border-subtle bg-surface-sunken p-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-brand-500">
-                    Assessment target — required
+                    Assessment target (required)
                   </p>
                   <p className="mt-1 text-xs text-ink-secondary">
                     Tell us the maturity you&apos;re aiming for. Your consultant

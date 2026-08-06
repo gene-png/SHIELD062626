@@ -58,6 +58,18 @@ const preset = {
           "neutral-fg": "var(--status-neutral-fg)",
           "neutral-border": "var(--status-neutral-border)",
         },
+        tier: {
+          "negligible-bg": "var(--tier-negligible-bg)",
+          "negligible-fg": "var(--tier-negligible-fg)",
+          "low-bg": "var(--tier-low-bg)",
+          "low-fg": "var(--tier-low-fg)",
+          "medium-bg": "var(--tier-medium-bg)",
+          "medium-fg": "var(--tier-medium-fg)",
+          "high-bg": "var(--tier-high-bg)",
+          "high-fg": "var(--tier-high-fg)",
+          "critical-bg": "var(--tier-critical-bg)",
+          "critical-fg": "var(--tier-critical-fg)",
+        },
       },
       borderRadius: {
         xs: "var(--radius-xs)",

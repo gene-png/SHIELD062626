@@ -363,7 +363,7 @@ export function AuditViewer(): JSX.Element {
       ) : tab === "activity" ? (
         <div data-testid="audit-activity-table">
           <DataTable
-            caption="Append-only activity log — read-only."
+            caption="Append-only activity log. Read-only."
             columns={activityColumns}
             rows={entries}
             rowKey={(e) => e.id}
@@ -378,7 +378,7 @@ export function AuditViewer(): JSX.Element {
       ) : (
         <div data-testid="audit-ai-table">
           <DataTable
-            caption="Append-only AI egress log — read-only."
+            caption="Append-only AI egress log. Read-only."
             columns={aiColumns}
             rows={calls}
             rowKey={(r) => r.id}

@@ -11,9 +11,9 @@ from __future__ import annotations
 import io
 from collections.abc import Sequence
 from dataclasses import dataclass
-from html import escape
 from typing import Any
 
+from app import export_style
 from app.risk.engine import (
     IMPACT_ORDER,
     LIKELIHOOD_ORDER,
@@ -92,7 +92,7 @@ def _source(e: Any) -> str:
 
 def render_xlsx(ctx: RiskExportContext) -> bytes:
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill
+    from openpyxl.styles import Font
 
     wb = Workbook()
     ws = wb.active
@@ -120,7 +120,7 @@ def render_xlsx(ctx: RiskExportContext) -> bytes:
         *_GOVERNANCE_COLUMNS,
     ]
     ws.append(header)
-    fill = PatternFill(start_color="FFEEF2F7", end_color="FFEEF2F7", fill_type="solid")
+    fill = export_style.xlsx_header_fill()
     for col in range(1, len(header) + 1):
         cell = ws.cell(row=1, column=col)
         cell.font = Font(bold=True)
@@ -171,9 +171,9 @@ def _summary_lines(ctx: RiskExportContext) -> list[str]:
     return [
         f"Total entries: {len(ctx.entries)}",
         f"Critical + High: {crit_high}",
-        f"By axis — detection {ac['detection']}, prevention "
+        f"By axis: detection {ac['detection']}, prevention "
         f"{ac['prevention']}, response {ac['response']}",
-        "By recommended action — " + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
+        "By recommended action: " + ", ".join(f"{k} {v}" for k, v in acts.items() if v),
     ]
 
 
@@ -188,28 +188,21 @@ def _legend_rows() -> list[list[str]]:
 
 def render_pdf(ctx: RiskExportContext) -> bytes:
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.platypus import (
         PageBreak,
         Paragraph,
-        SimpleDocTemplate,
         Spacer,
         Table,
         TableStyle,
     )
 
     out = io.BytesIO()
-    doc = SimpleDocTemplate(
+    doc = export_style.new_pdf_doc(
         out,
-        pagesize=letter,
-        leftMargin=0.6 * inch,
-        rightMargin=0.6 * inch,
-        topMargin=0.7 * inch,
-        bottomMargin=0.7 * inch,
-        title=f"Risk Register — {ctx.client_legal_name}",
-        author="SHIELD by Kentro",
+        title=export_style.metadata_title("Risk Register", ctx.client_legal_name),
+        side_margin_in=export_style.SERVICE_PAGE_MARGIN_IN,
     )
     styles = getSampleStyleSheet()
     h1 = styles["Title"]
@@ -221,9 +214,14 @@ def render_pdf(ctx: RiskExportContext) -> bytes:
         t.setStyle(
             TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        colors.HexColor(export_style.SURFACE_SUNKEN_HEX),
+                    ),
                     ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d6dae3")),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor(export_style.BORDER_HEX)),
                     ("FONTSIZE", (0, 0), (-1, -1), 8),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ]
@@ -232,10 +230,11 @@ def render_pdf(ctx: RiskExportContext) -> bytes:
         return t
 
     story: list = [
-        Paragraph(f"Risk Register (v{ctx.version})", h1),
-        # Paragraph parses reportlab mini-XML: a bare "&" (e.g. an "R&D Corp"
-        # client) re-emits as an unknown entity with a synthesized semicolon.
-        Paragraph(escape(ctx.client_legal_name), body),
+        Paragraph(
+            export_style.escaped_title(f"Risk Register (v{ctx.version})", ctx.client_legal_name),
+            h1,
+        ),
+        Paragraph(export_style.escaped_line(ctx.client_legal_name), body),
         Spacer(1, 0.2 * inch),
         Paragraph("Summary", h2),
     ]
@@ -304,7 +303,7 @@ def render_docx(ctx: RiskExportContext) -> bytes:
         to_bytes,
     )
 
-    doc = new_document(f"Risk Register — {ctx.client_legal_name}")
+    doc = new_document(export_style.metadata_title("Risk Register", ctx.client_legal_name))
     add_title(doc, f"Risk Register (v{ctx.version})", ctx.client_legal_name)
 
     add_heading(doc, "Summary")

@@ -368,7 +368,7 @@ export function ZtSelfAssessment({
                             void onAnswerUpdate(ans.id, { notes: v });
                           }}
                           className="mt-2 w-full rounded-md border border-border bg-surface-card p-2 text-sm text-ink-primary focus:border-brand-500 focus:outline-hidden"
-                          placeholder="Evidence, references, exceptions…"
+                          placeholder="Name the tool, policy, or process behind this answer: what enforces it, where it is written down, and who runs it."
                         />
                       </details>
                     </li>

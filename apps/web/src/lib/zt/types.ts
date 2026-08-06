@@ -55,6 +55,12 @@ export interface ZtAssessment {
   documents_stale?: boolean;
   answers: ZtAnswer[];
   client_target_stage: number | null;
+  // Persisted Run-AI narratives (API migration 0034). Absent or null means the
+  // assessment carries no narrative, and the deliverable renders no section for
+  // it — never an empty heading.
+  roadmap_summary?: string | null;
+  executive_summary?: string | null;
+  pillar_narratives?: Record<string, string> | null;
 }
 
 export interface ZtAnswerPatch {

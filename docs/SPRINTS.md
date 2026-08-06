@@ -121,7 +121,7 @@ recorded in `docs/design-systems.md`, which found web-side color that no theme c
 It runs first because it is pure refactor with no visual change, and because it touches
 files S7 and S8 also touch.
 
-- [ ] **S0 · Web color moves onto tokens. No visual change.**
+- [x] **S0 · Web color moves onto tokens. No visual change.**
       Scope: `apps/web/src/lib/risk/matrix.ts`, `components/admin/risk/RiskRegisterDashboard.tsx`,
       `packages/design-system/src/tokens.css`, `src/tailwind-preset.ts`, and the six files
       using a token that does not exist. Every hex stays the value it is today; this task
@@ -147,7 +147,7 @@ files S7 and S8 also touch.
   - The full `s16-axe` sweep still passes, and no existing vitest or e2e assertion changed.
     Evidence: the gate output plus a diff showing no edits to existing test assertions.
 
-- [ ] **S1 · Shared export style module and five-exporter adoption (D-036).**
+- [x] **S1 · Shared export style module and five-exporter adoption (D-036).**
       Scope: new `apps/api/app/export_style.py` as the single home for deliverable styling,
       adopted by `app/{tech_debt,attack,csf,zt,risk}/exporters.py` and `playbook_export.py`.
       Brand hexes documented against `packages/design-system` tokens: ink `#0e1220`, border
@@ -180,7 +180,7 @@ files S7 and S8 also touch.
   - D-036 appended to DECISIONS.md.
     Note: new module under `app/` means `docker compose restart api`.
 
-- [ ] **S2 · ATT&CK deliverable renders curated evidence and a tactic heatmap (D-035).**
+- [x] **S2 · ATT&CK deliverable renders curated evidence and a tactic heatmap (D-035).**
       Scope: `app/attack/exporters.py` and the `routes/attack.py` context builder.
       Acceptance criteria:
   - The Coverage sheet carries Detection tools, Prevention tools, Response tools, and
@@ -207,7 +207,7 @@ files S7 and S8 also touch.
     row's tools and rationale at `routes/attack.py:593-599`, so those fields are AI-applied
     unless the consultant edited or locked them, and no acceptance state exists yet.
 
-- [ ] **S3 · CSF released deliverable adopts the POA&M machinery and tier heatmap.**
+- [x] **S3 · CSF released deliverable adopts the POA&M machinery and tier heatmap.**
       Scope: `routes/csf.py` release/export path plus `app/csf/exporters.py`.
       Acceptance criteria:
   - The release path loads `CsfGapAction` rows and passes them into `build_context`.
@@ -230,7 +230,7 @@ files S7 and S8 also touch.
   - A zero-actions assessment still renders. Evidence:
     `tests/unit/test_csf_deliverable_routes.py`, the C0-pattern case.
 
-- [ ] **S4 · ZT roadmap and persisted AI narratives, migration `0034_zt_narratives`.**
+- [x] **S4 · ZT roadmap and persisted AI narratives, migration `0034_zt_narratives`.**
       Highest risk in the batch. Scope: the migration, `schemas/zt.py`, `routes/zt.py`,
       `app/zt/exporters.py`, `apps/web/src/lib/zt/types.ts`.
       Acceptance criteria:
@@ -271,7 +271,7 @@ files S7 and S8 also touch.
     renders `"No evidence attached"`. Evidence: same file, one case per branch.
     Note: `alembic upgrade head` in-container before any later e2e.
 
-- [ ] **S5 · Demo evidence depth: seed, fixtures, tech-debt narrative.**
+- [x] **S5 · Demo evidence depth: seed, fixtures, tech-debt narrative.**
       Scope: `scripts/seed_demo.py`, `app/ai/fixtures.py`, `app/tech_debt/exporters.py`.
       Acceptance criteria:
   - The seed replaces the every-25th hardcoded sentence at `:811-815` with systematic
@@ -296,7 +296,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     `tests/unit/test_exporters.py`, a narrative contract case.
   - SMOKE section 26 boxes re-pointed to the evidence-rich seed.
 
-- [ ] **S6 · Questionnaire guidance: make every question answerable.**
+- [x] **S6 · Questionnaire guidance: make every question answerable.**
       Scope: `CsfQuestionnaire.tsx`, `ZtQuestionnaire.tsx`, `CsfSelfAssessment.tsx`, new
       `apps/web/src/lib/guidance/`, new `CsfMaturityReference.tsx`. Author content under
       `/writing-style`.
@@ -322,7 +322,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     and select-on-Enter contract and the auto-save PATCH-flood guard at
     `TierPicker.tsx:32-37`. Evidence: the diff touches neither file.
 
-- [ ] **S7 · Workspace and platform comprehension.**
+- [x] **S7 · Workspace and platform comprehension.**
       Scope: new `components/admin/WorkflowSteps.tsx`, `CsfPlaybookPanel.tsx`,
       `/admin/management`, `HomeDashboard.tsx`, `CsfSelfAssessment.tsx`. Scheduled before S8,
       which touches the same workspace files.
@@ -339,7 +339,7 @@ T1001"`. Alignment, never weakening. Evidence: the commit diff shows the spec pi
     Impact Profile explainer renders where `profileLabel` does at
     `CsfSelfAssessment.tsx:253-261`. Evidence: vitest case asserting all five labels.
 
-- [ ] **S8 · AI transparency, consultant-facing (D-037).**
+- [x] **S8 · AI transparency, consultant-facing (D-037).**
       Scope: `routes/admin.py`, the four workspaces, new `HowAiWorks.tsx`, risk register rows.
       Acceptance criteria:
   - `AiStatusBanner` mounts in the three unbannered workspaces (attack, csf, zt). Evidence:
@@ -361,6 +361,17 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - D-037 appended to DECISIONS.md.
 
 - [ ] **S9 · e2e proofs and SMOKE sections 33, 34, 35.**
+      `needs-human: criterion 1's interview-prompt clause` — the prompt cannot render in ANY
+      environment. The `questions` table is empty, `seed_demo.py` never populates it, and the
+      loader `scripts/load_csf_tier_questionnaires.py` is referenced only by a docstring and a
+      SMOKE line; nothing in CI, compose or `demo-reset` invokes it. Running reference data into
+      the shared demo database is a human decision.
+      `needs-human: criterion 5's green full-suite run` — three attempts, none green (checkpoint 1
+      2 failed/49 passed, checkpoint 2 1 failed/50 passed, driver warmed+uncontended 2 failed/56
+      passed). All 58 runnable tests pass across runs, but no single green summary exists. The
+      plan's own loop protocol says CI's fresh-runner E2E job is authoritative; that is the
+      honest arbiter here.
+      Criteria 2, 3 and 4 are met with evidence — see the Log line.
       Scope: extend existing specs, add exactly one new file.
       Acceptance criteria:
   - `s3-selfassessment.spec.ts` proves a client sees tier guidance, an interview prompt,
@@ -384,7 +395,7 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - The full host e2e suite is green after `--force-recreate web`, `alembic upgrade head`,
     and a re-seed. Evidence: the Playwright run summary pasted into the log line.
 
-- [ ] **S10 · Prose scrub.**
+- [x] **S10 · Prose scrub.**
       First to cut. Load `/writing-style` and sweep UI copy plus export, fixture, and seed
       prose, including everything S2 through S8 authored. Code identifiers, log prefixes, and
       UI glyphs are exempt.
@@ -394,6 +405,16 @@ output"`. Evidence: `tests/unit/test_admin_routes.py` asserting the detail strin
   - The full push gate is green afterwards. Evidence: gate output in the log line.
 
 - [ ] **S11 · Wrap-up.**
+      `needs-human: the "full e2e green on a quiet box" half of the last criterion` — four
+      attempts in this batch, none green. S11's own run at final HEAD, warmed and uncontended,
+      gave `1 failed / 57 passed / 6 skipped (33.2m)`, and the failure arbitrated standalone.
+      **The mechanism is now measured rather than assumed:** after the 33-minute run the
+      pre-warmed routes had gone cold again (`/` back to 6.3s from 0.5s), because next-dev evicts
+      compiled routes under sustained load. The back half of a serialized suite re-pays the cold
+      compiles the front half already paid, so warming cannot fix it and neither can a larger
+      timeout. Sharding or a production build would; both are test-infra work outside this batch.
+      CI's fresh-runner E2E job is the authoritative arbiter per this plan's own loop protocol.
+      The other four criteria are met — see the Log line.
       Acceptance criteria:
   - SMOKE final pass over the section 10 note, section 26, and sections 33 to 35. Every box
     is checked only with its proving spec or test filename beside it. Evidence: the diff.
@@ -432,3 +453,487 @@ Checkpoints append `checkpoint · pass|fixed · counts`. Shutdown appends
 
 - 2026-07-30 · backlog authored from SPRINT_10.md, translated to the loop-sprint-cron
   format on `chore/reconcile-ops-pipeline`. Not yet launched.
+- 2026-08-03 · S0 · `docs/evidence/S0/served-css-colourless.md`,
+  `apps/web/src/lib/risk/matrix.test.ts`,
+  `apps/web/src/components/admin/risk/RiskRegisterDashboard.test.tsx` · `5b575c3`.
+  Driver-verified independently of the runner: `gate: shield/push passed (7 steps)`;
+  `s16-axe` 5 passed (1.6m) re-run after `--force-recreate web` because the runner's own
+  sweep predated two later edits; all ten tier values identical in the **served**
+  stylesheet to `git show main:apps/web/src/lib/risk/matrix.ts`;
+  `grep -rn "surface-muted" apps/web/src` exit 1, no output; both test files added, zero
+  existing assertions modified. vitest 47→56.
+  Two notes for later tasks. **The criterion text contains an ordering trap**: it names the
+  tokens `negligible,low,medium,high,critical` but lists the hexes starting with
+  _critical's_ pair, so a positional reading inverts the whole ramp and every frozen-table
+  test still passes. The runner keyed by name and got all ten right. And **the axe sweep
+  never visits the risk register**, so its pass proves no regression on the surfaces it
+  does visit, not that the recoloured matrix is accessible; what carries that is the
+  byte-identical values, which make a cell-text contrast change impossible.
+- 2026-08-03 · S1 · `docs/evidence/S1/rendered-output-unchanged.md`,
+  `apps/api/tests/unit/test_export_style.py` · `57068f3`. Driver-verified independently:
+  the tech-debt deliverable was rendered from a fixed context on the post-S1 tree and again
+  with `apps/api/app` checked out at `87c6df7`, and the two dumps — extracted PDF text plus
+  every XLSX cell value, fill ARGB and bold flag — diffed `IDENTICAL`, ampersand org name
+  included. `gate: shield/push passed (7 steps)`. Margins stay split, 0.6in across the five
+  service exporters and 0.7in in `playbook_export.py`, with `new_pdf_doc()` parameterizing
+  rather than unifying. `grep -rn 'PatternFill(start_color="FF' apps/api/app` exit 1. One
+  test file added, zero existing assertions modified. pytest 734→762. D-036 at
+  `DECISIONS.md:880`.
+  **This task's third criterion could not fail.** It asks `grep -c 'html.escape'` over the
+  five exporters to return 0; it returned 0 on the pre-S1 tree too, because PR #50 wrote
+  `from html import escape` and called bare `escape(...)`. The runner caught this, said so,
+  and substituted the check that bites — bare `escape(` over the six modules, now empty.
+  Together with S0's inverted-hex ordering, that is two of the first two sprints whose
+  written evidence clause was defective. Read the remaining clauses as drafts, not as
+  contracts: an evidence command that passes before the work begins certifies nothing.
+  The brand-navy 7-step ramp S1 built is AA-checked but **renders nothing yet**; adopting it
+  would change a colour clients have already received, so it waits for the visual batch.
+- 2026-08-03 · S2 · `docs/evidence/S2/empty-input-run.md`,
+  `apps/api/tests/unit/test_attack_exporters.py`,
+  `apps/api/tests/unit/test_attack_evidence_join.py` · `e7cd945`. Driver-verified with the
+  protocol's mandatory **empty-input run**, since S2 changes a customer-visible artifact:
+  the ATT&CK deliverable rendered for an assessment with all 633 techniques unscored and
+  nothing curated invents no tool name, reports an honest `0 of 0 scored techniques cite at
+least one tool`, and fills all 633 evidence cells with the explicit `No evidence
+attached` state. `gate: shield/push passed (7 steps)`. `gap_direction()` read directly:
+  exactly two returns, both citation facts. Both grep guards from S1 still empty. One import
+  line removed from the existing attack test, zero assertions changed; DECISIONS.md a pure
+  addition with D-035 ordered between D-034 and D-036.
+  **Open item, needs a human, carried out of S2 deliberately.** The PDF and DOCX head the
+  gap list `Top remediation gaps (N of M shown)` (`app/attack/exporters.py:435` and `:540`).
+  It predates S2 (Work Order C4) and is a heading rather than a Gap Direction cell, so it is
+  outside S2's criteria — but it frames gaps as remediation targets immediately above cells
+  D-035 forbids from doing so, and the empty-input render shows it reading `Top remediation
+gaps (0 of 0 shown)` on a report that scored nothing. The runner declined to change
+  client-visible copy outside its criteria, which was the right call. Either pull the fix
+  forward or let S10's prose scrub take it, but do not let it close unnoticed.
+  Third consecutive sprint with a defective evidence clause: criterion 4 requires the stat
+  and methodology note in **PDF and DOCX** but its evidence names only "substring assertions
+  over extracted PDF text", so the DOCX half could not fail. The runner substituted a real
+  DOCX paragraph extraction and said so.
+- 2026-08-03 · S3 · `docs/evidence/S3/coverage-defect.md`,
+  `apps/api/tests/unit/test_csf_exporters.py`,
+  `apps/api/tests/unit/test_csf_deliverable_routes.py` · `19a1fe6` + fix `d3864f3`.
+  **Rejected on first submission, then accepted.** The empty-input run caught a
+  client-facing false reassurance in code S3 wrote: at 3 of 106 subcategories scored, the
+  report advised `maintain the current controls and re-assess on the next cycle`, because
+  `analyze_gaps` raises a gap only for an ANSWERED subcategory below target, so 0/106 and
+  106/106 both reach the zero-gap branch. The first commit's gate was green and all fourteen
+  of its tests passed; every zero-gap case they exercised used a fully scored assessment, so
+  the branch was correct for the only input it was ever given. Fixed into three branches —
+  nothing scored, partially scored, fully scored — with the adequacy claim surviving only at
+  full coverage. Driver re-rendered all three and each asserts `total_gap_count == 0` first,
+  proving the branch was narrowed rather than bypassed. `gate: shield/push passed (7 steps)`.
+  Both grep guards empty; one import line widened, zero assertions changed across both
+  commits. pytest `test_csf_exporters` 10→24, `test_csf_deliverable_routes` 6→8.
+  The runner found three weak criteria on its own before the driver found the fourth:
+  "a zero-actions assessment still renders" passes on a bare no-exception, so it substituted
+  assertions about what renders; the `priority_override` fixture needed the computed value to
+  differ from the override, and it added `assert computed != "P1"` as a vacuity guard; and one
+  of its own new tests passed against the old tree, so it strengthened it.
+  **Open item, needs a human.** The same render headlines `Overall maturity: Repeatable` on
+  2.8% coverage. The coverage figure sits beside it so it is not a lie, but a headline
+  maturity rating computed from 3 of 106 answers is the same class of problem one layer up.
+  Predates S3, covered by no criterion. Whether a coverage floor should gate the headline
+  rating is a product decision.
+- 2026-08-03 · checkpoint · pass · gate 7/7 · bandit clean · secrets clean · e2e 49 passed /
+  6 skipped by design / 2 load-flakes green standalone · tenant isolation holds.
+  Ran at `9c49382` after four completed sprints. Nothing fixed, nothing committed by the
+  checkpoint itself. The three things the per-sprint gates never cover all ran here: bandit
+  (CI-only), the dependency audits, and the full host e2e suite, which had not run since S0
+  changed how the risk matrix renders. `s8-risk-register:206` exercises that 5x5 matrix and
+  passed even under load, which is the S0 concern cleared end to end. The two e2e failures
+  were both `waitForURL` timeouts in the shared sign-in helper, never a content assertion;
+  `/sign-in` measured 14.4s cold against a 15s budget, and both specs passed standalone.
+  **Driver-verified the security claim rather than accepting it.** Both new evidence joins
+  carry `Artifact.client_id == client_id` in the SQL predicate (`routes/attack.py:919`,
+  `routes/csf.py:1782`), so a foreign artifact never enters the result map; both exporters
+  then raise on an unresolved id rather than degrading into `No evidence attached`
+  (`attack/exporters.py:94`, `csf/exporters.py:115`). A cross-tenant artifact cannot reach a
+  deliverable, and the 409 is not an existence oracle because a foreign id and a nonexistent
+  id take the identical path.
+  **The documented dependency posture is stale and should be corrected.** `CONTEXT.md`
+  records one HIGH (`sharp`) plus one moderate (`postcss`). Actual root `pnpm audit` is
+  **5 high + 2 moderate**: `sharp@0.34.5` HIGH as documented, `postcss@8.4.31` now carrying
+  four advisories of which **two are HIGH** rather than one moderate, and
+  `brace-expansion@1.1.16` **2× HIGH, undocumented anywhere** (transitive via
+  `minimatch@3.1.5`). None is branch-introduced — this branch touches no lockfile or
+  manifest, so `main` audits identically — but the recorded posture understates reality and
+  all three want the same unscheduled lockfile bump. `npm audit` in `e2e/` is clean, and the
+  endpoint did not 410 this time.
+  **Two pre-existing security findings, reported not fixed, neither a branch regression.**
+  (1) XLSX formula injection: openpyxl types a leading `=` as a formula, and free-form
+  `Notes`/`Rationale` cells already carry user text across all six exporters; S2 and S3 add
+  one more user-controlled column to a vector that already existed. A real fix spans six
+  modules and is not a one-pass TDD change. (2) `evidence_artifact_id` is written
+  unvalidated at `attack.py:401` and `csf.py:528`, both admin-gated and both unchanged by
+  this branch: a nonexistent UUID raises IntegrityError while a foreign-tenant UUID commits,
+  which is a boolean existence oracle at PATCH. Data-integrity gap rather than privilege
+  escalation, since platform admins hold cross-tenant reach by design; the new join is what
+  stops it becoming a leak in a deliverable.
+- 2026-08-03 · S4 · `docs/evidence/S4/race-window-and-sparse-render.md`,
+  `apps/api/tests/unit/test_zt_run_ai.py`, `apps/api/tests/unit/test_zt_exporters.py`,
+  `apps/api/tests/unit/test_zt_routes.py` · `3590500`. The highest-risk task in the batch,
+  accepted first time.
+  **The race criterion was verified structurally, not accepted.** The test patches
+  `app.routes.zt.audit`, and that call sits strictly after the status check and strictly
+  before the durable write in BOTH shapes: pre-fix `b53b6af` had check `:510` → audit `:524`
+  → commit `:532`; post-fix has audit `:584` → conditional UPDATE `:596` → commit `:603`. So
+  the injection is genuinely inside the window the criterion names, and the required red run
+  against the pre-fix shape returned **200** with the narrative persisted into a parent that
+  had gone DISCARDED mid-window. The fix is D-031's shape — conditional
+  `UPDATE ... WHERE status IN ('draft','submitted')`, `rowcount != 1` raises typed 409
+  `assessment_not_editable` — not a third mechanism. The test carries
+  `assert fired, "the seam moved out of the window"` so it cannot silently stop biting.
+  Disclosed limitation, the runner's own: the injection is emitted SQL on the request session
+  rather than a second connection, because SQLite already holds a RESERVED write lock there.
+  The criterion asks for a monkeypatch and what it tests is exercised faithfully.
+  Migration `0034` → `down_revision "0033"`, `batch_alter_table`, all three nullable and
+  additive, `JSON().with_variant(JSONB, "postgresql")`; `alembic current` reports
+  `0034 (head)` in-container. `gate: shield/push passed (7 steps)`. Both grep guards empty;
+  the evidence join filters `Artifact.client_id == client_id` in SQL at `zt.py:1305`, matching
+  attack and csf exactly. One line removed from tests: the `_ctx` signature, widened with
+  keyword-only args defaulting to prior behaviour. pytest 796→814.
+  **Fifth consecutive defective evidence clause**, and this one could not fail by
+  construction: criterion 3 asks for `tsc --noEmit` green with the web type consumed, but
+  adding three _optional_ fields to a TS interface cannot make tsc red, and the scope forbade
+  touching any web file that could consume them. The runner substituted wire-level assertions
+  on the real serialized payload, which is where the contract actually lives.
+  **The runner fixed three S3-shaped defects no criterion covered**, after being warned about
+  the pattern: the ZT PDF/DOCX printed `No gaps at target stage 3 (Advanced).` identically
+  whether all 37 capabilities sat at target or none was scored, the XLSX placeholder was a
+  flat string, and the headline printed against 8% coverage unqualified. Driver re-rendered
+  0/37 and 3/37 and both now state their own coverage — `This is an absence of data, not an
+absence of gaps.`
+  **This answers the CSF open item.** ZT's headline reads `Overall stage: Optimal` at 8.1%
+  coverage but follows with a sentence saying unscored capabilities are excluded from every
+  average "so no stage here describes them". CSF's `Overall maturity: Repeatable` at 2.8% has
+  no such qualifier. The remedy already exists one service over, so closing that item is
+  copying an established pattern rather than making a new decision.
+  Noted, not a defect: `ZtRunAiResponse.pillar_narratives` carries a mutable `{}` default
+  (`schemas/zt.py:173`), but it is pre-existing at `b53b6af`, outside the criterion's named
+  class `ZtAssessmentResponse` (which correctly uses `| None = None`), and Pydantic v2
+  deep-copies defaults per instance.
+- 2026-08-04 · S5 · `docs/evidence/S5/pin-cycles-and-thin-data.md`,
+  `apps/api/tests/unit/test_ai_runtime_fixtures.py`, `apps/api/tests/unit/test_exporters.py`
+  · `ed639e3`. `gate: shield/push passed (7 steps)`. The four pinning specs green: 8 passed
+  (8.5m), no flake, no standalone re-run needed.
+  **The one sanctioned pin was diffed, not trusted.** `s5-attack.spec.ts:151` changed
+  `assessment` to `evidence` inside the same `page.getByText(/…/)` and the same
+  `toBeVisible()` — alignment at identical strictness. Across all of S5 the only lines removed
+  from any test or spec are that pin and one widened import. `_MITRE_STATUS_CYCLE` is
+  byte-identical at `fixtures.py:98`; no cycle tuple or arithmetic line was removed or
+  modified, and the runner's mutation check confirms the pin goes red when a cycle value moves.
+  Driver re-rendered the tech-debt paragraph four ways (empty list, uncosted rows, no
+  dispositions, mixed): clean in every case, no dollar figure printed without a costed Cut row,
+  lower-bound caveat intact.
+  **S5 found a bug that made the seed unrunnable on a fresh database.** `_zt_stage_for` emitted
+  stage 4 for DoD ZTRA, whose ladder stops at 3, and S1's `graded_hex` raises rather than
+  clamps, so `render_zt_xlsx` died with `ValueError: level must be within 1..3, got 4`. Fixed
+  by clamping per framework via `level_count`. This is FAIL LOUDLY earning its keep: bad seed
+  data that had been silently accepted became a crash the moment a raising helper touched it,
+  and the live demo DB predates S1, which is why nobody had seen it.
+  Three criteria could not fail and were substituted: the cycle regression pin (passes with no
+  work, and re-deriving expected values from the code under test can never fail — replaced with
+  literal pins plus a mutation check), the two-run row-count evidence (no such log line
+  existed and the skip path printed nothing — replaced with `_print_row_census` on both paths,
+  `seed_demo.py:1369` and `:1420`), and the SMOKE re-point (no failure condition — replaced
+  with an explicitly unchecked box naming what proves what). The runner also caught its own
+  prose committing this batch's defect once, claiming "a documented response play exists" for a
+  covered row citing no response tool, and pinned the fix.
+  **Same defect, third service, now at the header layer.** Rescoping a driver check revealed
+  the pre-existing Summary header reads `Total annual cost: $0` when rows carry _unrecorded_
+  costs — asserting zero where the truth is "not recorded". With CSF's unqualified
+  `Overall maturity` and ZT's now-qualified `Overall stage`, that is three of four services with
+  one root cause, found by three independent empty-input runs, and ZT already holds the fix
+  pattern. Wants one consistent absent-versus-zero treatment across all four, not three nits.
+  **Operational gap S9 will hit.** The seed skips when any Service exists, so the live demo
+  database still carries the OLD ATT&CK evidence (`zt_narrated=0` against `services=37`). Only
+  `demo-reset --demo` or a wipe picks up the new seed, and that path is destructive and opt-in
+  per D-033. S9's criteria assume the evidence-rich seed is live, so that reset has to be run
+  deliberately before S9's suite.
+- 2026-08-04 · S6 · `docs/evidence/S6/unrunnable-criterion-and-findings.md`,
+  `apps/web/src/lib/guidance/guidance.test.ts`, plus vitest beside each of the three
+  components · `1251a18`. `gate: shield/push passed (7 steps)`. vitest 56→79 across 13→17
+  files, zero skips. Pickers verified untouched: `git diff --name-only | grep -E
+"TierPicker|ZtStagePicker"` returns nothing, so the roving-tabindex contract and the
+  PATCH-flood guard are intact. No new hex; all six colour utilities added exist in
+  `tokens.css` and the preset.
+  **Criterion 3 was not weak, it was unrunnable.** It asks for a vitest pin against
+  `TIER_DEFINITIONS`, `CISA_STAGES` and `DOD_STAGES`, which live in `apps/api` — but the web
+  service mounts only `./apps/web`, `./packages`, `./package.json` and `./pnpm-workspace.yaml`,
+  and `docker compose exec -T web sh -lc "ls /app/apps"` prints `web` alone. No pin vitest can
+  write is able to read those constants, and the only literal satisfaction is comparing against
+  a hardcoded web-side copy, which passes while the component ignores the wire — the exact drift
+  the criterion exists to prevent. Substitute inverts it: the web layer now carries **no** label
+  or description text, labels render from the catalog payload, and tests feed sentinels
+  (`WIRE-LABEL-1`) so a reintroduced copy fails. Driver-verified by grep: no label string in
+  `lib/guidance/` or `CsfMaturityReference.tsx`. Seventh consecutive defective clause and the
+  first that was impossible rather than merely unfalsifiable.
+  The 6x4 + 4 + 3 completeness test asserts 24 and 7 unique examples and the lookups raise on a
+  missing entry; the runner confirmed it goes red by deleting `PR` tier 3.
+  **Open item: Zero Trust clients get no guidance, and the gap is in the plan.**
+  `ZtSelfAssessment.tsx` mounts `ZtStagePicker` directly (`:13`, `:339`) rather than
+  `ZtQuestionnaire`, and that file is absent from S6's scope list. CSF's questionnaire is shared
+  so one disclosure serves both audiences; ZT's is not. All seven stages of guidance data exist
+  and are tested, but nothing client-side consumes them. The runner honoured scope and flagged
+  it. Closing it is an import plus one element beside the picker.
+  **Open item, highest value found in this run: a swallowed error on the client's only write
+  path.** `CsfSelfAssessment.tsx:172` is a bare `catch {}` around the answer PATCH, a direct
+  violation of `CLAUDE.md` principle 2, and it predates S6. The consequence compounds with what
+  this batch built: a client picks a tier, the optimistic UI shows it saved, the PATCH fails
+  silently, the answer is lost, and the deliverable then reports — honestly, thanks to S3 — that
+  the subcategory is unscored and carries no finding. The newly truthful reporting will
+  faithfully describe a gap that a silent save failure created. The client answered and the
+  report says they did not.
+- 2026-08-04 · S7 · `docs/evidence/S7/recovered-red-run.md`,
+  `apps/web/src/components/admin/WorkflowSteps.test.tsx`, `CsfPlaybookPanel.test.tsx`,
+  `HomeDashboard.test.tsx`, `CsfSelfAssessment.test.tsx` · `517b4b3`.
+  `gate: shield/push passed (7 steps)`. vitest 79→106 across 17→19 files. Pickers,
+  `ZtSelfAssessment.tsx` and the bare `catch {}` all verified untouched, the last byte-identical
+  at `CsfSelfAssessment.tsx:173` despite S7 working inside that file.
+  **A TDD violation, disclosed by the runner and then recovered.** For the playbook-legend
+  criterion it wrote the component before the test, so no red run was observed; the other three
+  criteria had observed reds. An observed red cannot be recreated after the fact, so the driver
+  reverted `CsfPlaybookPanel.tsx` to `b250c4c` and ran its suite: **2 failed | 2 passed (4)**.
+  The tests cannot pass without the implementation. Recorded as a _recovered check_ rather than
+  an observed red, and deliberately not overstated: one failure is a render assertion, the other
+  is `gapPriorityMeaning is not a function`, so part of what fails is the module surface rather
+  than the behaviour. The disclosure is why this was checkable at all — a runner that quietly
+  reordered its narrative would have produced an identical-looking green sprint.
+  Unrecognised statuses fail loudly instead of defaulting to step 1, and the expectation type is
+  `Record<Status, number>` so tsc rejects a new wire status until it is mapped. The home legend
+  makes an unexplained phase structurally impossible (`phaseFor` returns one of five shared
+  objects) and the Gap chips render their legend from the same map that colours them, raising on
+  a missing reading. All four workspaces proved by name, two at non-trivial statuses.
+  **Plan defect, not a code one: `/admin/management` is named in S7's Scope line but carries no
+  acceptance criterion and no evidence clause anywhere.** The runner left it untouched rather
+  than inventing work, which was correct. Either it needs a criterion in a later sprint or that
+  scope line is stale from an earlier draft.
+- 2026-08-04 · checkpoint · pass · gate 7/7 · bandit clean · secrets clean · audits unchanged
+  (5 high + 2 moderate, no lockfile touched) · e2e 50 passed / 6 skipped by design / 1 load
+  flake arbitrated green. Ran at `f58332b` after eight sprints; nothing fixed, nothing
+  committed by the checkpoint.
+  This checkpoint's specific risk was S6 and S7 pouring new copy onto the surfaces the specs
+  drive, where `getByRole` matches by substring — a strict-mode violation would have been a real
+  regression, not a flake. **None occurred.** The single failure
+  (`s7-csf-playbook.spec.ts:312`) was arbitrated as the documented cold-compile flake on four
+  strands: it failed in `signIn`, the test's first action, before any assertion on rendered
+  content; no strict-mode violation or "resolved to N elements" anywhere; **the failure moved**
+  between runs (`:312` failed in-suite then passed standalone while `:150` did the reverse,
+  whereas a selector break is deterministic); and the logs show sign-in succeeding, then the
+  redirect chain paying `/` 10.5s + `/admin` 3.2s + `/admin/queue` 3.4s. Warming those routes
+  and re-running gave `1 passed`, so all 51 runnable tests are green across runs.
+  Driver-verified: the ZT evidence join at `routes/zt.py:1305` carries
+  `Artifact.client_id == client_id` identically to `attack.py:919` and `csf.py:1782`, so no
+  cross-tenant artifact reaches a ZT deliverable; `_persist_run_ai_narratives` needs no
+  client_id predicate because it targets a primary key already authorised by
+  `require_service_in_tenant`.
+  **New finding: CI's bandit never scans `apps/api/scripts`.** `.github/workflows/ci.yml:48`
+  runs `bandit -q -c pyproject.toml -r apps/api/app`, so the whole `scripts/` tree is invisible
+  to it. Scanning it anyway found 7 LOW including `B105` on the documented demo password at
+  `seed_demo.py:129` — harmless and pre-existing from `20afb3d`. The credential is not the
+  finding; the coverage gap is, because a future script could carry a real secret unscanned.
+  **The recorded `evidence_artifact_id` finding has a third instance:** `zt.py:786` joins
+  `attack.py:401` and `csf.py:528`. Same pattern, dating to `fb9c99d`, not a regression.
+  **Correction to how the e2e flake should be fixed.** It is NOT a one-line timeout bump:
+  `e2e/helpers/auth.ts:60-63` already wraps a 15s inner `waitForURL` in
+  `expect(...).toPass({ timeout: 60000 })` and still lost, because the post-login chain pays
+  three sequential cold compiles and each retry can re-enter them. S9 and S11 both require a
+  green full suite, so this will keep recurring on any cold-start run — real test-infra work,
+  small but not trivial, and outside a checkpoint's remit.
+- 2026-08-04 · S8 · `docs/evidence/S8/phantom-token-and-badge.md`,
+  `apps/web/src/components/admin/HowAiWorks.test.tsx`, `AiStatusBanner.test.tsx`,
+  `ZtWorkspace.test.tsx`, `apps/api/tests/unit/test_admin_routes.py` · `56373e2`.
+  **The loop survived a process exit mid-sprint.** The runner was killed with its work
+  uncommitted; HEAD stayed at `4bdc6d8`, the branch stayed in sync, and the work was intact in
+  the tree. Resumed from transcript rather than respawned, since a fresh agent would inherit a
+  half-finished tree it did not write. Finished on attempt 2. Its first gate after resuming
+  correctly reported `BLOCKED` because Docker Desktop had died with the earlier crash; it
+  restarted the stack and re-ran rather than reading five unreachable steps as green.
+  `gate: shield/push passed (7 steps)`. vitest 106→118 across 19→22 files. Client-surface
+  constraint held: `git diff --name-only | grep -E "app/home/|components/home/|
+components/self-assessment/"` returns nothing, and the section 6.4 comment is intact and
+  asserted. The fixture string reassembles to the criterion's text exactly.
+  **A SECOND phantom Tailwind token, and this one matters beyond its seven lines.**
+  `border-border-default` emits nothing: the preset declares `border: { subtle, DEFAULT, strong,
+focus }` and Tailwind flattens `DEFAULT` to the bare name. Proven against the served
+  stylesheet (41130 bytes) rather than by reasoning — `grep -c "border-border-default"` returns
+  **0** while `border-border-subtle` returns 1. Seven uses across five files against 94 of the
+  working class. S0 existed to sweep this exact class of defect and swept only `surface-muted`,
+  the one instance the design sprint grepped for, so a second phantom survived it. The class was
+  never swept systematically; the general fix is a check that every colour utility resolves to a
+  real generated class, not another one-off grep.
+  **The provenance badge is correct and currently cannot discriminate.** The criterion is met
+  with fixtures differing in both `origin` and `trust`, but nothing writes a non-AI origin:
+  `routes/risk.py:270` is the only `RiskEntry` writer and passes `origin="ai_generated"`, the
+  model defaults to the same, and `consultant_entered` appears nowhere in app code. So every
+  register row badges — honest, since every row really is AI-drafted, but a constant label rather
+  than a distinction. It becomes informative only when a consultant-entered write path exists,
+  which the plan places in the next batch. The runner disclosed this itself instead of letting a
+  passing test speak for it.
+  **Red-run honesty, volunteered.** Observed red: info tone, risk badge, all three banner
+  mounts; `HowAiWorks` content was red as a collection failure rather than an assertion. NOT
+  red and disclosed: the warning-tone and renders-nothing cases both passed pre-change because
+  the old banner was warning-toned for every state; the three client-silence guards could not
+  go red without adding AI vocabulary to a forbidden file, so the runner proved the detector
+  fires against files that do carry it; the pytest red was reconstructed by stashing `admin.py`
+  after a first run raced its own edit and passed spuriously. **One test was edited after seeing
+  implementation behaviour** — the CSF proximity assertion, because CSF's Run AI lives in a child
+  component so the shared-ancestor check used for attack and zt legitimately failed against
+  correct code. Replaced with `previousElementSibling`, a tighter claim, and disclosed.
+  D-037 records the client-PDF-versus-client-screen asymmetry as an open boundary rather than
+  resolving it, on the reasoning that an unrecorded inconsistency is the one silently "fixed" by
+  whoever notices it first.
+- 2026-08-04 · S9 · `docs/evidence/S9/two-unmet-criteria.md`, `e2e/smoke/s27-comprehension.spec.ts`,
+  four PDF acceptance contracts in the existing exporter test files · `718234b`.
+  **BOX LEFT UNCHECKED. Two criteria carry `needs-human`; three are met.**
+  Met: `s27-comprehension.spec.ts` (4 tests) plus the s3/s4/s5/s6/s7 extensions all passed inside
+  the driver's own full-suite run; the four PDF contracts assert section order as a subsequence
+  over real extracted bytes with three mutation-checked; SMOKE 33-35 added with per-box spec
+  filenames and four boxes deliberately left unchecked. `gate: shield/push passed (7 steps)`.
+  No application source touched; zero deletion lines across specs and unit tests.
+  **needs-human 1: the interview prompt has no data path in any environment.** `questions` is
+  empty, `seed_demo.py` contains zero references to it, and `load_csf_tier_questionnaires.py` is
+  invoked by nothing — only a docstring and a SMOKE line mention it. **S6 was credited for this
+  feature on a mocked vitest**: its criterion asked for "a vitest case asserting the client label"
+  and got one, with the fetch mocked. The test is honest; the criterion asked for the wrong proof.
+  This is `CONTEXT.md`'s Sprint-8 lesson verbatim — a flow unit tests call green can be broken for
+  every real user — recurring with a different cause.
+  **needs-human 2: no green full-suite run exists after three attempts** (2/49, 1/50, and the
+  driver's warmed uncontended 2 failed/56 passed/6 skipped in 34.6m). All 58 runnable tests pass
+  across runs; the 2 failures arbitrate standalone at `2 passed (1.3m)`. **Driver correction:**
+  both were `s18-home`, and `:180` had failed in the runner's run too, so the driver first called
+  it a reproducible regression. Wrong — `:180` is a pure timing test with no state dependency,
+  `:125` builds its own isolated tenant, and `s27` mutates nothing. The error was treating "quiet
+  box" as a property of how the run started; after 34 minutes of continuous browser work a 20s
+  redirect budget is the first thing to give out. Same structural fragility checkpoint 2
+  measured. The plan's loop protocol names CI's fresh-runner E2E job as authoritative, which is
+  the honest arbiter. **S11 requires the same green run and will hit the same wall.**
+  Five criteria describing things the system does not do, all verified: the interview prompt; ZT
+  client stage guidance (consultant render only); the badge reads `AI-drafted · Admin Assisted`
+  and every row badges; "management purpose copy" predates Sprint 10 (`0fe1096`); the CSF stepper
+  is 5 steps, not 10. Plus a bug correctly left alone: `ZtSelfAssessment.tsx:371` still carries
+  the old Notes placeholder although S6's commit message claims both were updated.
+- 2026-08-04 · S10 · `docs/evidence/S10/pins-moved-nothing-loosened.md` · `73ae76b`.
+  `gate: shield/push passed (7 steps)`. Seven pinned literals moved, prose and pin in the same
+  commit at identical strictness.
+  **Nothing was loosened.** The complete deletion set across `apps/api/tests` and `e2e` is eight
+  lines: five substring `in text` checks, one `==` cell equality, one module constant consumed by
+  two `not in` absence checks, and two regexes — and the regexes got **stricter**, losing a `.*`
+  wildcard (`/capped .* no evidence/` → `/capped, no evidence/`). Nothing became a `toContain`,
+  a permissive regex, conditional, or deleted.
+  **Nothing frozen moved.** `apps/api/app/ai/` has an empty diff, so `_MITRE_STATUS_CYCLE` and the
+  ZT/CSF arithmetic are byte-identical; `s4-techdebt`, `s5-attack` and `s6-zt` have no diff at all,
+  so `s4:115/119/134`, `s5:119/131/194` and `s6:186` could not have moved; `s7` changed exactly two
+  lines at 301/309, leaving `s7:238/249` alone.
+  **No honesty claim was re-inflated** — the check that mattered, since five sprints in this batch
+  made sentences narrower and a scrub is the easiest way to reverse that while looking like an
+  improvement. `zt/exporters.py:200,206` still carry "This is an absence of data, not an absence of
+  gaps" and "this statement says nothing about them"; `attack/exporters.py:61` still says "no field
+  here should be read as verified"; `tech_debt/exporters.py` has an **empty diff** so its lower-bound
+  hedges are byte-identical; the D-035 gap-direction string is unchanged.
+  **Driver methodology note:** a single-line grep for those protected strings showed four of nine
+  "missing". All nine were present — Python splits them across f-string continuations, so only a
+  multiline search finds them. A false alarm was one trusted grep away, and anyone auditing prose in
+  this codebase will hit the same trap.
+  61 em-dashes rewritten rather than swapped (41 sentence splits, 12 colons, 5 commas, 3
+  parentheses); rules 2 through 7 produced zero changes, every hype-list hit being a code
+  identifier. Correctly declined: title separators like `"{org} — {label}"`, which are load-bearing
+  (`test_export_style.py:109` parametrizes the separator set, `test_deliverable_release.py:426`
+  asserts an em-dash is _absent_ from a stripped label, `s6-zt.spec.ts:30` pins a service title),
+  and ~180 em-dashes in comments and docstrings. The runner caught its own subagent editing three
+  out-of-scope lines in `ZtSelfAssessment.tsx` and reverted them pre-commit.
+  Also fixed the stale placeholder S6's commit message claimed to have updated:
+  `ZtSelfAssessment.tsx:371` is now byte-identical to the other two questionnaires and the old
+  string is gone from `apps/web/src`. Nothing pinned it.
+  The runner noted unprompted that criterion 2 ("the full push gate is green afterwards") is a
+  floor rather than a proof, and treated it as one.
+- 2026-08-04 · S11 · `CHANGELOG.md`, `BUILD_REPORT.md`, `CONTEXT.md`, `SMOKE_TEST.md`,
+  `context/dave.md` · `60d7654`. **BOX LEFT UNCHECKED**: four of five criteria met, the
+  full-e2e-green half carries `needs-human`. `gate: shield/push passed (7 steps)` at final HEAD.
+  Met: CHANGELOG `[3.6.0]` with a per-task entry and commit for S0–S11 (S3 as `19a1fe6` plus fix
+  `d3864f3`); BUILD_REPORT synced with all seven gate steps, 28 spec files / 64 tests, migration
+  0034, and D-035/036/037; `CONTEXT.md` rewritten as the end-of-batch snapshot; `context/dave.md`
+  refreshed and **`context/gene.md` never written**; no live-LLM config committed — no `.env`,
+  manifest, or lockfile anywhere in `git diff main`, and every `SHIELD_LLM_MODE=live` hit is
+  documentation, a refusal message, or the `live` pytest marker.
+  **The e2e mechanism is now measured, not assumed.** S11's run at final HEAD, warmed and quiet,
+  gave `1 failed / 57 passed / 6 skipped (33.2m)`, the failure dying in `signIn` at
+  `helpers/auth.ts:63` before any content assertion, with no strict-mode violation. Arbitrated
+  standalone it passed while `s4:154` then failed having passed in the suite — the failure moves,
+  which is non-determinism rather than a selector break. **The cause: after 33 minutes the
+  pre-warmed routes had gone cold again (`/` back to 6.3s from 0.5s). next-dev evicts compiled
+  routes under sustained load, so the back half of a serialized suite re-pays the front half's
+  cold compiles.** That is why three earlier warmed attempts also failed, and why neither warming
+  nor a bigger timeout can fix it. Sharding or a production build would.
+  Recorded, not diagnosed: standalone `s4:154` failed on a 120s `waitForResponse` with an existing
+  `Draft v37` and an error banner, hinting at order-coupling to the draft `:40` leaves behind. One
+  observation is not a diagnosis and the runner correctly declined to chase it.
+  **All 18 ledger items reached `CONTEXT.md`**, plus four pre-existing deferrals, for 21 total;
+  item 18 (nine of eleven sprints carried a defective acceptance criterion) leads the Lessons
+  section with all five defect shapes named. The runner verified line references rather than
+  copying them, and corrected one of the driver's: the client-write swallow is at
+  `CsfSelfAssessment.tsx:172-174`, not `:173` — `:173` is the comment, whose claim that "a reload
+  reconciles" is itself the part to distrust.
+  Two SMOKE corrections, no box flipped: the §34 ZT box now credits S10's placeholder fix while
+  keeping the guidance half open, and **§28's audit line, which read "0 high / 2 documented
+  moderates carried unchanged from Sprint 5", is corrected to the measured 5 high + 2 moderate**.
+  All four deliberately-unchecked boxes verified still unchecked with their explanations intact.
+- 2026-08-04 · shutdown · fixed · pushed=t · pr=none · `575f17c`.
+  `gate: shield/push passed (7 steps)`. Deep audit, security sweep and a record audit over all 28
+  commits. Five parallel adversarial sub-audits; nothing code-fixed, because no finding is
+  one-pass fixable — each is either a claim change on a client-visible deliverable (D-035's
+  precedent makes those decisions, not scrubs) or a multi-file sweep.
+  **HIGH-1, the most important finding of the batch and the reason this ceremony existed.**
+  `app/csf/playbook_export.py` is a SECOND, SEPARATE CSF exporter producing five client-facing
+  artifacts from `POST /csf/services/{id}/playbook/export`, and **S3's honesty fix never touched
+  it**. Driver-verified: it contains **0** coverage-qualifier phrases against **18** in
+  `csf/exporters.py`. Root cause at `routes/csf.py:1128` —
+  `gap = is_gap(rollup.score, target) if target is not None else False` — so with `target_level`
+  nullable (`Mapped[int | None]`, and `csf.py:1331` writes `None` explicitly) **"no target
+  recorded" and "target met" are the same value.** Rendered with all 106 subcategories scored at
+  Enterprise Level 2 of 5 and no target set, the deliverable says `No gaps: every in-scope
+subcategory meets its target.` and `Maintain current controls and re-assess on the next
+cycle.` while printing `—` in every Target cell. **It triggers on the default state of a real
+  engagement, not a contrived empty input.** Fifth instance of this batch's recurring defect and
+  the largest.
+  HIGH-2: the same file manufactures 91 Priority 1 criticals from unscored rows when targets ARE
+  set, because `maturity_level(0)` returns 1 and an unscored row is indistinguishable from a real
+  Level 1. HIGH-3: a lost Run-AI race — the exact case S4 built the conditional UPDATE for —
+  crashes the ZT workspace instead of showing the typed 409, because `ZtWorkspace.tsx:68-79` casts
+  dict-detail as `detail?: string` and renders an object as a React child; the bad cast is
+  pre-existing at 16 sites across 15 files and this branch adds three more 409s that reach it.
+  HIGH-4: `fixtures.py:209` derives the pillar key as `code.split(".")[0]`, so every ZT code
+  yields `"CISA"` or `"DOD"` — fixture mode, the default, persists and now RENDERS a narrative for
+  a pillar that does not exist, and no `apps/web` surface displays `pillar_narratives` to catch it
+  pre-release. HIGH-5: `seed_demo.py:797` writes Python-computed narratives, which makes the
+  exporter's attribution note ("drafted by Run AI … carried into the report only from an
+  assessment a consultant approved") false for every seeded demo deliverable.
+  Nine MEDIUM including `Overall coverage: 100.0%` on one scored technique of 633
+  (`attack/analytics.py:105` divides by scored-only), two adjacent contradictory sentences in
+  `csf/exporters.py:550`, and **six branch-introduced formula-injectable XLSX columns**
+  (`csf/exporters.py:70-77` `POAM_FIELDS`), correcting the earlier assumption that the batch added
+  none. Seven LOW including a **third phantom Tailwind token** — `bg-surface-default` at
+  `AiPreviewButton.tsx:106`, found by the systematic served-CSS sweep of all 55 colour utilities
+  that deferred item 5 said had never been done. That sweep also re-verified all ten `--tier-*`
+  tokens, independently confirming S0.
+  **Spec compliance holds.** `ai/jobs.py`, `ai/llm.py` and `config.py` have zero-line diffs, all
+  four prompts are byte-identical to `main`, and every scoring engine has a zero-line diff.
+  Deterministic scoring is still entirely in Python and no AI-drafted text influences a number.
+  **Security holds.** 5 high + 2 moderate confirmed exactly and none branch-introduced (no
+  lockfile in a 117-file diff); bandit clean on `app`, 7 LOW on `scripts` all pre-existing; secret
+  scan clean over 14,386 diff lines with positive controls; cross-tenant artifact reachability
+  independently re-verified across six break attempts and the 409 shown non-oracular by structure
+  and by timing. One input the checkpoints never tried does resolve: a **purged** in-tenant
+  artifact still prints its filename. Also corrected a checkpoint's wording — the `client_id` bound
+  IS derived from the caller-controlled `X-Client-Id` for platform admins; the property is real but
+  rests on `require_service_in_tenant` agreeing with it, not on the header being untrusted.
+  **Four false claims found in the records and corrected**, including that no document recorded S11
+  as open — CHANGELOG, BUILD_REPORT and CONTEXT.md all named S9 as the only sprint that did not
+  close. Ten of twelve boxes are checked, not eleven. Also: five checked SMOKE §14.1 boxes carried
+  no proof at all and now cite `tests/live/test_live_ai.py`.
+  Extensive cannot-fail-test findings recorded, including heatmap-fill assertions that pin only
+  "a fill was applied", length-not-value assertions, and an `AiStatusBanner` case that awaits two
+  microtasks where the state needs four, so it measures "not loaded yet" and stays green if the
+  guard is removed.

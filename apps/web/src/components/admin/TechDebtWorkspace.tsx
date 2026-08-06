@@ -33,12 +33,14 @@ import type {
 } from "@/lib/tech_debt/types";
 
 import { AiStatusBanner } from "./AiStatusBanner";
+import { HowAiWorks } from "./HowAiWorks";
 import { ConsolidationPlanCard } from "./ConsolidationPlanCard";
 import { DeliverableCard } from "./DeliverableCard";
 import { DiscardDraftButton } from "./DiscardDraftButton";
 import { EditableCapabilityTable } from "./EditableCapabilityTable";
 import { IntakeDocumentsPanel } from "./IntakeDocumentsPanel";
 import { OverlapDashboard } from "./OverlapDashboard";
+import { WorkflowSteps } from "./WorkflowSteps";
 
 import type { JSX } from "react";
 
@@ -272,6 +274,8 @@ export function TechDebtWorkspace({
         </div>
       </header>
 
+      <WorkflowSteps service="tech_debt" status={list?.status ?? null} />
+
       <Card>
         <CardHeader>
           <CardTitle>Upload inventory and extract</CardTitle>
@@ -283,6 +287,7 @@ export function TechDebtWorkspace({
         </CardHeader>
         <CardBody className="flex flex-col gap-4">
           <RedactionDisclosure />
+          <HowAiWorks service="tech_debt" />
           <Dropzone
             onUploaded={(a) => {
               setDocsReloadKey((k) => k + 1);

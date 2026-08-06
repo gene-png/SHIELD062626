@@ -298,7 +298,7 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   await expect(totalLine(/Total\s*9\s*·\s*Level\s*L2/)).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText(/capped .* no evidence/)).toBeVisible();
+  await expect(page.getByText(/capped, no evidence/)).toBeVisible();
 
   // Toggle Evidence ON: the cap lifts live -> total 10, level L5.
   await patched(page, () => evidence.click());
@@ -306,7 +306,7 @@ test("Seed Working Profiles (~106 subcats), Run AI drafts dimensions + narrative
   await expect(totalLine(/Total\s*10\s*·\s*Level\s*L5/)).toBeVisible({
     timeout: 30000,
   });
-  await expect(page.getByText(/capped .* no evidence/)).toBeHidden();
+  await expect(page.getByText(/capped, no evidence/)).toBeHidden();
 });
 
 test("Enterprise roll-up shows tier levels/rule/target/priority and Export produces 5 downloadable files", async ({
@@ -490,4 +490,87 @@ test("Enterprise roll-up shows tier levels/rule/target/priority and Export produ
     // Saved for David's manual section-10 review (dir is gitignored).
     fs.writeFileSync(path.join(ARTIFACTS_DIR, artifact.filename), body);
   }
+});
+
+/**
+ * SMOKE_TEST.md section 35: the two things S7 added so a consultant can read the
+ * CSF workspace without being told what its notation means — the Working
+ * Profiles column legend and the engagement step strip.
+ *
+ * Sources of record: apps/web/src/components/admin/csf/CsfPlaybookPanel.tsx
+ * (PLAYBOOK_LEGEND, ROLLUP_RULES, GAP_PRIORITIES) and
+ * apps/web/src/components/admin/WorkflowSteps.tsx (the csf strip).
+ *
+ * Scoping note: "Tiers", "Enterprise", "Rule" and "Gap" are each BOTH a legend
+ * <dt> and a table <th> on this page, and "Approved"/"Released" are each a step
+ * label, a status pill and a button. Every assertion below is therefore scoped
+ * to the legend's `data-legend` hook or to the step strip's landmark, never left
+ * to substring-match the page.
+ */
+const LEGEND_TERMS = ["Tiers", "Enterprise", "Rule", "Gap"] as const;
+const CSF_STEPS = [
+  "Assessment",
+  "Scoring",
+  "Client answers",
+  "Approved",
+  "Released",
+] as const;
+
+test("the Working Profiles legend defines its columns and the step strip says where the engagement stands", async ({
+  page,
+}) => {
+  test.slow();
+  await openWorkspaceOnDraft(page);
+
+  // --- The step strip -----------------------------------------------------
+  const steps = page.getByRole("navigation", { name: "Engagement steps" });
+  await expect(steps).toBeVisible({ timeout: 30000 });
+  await expect(steps.getByRole("listitem")).toHaveCount(CSF_STEPS.length);
+  for (const [i, label] of CSF_STEPS.entries()) {
+    const item = steps.getByRole("listitem").nth(i);
+    await expect(item).toContainText(`Step ${i + 1}`);
+    await expect(item).toContainText(label);
+  }
+  // Exactly one step is marked current, and it is marked for assistive tech too
+  // — a strip that highlighted nothing would not say where the work stands.
+  await expect(steps.locator('[data-step-state="current"]')).toHaveCount(1);
+  await expect(steps.locator('[aria-current="step"]')).toHaveCount(1);
+  // Who owns the client's answers, stated next to the strip.
+  await expect(
+    page.getByText("you own the quality of what ships"),
+  ).toBeVisible();
+
+  // --- The column legend --------------------------------------------------
+  const legend = page.locator('details[data-legend="playbook-columns"]');
+  const trigger = legend.getByText("What the columns mean");
+  await expect(trigger).toBeVisible({ timeout: 30000 });
+  await trigger.click();
+
+  for (const term of LEGEND_TERMS) {
+    await expect(legend.getByText(term, { exact: true })).toBeVisible();
+  }
+  // The legend has to say WHO computes the Enterprise level, because that is the
+  // "AI suggests, code computes" boundary the deliverable rests on.
+  await expect(legend).toContainText(
+    "Code computes it. The AI only drafts the dimension scores underneath.",
+  );
+  // All six weighted-floor rules are enumerated, in order, and readable. The
+  // rules list is the one <ul> in the legend without a data-legend hook.
+  await expect(legend).toContainText(
+    "They apply in order and the first match wins.",
+  );
+  const rules = legend.locator("ul:not([data-legend])");
+  await expect(rules.getByRole("listitem")).toHaveCount(6);
+  await expect(rules.getByText("#1", { exact: true })).toBeVisible();
+  await expect(rules.getByText("#6", { exact: true })).toBeVisible();
+  await expect(rules).toContainText(
+    "All tiers scored the same, so that score stands.",
+  );
+  // And the three gap priorities are readable rather than bare P1/P2/P3 chips.
+  const priorities = legend.locator('[data-legend="gap-priorities"]');
+  await expect(priorities.getByRole("listitem")).toHaveCount(3);
+  await expect(priorities).toContainText(
+    "A Core metric, on the HIGH tier, with the gap spanning multiple systems.",
+  );
+  await expect(priorities).toContainText("Every other gap.");
 });
