@@ -450,9 +450,16 @@ platform admins, so the isolation property is real but rests on
   suite iterates the full 6x4 CSF set plus CISA 4 and DoD 3 rather than sampling,
   and asserts the lookups raise on a missing entry.
 - Web `tsc --noEmit` clean; eslint 0 errors (1 pre-existing postcss warning).
-- e2e: **28 spec files** (host, resolves `:3001`), 64 tests, of which 6 skip by
+- e2e: **29 spec files** (host, resolves `:3001`), 65 tests, of which 7 skip by
   design (4 `e2e/demo/*` need `SHIELD_DEMO_SMOKE=1`, 2 `s26-oidc-login` need
-  `E2E_OIDC=1`), leaving 58 runnable. S9 added `s27-comprehension.spec.ts` (4
+  `E2E_OIDC=1`, 1 `capture-demo` needs `SHIELD_CAPTURE=1`), leaving 58 runnable.
+  `capture-demo.spec.ts` is a screenshot tool rather than a test: it drives the
+  consultant walkthrough and writes full-page PNGs to the gitignored
+  `e2e/artifacts/screenshots/`. It is guarded because `playwright.config.ts` sets
+  `testDir: "."` with no `testIgnore` and CI runs a bare `npx playwright test`, so
+  an unguarded file would be collected and would fail on service UUIDs that exist
+  only in this box's demo database. Verified both halves: `--list` collects it, and
+  a run without the flag reports `1 skipped`. S9 added `s27-comprehension.spec.ts` (4
   tests) and extended s3/s4/s5/s6/s7. **S11's exit run: 1 failed / 57 passed / 6
   skipped in 33.2m**, warmed and uncontended, the single failure being a sign-in
   cold-compile timeout at `s4-techdebt.spec.ts:40` that passes standalone. **No green
