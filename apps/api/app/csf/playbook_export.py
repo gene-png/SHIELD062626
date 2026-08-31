@@ -15,10 +15,14 @@ math is code-computed; the report only presents it.
 from __future__ import annotations
 
 import io
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from app import export_style
+
+logger = logging.getLogger(__name__)
+_LOG = "csf.playbook_export:"
 
 # ---------------------------------------------------------------------------
 # XLSX workbook
@@ -277,20 +281,88 @@ def _function_summary(rows: Sequence[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _target_coverage(rows: Sequence[Any]) -> tuple[int, int]:
+    """(subcategories carrying a recorded target, in-scope subcategories).
+
+    `models/csf_profile.py` types `target_level` as nullable and
+    `routes/csf.py` writes None explicitly, so "no target recorded" is a stored
+    fact rather than something inferred from a sentinel value.
+    """
+    return sum(1 for r in rows if r.target_level is not None), len(rows)
+
+
+def _no_gap_lines(rows: Sequence[Any]) -> list[str]:
+    """What to say when no subcategory is flagged as a gap.
+
+    `routes/csf.py` resolves `gap` to False both when a target is met and when
+    no target was ever recorded, so an empty gap list is ambiguous at this
+    layer. Reading it as an all-clear certifies subcategories nobody set a
+    target for, and since targets are optional that is the default state of a
+    real engagement rather than a contrived empty input. The sentence therefore
+    depends on target coverage.
+
+    This mirrors `_no_gap_steps` in `csf/exporters.py`, which draws the same
+    distinction on the answered axis. Here the axis is the target, because that
+    is what this file's gap flag actually depends on.
+    """
+    recorded, total = _target_coverage(rows)
+    logger.debug("%s _no_gap_lines target_coverage=%d/%d", _LOG, recorded, total)
+    if total == 0:
+        return ["This working profile has no in-scope subcategories and records no gap finding."]
+    if recorded == 0:
+        return [
+            f"No target maturity level has been recorded for any of the {total} in-scope "
+            f"subcategories, so this report records no gap finding.",
+            "A gap is the distance between current and target maturity. Setting targets is "
+            "what makes one computable.",
+        ]
+    if recorded < total:
+        return [
+            "No subcategory with a recorded target falls below it.",
+            f"{total - recorded} of {total} subcategories have no target recorded and "
+            f"carry no finding.",
+        ]
+    return [
+        "Every in-scope subcategory meets its recorded target. Maintain current controls "
+        "and re-assess on the next cycle."
+    ]
+
+
 def _overview_sentences(rows: Sequence[Any]) -> list[str]:
     total = len(rows)
     overall = _overall_level(rows)
     gaps = sum(1 for r in rows if r.gap)
     pc = _priority_counts(rows)
     fns = _function_summary(rows)
+    recorded, _ = _target_coverage(rows)
+    logger.debug(
+        "%s _overview_sentences rows=%d gaps=%d targets_recorded=%d", _LOG, total, gaps, recorded
+    )
     lines = [
         f"This assessment covers {total} in-scope NIST CSF 2.0 subcategories. "
         f"Enterprise maturity, rolled up across the impact tiers in use, "
         f"averages Level {overall} of 5.",
-        f"{gaps} subcategories fall short of their target maturity: "
-        f"{pc['P1']} Priority 1 (critical), {pc['P2']} Priority 2, and "
-        f"{pc['P3']} Priority 3.",
     ]
+    if recorded == 0:
+        # Without a target there is nothing to fall short of, so the priority
+        # counts are all zero for a reason that is not "no problems found".
+        lines.append(
+            f"No target maturity level has been recorded for any of the {total} in-scope "
+            f"subcategories, so none can be measured against one and no gap priorities "
+            f"are computed."
+        )
+    else:
+        shortfall = (
+            f"{gaps} of the {recorded} subcategories with a recorded target fall short "
+            f"of it: {pc['P1']} Priority 1 (critical), {pc['P2']} Priority 2, and "
+            f"{pc['P3']} Priority 3."
+        )
+        if recorded < total:
+            shortfall += (
+                f" {total - recorded} of {total} subcategories have no target recorded "
+                f"and carry no finding."
+            )
+        lines.append(shortfall)
     if len(fns) >= 2:
         strongest = max(fns, key=lambda f: f["avg"])
         weakest = min(fns, key=lambda f: f["avg"])
@@ -316,9 +388,7 @@ def _next_steps(rows: Sequence[Any]) -> list[str]:
     if pc["P3"]:
         steps.append(f"Track the {pc['P3']} Priority 3 gap(s) for continuous improvement.")
     if not steps:
-        steps.append(
-            "No gaps were identified. Maintain current controls and re-assess on the next cycle."
-        )
+        steps.extend(_no_gap_lines(rows))
     return steps
 
 
@@ -449,14 +519,18 @@ def _scorecard(story: list[Any], styles: dict[str, Any], rows: Sequence[Any]) ->
     )
 
 
-def _gap_table(story: list[Any], styles: dict[str, Any], gaps: Sequence[Any]) -> None:
+def _gap_table(
+    story: list[Any], styles: dict[str, Any], gaps: Sequence[Any], rows: Sequence[Any]
+) -> None:
+    """`rows` is the full enterprise set, not just the gaps: an empty gap list
+    means nothing on its own, so the placeholder has to read target coverage
+    off every row to know what it is allowed to claim."""
     from reportlab.lib.units import inch
     from reportlab.platypus import Paragraph
 
     if not gaps:
-        story.append(
-            Paragraph("No gaps: every in-scope subcategory meets its target.", styles["body"])
-        )
+        for line in _no_gap_lines(rows):
+            story.append(Paragraph(line, styles["body"]))
         return
     body = [
         [
@@ -516,7 +590,7 @@ def render_exec_pdf(
         story.append(Paragraph(line, styles["body"]))
     _scorecard(story, styles, enterprise_rows)
     story.append(Paragraph("Top priority gaps", styles["h2"]))
-    _gap_table(story, styles, _gap_rows(enterprise_rows, limit=12))
+    _gap_table(story, styles, _gap_rows(enterprise_rows, limit=12), enterprise_rows)
     story.append(Paragraph("Recommended next steps", styles["h2"]))
     for step in _next_steps(enterprise_rows):
         story.append(Paragraph(f"• {step}", styles["body"]))
@@ -617,7 +691,7 @@ def render_full_pdf(
 
     story.append(PageBreak())
     story.append(Paragraph("5. Prioritized roadmap", styles["h2"]))
-    _gap_table(story, styles, _gap_rows(enterprise_rows))
+    _gap_table(story, styles, _gap_rows(enterprise_rows), enterprise_rows)
 
     story.append(PageBreak())
     story.append(Paragraph("6. Appendix: all subcategories", styles["h2"]))
@@ -752,7 +826,7 @@ def render_exec_docx(
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:
-        add_paragraphs(doc, ["No gaps: every in-scope subcategory meets its target."])
+        add_paragraphs(doc, _no_gap_lines(enterprise_rows))
 
     add_heading(doc, "Recommended next steps")
     add_paragraphs(doc, [f"• {s}" for s in _next_steps(enterprise_rows)])
@@ -846,7 +920,7 @@ def render_full_docx(
         )
         _shade_col(table, 2, [g.enterprise_level for g in gaps])
     else:
-        add_paragraphs(doc, ["No gaps: every in-scope subcategory meets its target."])
+        add_paragraphs(doc, _no_gap_lines(enterprise_rows))
 
     add_page_break(doc)
     add_heading(doc, "6. Appendix: all subcategories")

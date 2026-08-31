@@ -1,10 +1,13 @@
 # Project Context — state of `main`
 
-_Last updated: 2026-08-05 (Sprint 10 "Reports you can defend" complete on
-`feat/defensible-reports-sprint-10`, targeting `v3.6.0`, PR not yet opened; Sprint 9
-"activate the seam" merged as PR #44, `v3.5.0`. The 2026-08-05 pass folded the
-shutdown deep audit's findings into the deferred list, where they had been recorded
-only in the `docs/SPRINTS.md` Log). This file describes the project as
+_Last updated: 2026-08-06 (Sprint 10 "Reports you can defend" **merged to `main`** as
+PR #58, merge commit `874d0ca`, targeting `v3.6.0`; Sprint 9 "activate the seam" merged
+as PR #44, `v3.5.0`. CI ran green on `bc4d1c4` across all five jobs, including the full
+Playwright suite on a fresh runner in 13m19s, which is the first authoritative
+full-suite green the batch had. Merged as a merge commit rather than a squash, so the
+per-sprint SHAs cited throughout this file stay reachable from `main`. The forward plan
+moved to `ROADMAP.md`, now sprint-by-sprint, and the claim contract it sequences
+against is `docs/PRINCIPLES.md`). This file describes the project as
 of the branch it sits on and is updated ONLY as part of a PR. Durable facts and
 environment gotchas live in `CLAUDE.md`; personal in-flight status lives in
 `context/<name>.md`; per-sprint detail lives in `SPRINT_<n>.md`, and the executable
@@ -176,8 +179,22 @@ including item 1.** None of the five has a pre-existing-versus-new label the aud
 did not give it: H1 through H4 have root causes older than the batch, and what this
 batch changed is how reachable or how visible each one is.
 
-- **H1. A second CSF exporter that S3's honesty fix never reached, and it is wrong
-  on the default state of a real engagement.** `app/csf/playbook_export.py`
+- **H1. FIXED 2026-08-06** on `fix/h1-csf-playbook-export-honesty`, ahead of Sprint 11,
+  because it was the one finding that shipped a false statement on the artifact a
+  consultant actually hands over. `playbook_export.py` now reads target coverage off the
+  rows and says what is true at each level of it: no target recorded anywhere, some
+  targets recorded, or every target recorded and met. Four renderers were lying; the
+  three literal `No gaps: every in-scope subcategory meets its target.` sites and the
+  `_next_steps` all-clear now route through one `_no_gap_lines()` helper, mirroring
+  `_no_gap_steps` in `csf/exporters.py`. The overview sentence no longer reports
+  `0 subcategories fall short of their target maturity` when no target exists to fall
+  short of. Eight tests in `test_playbook_export_content.py`, observed red first, and one
+  of them is a counterexample proving the reassuring line survives where it is true.
+  **The root cause at `routes/csf.py:1129` was deliberately left in place**: `gap` stays
+  False when no target is recorded, which is correct for a gap flag, and the fix is that
+  the deliverable no longer reads an empty gap list as an all-clear. The original entry
+  follows.
+- **H1 (original).** `app/csf/playbook_export.py`
   produces five client-facing artifacts from
   `POST /csf/services/{id}/playbook/export`, and it carries **0** coverage-qualifier
   phrases against 18 in `csf/exporters.py`. Root cause at `routes/csf.py:1128`:
@@ -265,7 +282,15 @@ platform admins, so the isolation property is real but rests on
    the Sprint-8 lesson recurring with a different cause. Running reference data
    into the shared demo database is a human decision. SMOKE §34 carries the
    unchecked box.
-3. **No green full-suite e2e run exists on this box, after four attempts.**
+3. **Settled 2026-08-06 by CI, and downgraded to test infrastructure.** The loop
+   protocol names CI's fresh-runner E2E job as authoritative, and on PR #58 it ran the
+   full suite green in 13m19s on `bc4d1c4` (run 31064849103, bare `npx playwright test`
+   with no filter, `retries: 1` in effect under CI). So the product question this item
+   existed to settle is answered: the suite passes. What remains is a dev-box
+   limitation, carried to `ROADMAP.md` under work outside the sprint loop, and the
+   measured cause below is the reason a timeout bump will not touch it. The original
+   entry follows, kept because the measurement in it is the useful part.
+   **No green full-suite e2e run exists on this box, after four attempts.**
    Checkpoint 1 (2 failed / 49 passed), checkpoint 2 (1 failed / 50 passed), the S9
    driver's warmed and uncontended run (2 failed / 56 passed / 6 skipped in 34.6m),
    and S11's own warmed quiet-box run: **1 failed / 57 passed / 6 skipped in 33.2m**,
@@ -425,9 +450,16 @@ platform admins, so the isolation property is real but rests on
   suite iterates the full 6x4 CSF set plus CISA 4 and DoD 3 rather than sampling,
   and asserts the lookups raise on a missing entry.
 - Web `tsc --noEmit` clean; eslint 0 errors (1 pre-existing postcss warning).
-- e2e: **28 spec files** (host, resolves `:3001`), 64 tests, of which 6 skip by
+- e2e: **29 spec files** (host, resolves `:3001`), 65 tests, of which 7 skip by
   design (4 `e2e/demo/*` need `SHIELD_DEMO_SMOKE=1`, 2 `s26-oidc-login` need
-  `E2E_OIDC=1`), leaving 58 runnable. S9 added `s27-comprehension.spec.ts` (4
+  `E2E_OIDC=1`, 1 `capture-demo` needs `SHIELD_CAPTURE=1`), leaving 58 runnable.
+  `capture-demo.spec.ts` is a screenshot tool rather than a test: it drives the
+  consultant walkthrough and writes full-page PNGs to the gitignored
+  `e2e/artifacts/screenshots/`. It is guarded because `playwright.config.ts` sets
+  `testDir: "."` with no `testIgnore` and CI runs a bare `npx playwright test`, so
+  an unguarded file would be collected and would fail on service UUIDs that exist
+  only in this box's demo database. Verified both halves: `--list` collects it, and
+  a run without the flag reports `1 skipped`. S9 added `s27-comprehension.spec.ts` (4
   tests) and extended s3/s4/s5/s6/s7. **S11's exit run: 1 failed / 57 passed / 6
   skipped in 33.2m**, warmed and uncontended, the single failure being a sign-in
   cold-compile timeout at `s4-techdebt.spec.ts:40` that passes standalone. **No green

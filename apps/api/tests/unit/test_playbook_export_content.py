@@ -298,3 +298,143 @@ def test_full_docx_heading_scorecard_and_maturity_cell() -> None:
     assert "Protect" in scorecard
     # Protect meets its target, rolled up to L5.
     assert "L5" in scorecard
+
+
+# ---------------------------------------------------------------------------
+# Target coverage: "no target recorded" is not "target met" (H1)
+#
+# `routes/csf.py` resolves `gap` to False whenever a subcategory has no target
+# level, so an assessment with no targets set produces an empty gap list that is
+# indistinguishable from one where every target is met. These five renderers
+# then told the client every subcategory met its target. `target_level` is
+# nullable and explicitly written as None, so the distinction is a fact the
+# exporter can read; these tests pin that it does.
+#
+# The `csf/exporters.py` deliverable already discriminates on the ANSWERED axis
+# (`_no_gap_steps`, S3). This is the same discipline on the TARGET axis, which
+# is the axis this file's gap flag actually depends on.
+# ---------------------------------------------------------------------------
+
+# The claim that must never appear on a report with no targets recorded.
+FALSE_ALL_CLEAR = "every in-scope subcategory meets its target"
+# The advice that must never follow it.
+FALSE_ADVICE = "Maintain current controls"
+
+
+def _flat(text: str) -> str:
+    """Collapse the whitespace reportlab's text extraction mangles, so a phrase
+    assertion tests the words rather than the line breaking."""
+    return " ".join(text.split())
+
+
+def _rows_without_targets() -> list[SimpleNamespace]:
+    """The default state of a real engagement: every subcategory scored, no
+    target level recorded anywhere.
+
+    This is not a contrived empty input. `models/csf_profile.py` types
+    `target_level` as nullable and `routes/csf.py` writes None explicitly, so an
+    engagement that has been fully scored but never had targets set lands here.
+    """
+    return [
+        SimpleNamespace(
+            subcategory_code=row.subcategory_code,
+            name=row.name,
+            function=row.function,
+            tier_levels=row.tier_levels,
+            enterprise_level=row.enterprise_level,
+            rollup_rule=row.rollup_rule,
+            target_level=None,
+            gap=False,
+            priority=None,
+        )
+        for row in _enterprise_rows()
+    ]
+
+
+def _rows_with_partial_targets() -> list[SimpleNamespace]:
+    """One of three subcategories carries a target, and it is met."""
+    rows = _rows_without_targets()
+    rows[2].target_level = 4
+    return rows
+
+
+def _rows_all_targets_met() -> list[SimpleNamespace]:
+    """Every subcategory carries a target and every target is met. This is the
+    only input for which the reassuring line is true."""
+    rows = _enterprise_rows()
+    for row in rows:
+        row.target_level = 1
+        row.gap = False
+        row.priority = None
+    return rows
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("render", [render_exec_pdf, render_full_pdf])
+def test_pdf_with_no_targets_recorded_does_not_claim_targets_are_met(render) -> None:
+    text = _flat(
+        _pdf_text(render(client_name=CLIENT, version=7, enterprise_rows=_rows_without_targets()))
+    )
+    assert FALSE_ALL_CLEAR not in text
+    assert FALSE_ADVICE not in text
+    # And it says what is actually true instead.
+    assert "no target maturity level has been recorded" in text.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("render", [render_exec_docx, render_full_docx])
+def test_docx_with_no_targets_recorded_does_not_claim_targets_are_met(render) -> None:
+    paras = _docx_paragraphs(
+        render(client_name=CLIENT, version=7, enterprise_rows=_rows_without_targets())
+    )
+    joined = _flat(" ".join(paras))
+    assert FALSE_ALL_CLEAR not in joined
+    assert FALSE_ADVICE not in joined
+    assert "no target maturity level has been recorded" in joined.lower()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("render", [render_exec_pdf, render_full_pdf])
+def test_pdf_with_no_targets_recorded_does_not_report_zero_shortfalls(render) -> None:
+    """`0 subcategories fall short of their target maturity` reads as an
+    all-clear when the truth is that nothing could be measured."""
+    text = _flat(
+        _pdf_text(render(client_name=CLIENT, version=7, enterprise_rows=_rows_without_targets()))
+    )
+    assert "0 subcategories fall short" not in text
+
+
+@pytest.mark.unit
+def test_partial_target_coverage_names_the_uncovered_count() -> None:
+    """One target of three, and it is met. The report may not generalise from
+    the one to the three."""
+    text = _flat(
+        _pdf_text(
+            render_full_pdf(
+                client_name=CLIENT, version=7, enterprise_rows=_rows_with_partial_targets()
+            )
+        )
+    )
+    assert FALSE_ALL_CLEAR not in text
+    assert FALSE_ADVICE not in text
+    # 2 of the 3 carry no target and therefore carry no finding.
+    assert "2 of 3" in text
+
+
+@pytest.mark.unit
+def test_full_target_coverage_still_gives_the_reassuring_line() -> None:
+    """The counterexample that keeps the fix from being a blanket deletion: when
+    every subcategory really does have a target and really does meet it, the
+    reassuring sentence is true and must survive.
+
+    Uses the executive renderer deliberately. `render_full_pdf` has no
+    next-steps section, so it can never carry this advice and asserting on it
+    there would pass for the wrong reason.
+    """
+    text = _flat(
+        _pdf_text(
+            render_exec_pdf(client_name=CLIENT, version=7, enterprise_rows=_rows_all_targets_met())
+        )
+    )
+    assert FALSE_ADVICE in text
+    assert "no target maturity level has been recorded" not in text.lower()
